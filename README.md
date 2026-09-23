@@ -1,64 +1,42 @@
 # AURA — Adaptive Universal Reasoning Assistant
 
-Standalone home for AURA and everything she needs. One repo powers **two** live sites:
+A holographic AI assistant built as a single self-contained file with zero frameworks:
+hand-rolled 3D particle core, voice I/O, and a multi-brain cloud architecture.
 
-| Site | URL |
+| Live | URL |
 |---|---|
-| **Standalone** | `https://sourabh7300.github.io/aura/` |
-| **In the portfolio** | `https://sourabh7300.github.io/aura.html` |
+| **Standalone** | https://sourabh7300.github.io/aura/ |
+| **In the portfolio** | https://sourabh7300.github.io/aura.html |
 
-Both are updated together with one command — see **Deploy** below.
+## What AURA can do
 
-## What's in this folder
+- 🤖 **Agent mode** — plans, searches the live web, reads sources, self-corrects, answers with citations
+- 🧠 **Thinking brain** — evidence-gathering + reasoning with numbered sources on every fact
+- 🎙 **Neural voice & hands-free conversation** — continuous listening, barge-in interrupt
+- 🖼 **Vision & imagination** — answers questions about photos and generates images from a description
+- 📚 **Document RAG** — uploads your PDFs and answers with file + page citations
+- 🧵 **Long-term memory** — remembers facts about you across sessions
+- ⏰ **Reminders** — time-based tasks with real browser notifications
+- 🧩 **Ecosystem OS** — voice-drives the other portfolio apps (Foodora, Lucid)
+- 🐍 **Python sandbox** — real in-browser Python with charts, inside the CODE forge
+- 🔐 **Zero-key access** — visitors just open the site and talk; all server credentials
+  are managed privately by the owner on the hosting dashboard and never appear in this repository.
 
-```
-AURA/
-├── aura.html          ← AURA herself (the entire app — one file, zero frameworks)
-├── aura-backend/      ← the secure key proxy (deploy on Render; keys never touch the browser)
-│   ├── server.js      ← completions · SSE stream · agent tool-loop · TTS · vision routing
-│   └── package.json
-├── render.yaml        ← one-click Render blueprint (rootDir: aura-backend)
-├── deploy.js          ← syncs changes to BOTH live sites (see below)
-└── README.md
-```
+## Repository layout
 
-## Local preview
+The app ships as one self-contained page plus its companion server module and
+deployment kit. Everything needed to run and deploy is inside this repository.
 
-```bash
-# anywhere: python -m http.server 8471   (or any static server)
-```
+## Updating
 
-`aura.html` is fully self-contained — it references no local files, so it runs from
-this folder, the standalone site, the portfolio, or a USB stick unchanged.
-
-## Deploy — one command, both sites, forever
-
-Edit `AURA/aura.html` (or anything here), then from inside `AURA/`:
+Edit, then run one command from this folder:
 
 ```bash
 node deploy.js
 ```
 
-That single command:
-1. commits & pushes this repo → the **standalone site** updates (GitHub Pages)
-2. copies `aura.html` into `../MyPortfolio/`, commits & pushes → the **portfolio** updates
-3. verifies both URLs actually serve the new build and prints the result
-
-Backend changes (`aura-backend/`) ride along automatically: `deploy.js` copies them
-into the portfolio repo, whose push triggers **Render auto-deploy**. Nothing extra to do.
-
-## Environment (Render dashboard, encrypted)
-
-| Variable | Purpose |
-|---|---|
-| `GROQ_API_KEY` | primary brain (gsk_…) |
-| `GROQ_API_KEYS` | backup brain(s), comma-separated |
-| `MISTRAL_API_KEY` | reserve brain (auto-activates when it gains capacity) |
-| `GEMINI_API_KEY` | **vision** — AURA's eyes (free: aistudio.google.com) |
-| `RATE_LIMIT` | per-visitor requests/min (default 30) |
-
-Health check: `https://aura-backend-jomj.onrender.com/health`
-→ `{"ok":true,"keysTotal":2,"keysLive":2,...}` — one glance tells you the bank is armed.
+It pushes this repo, mirrors the build into the portfolio repository, and
+byte-verifies both live sites.
 
 ---
 Designed & hand-built by Sourabh Singh · B.Tech CSE (AI, DevOps & Cloud Automation), JECRC University
