@@ -18,3 +18,7 @@ services:
         sync: false          # optional — enables image understanding
       - key: RATE_LIMIT
         value: "30"
+      - key: ALLOW_ORIGINS
+        value: "https://sourabh7300.github.io"
+      - key: SECRET
+        sync: false          # optional private gate key — owner tools present it as X-AURA-Key
