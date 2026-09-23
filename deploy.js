@@ -46,15 +46,20 @@ function short(bytes) { return (bytes.length / 1024).toFixed(0) + " KB"; }
   } catch (e) { console.log("(portfolio already up to date)"); }
   run("git push", PORTFOLIO);
 
-  /* ---- 3. verify both live URLs ---- */
+  /* ---- 3. verify both live URLs (byte-exact against the local build) ---- */
   step("3/3 · verifying live sites (Pages builds take ~1 min)");
+  const crypto = require("crypto");
+  const localMd5 = crypto.createHash("md5").update(auraSrc).digest("hex");
   const check = async (name, url) => {
     for (let i = 0; i < 10; i++) {
       await new Promise(r => setTimeout(r, 15000));
       try {
         const r = await fetch(url + "?nocache=" + Date.now());
-        const t = await r.text();
-        if (r.ok && t.includes(hash)) return console.log("✅ " + name + " → live build " + hash + " (" + (t.length / 1024).toFixed(0) + " KB)");
+        if (r.ok) {
+          const buf = Buffer.from(await r.arrayBuffer());
+          const md5 = crypto.createHash("md5").update(buf).digest("hex");
+          if (md5 === localMd5) return console.log("✅ " + name + " → live, byte-identical to build " + hash + " (" + (buf.length / 1024).toFixed(0) + " KB)");
+        }
       } catch (e) {}
       console.log("   " + name + ": waiting for Pages… (" + (i + 1) + "/10)");
     }
