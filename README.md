@@ -44,8 +44,8 @@ That single command:
 2. copies `aura.html` into `../MyPortfolio/`, commits & pushes → the **portfolio** updates
 3. verifies both URLs actually serve the new build and prints the result
 
-Backend changes (`aura-backend/`) deploy via **Render auto-deploy** on every push of
-this repo — nothing extra to do.
+Backend changes (`aura-backend/`) ride along automatically: `deploy.js` copies them
+into the portfolio repo, whose push triggers **Render auto-deploy**. Nothing extra to do.
 
 ## Environment (Render dashboard, encrypted)
 
