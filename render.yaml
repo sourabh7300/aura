@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: aura-secure-backend
+    runtime: node
+    plan: free
+    rootDir: aura-backend
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false          # paste in the Render dashboard — never in this file
+      - key: GROQ_API_KEYS
+        sync: false          # backup Groq key(s), comma-separated
+      - key: MISTRAL_API_KEY
+        sync: false          # reserve brain
+      - key: GEMINI_API_KEY
+        sync: false          # vision — AURA's eyes (aistudio.google.com)
+      - key: RATE_LIMIT
+        value: "30"
