@@ -1,0 +1,42 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /* helper: the caller's own user doc */
+    function isSelf(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    /* helper: role from the verified ID token or the stored profile.
+       Roles are SET only through the backend (Firebase Admin SDK) —
+       no client can ever write a role for itself through these rules. */
+    function role() {
+      return request.auth.token.role
+          || get(/databases/$(database)/documents/aura_users/$(request.auth.uid)).data.role;
+    }
+    function isStaff() {
+      return request.auth != null && (role() in ['maker', 'ceo']);
+    }
+
+    /* ---- per-user data: only the owner reads/writes; only the Admin SDK (backend) may touch roles ---- */
+    match /aura_users/{uid} {
+      allow read: if isSelf(uid) || isStaff();
+      /* users may create/update their own blob but NEVER the role field */
+      allow create, update: if isSelf(uid)
+        && request.resource.data.role == (request.resource.data.role == null ? 'user' : request.resource.data.role)
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']));
+      allow delete: if false; /* deletion goes through the backend only */
+    }
+
+    /* ---- public config: everyone reads, only staff writes (via backend) ---- */
+    match /aura_config/{doc} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+
+    /* ---- everything else: closed ---- */
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
