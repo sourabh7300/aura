@@ -400,6 +400,40 @@ app.post("/v1/dev/commit", async (req, res) => {
   } catch (e) { res.status(502).json({ error: e.message || String(e) }); }
 });
 
+/* STAFF BRAIN — completions reserved for verified maker/ceo accounts.
+   Self-integration planning runs through HERE, never through the public
+   proxy, so guests can never borrow admin prompts or model budgets. */
+app.post("/v1/staff/brain", async (req, res) => {
+  const u = await requireRole(req, res, ["maker", "ceo"]);
+  if (!u) return;
+  const body = req.body || {};
+  const messages = Array.isArray(body.messages) ? body.messages.slice(-12) : null;
+  if (!messages || messages.some(m => !m || typeof m.content !== "string")) return res.status(400).json({ error: "messages required" });
+  const baseTok = Math.min(body.max_tokens || 1400, 4000);
+  for (const model of MODELS) {
+    try {
+      const mt = model.startsWith("openai/gpt-oss") ? Math.max(baseTok, 600) : baseTok;
+      const key = pickKey();
+      if (!key) break;
+      const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + key, "Content-Type": "application/json" },
+        body: JSON.stringify({ model, messages, max_tokens: mt, temperature: body.temperature != null ? body.temperature : 0.3 }),
+        signal: AbortSignal.timeout(60_000)
+      });
+      if (r.status === 429) { keyCool.set(key, Date.now() + 10 * 60_000); continue; }
+      if (r.status === 401 || r.status === 403) { keyCool.set(key, Date.now() + 24 * 3600_000); continue; }
+      if (r.status === 404 || r.status === 400) continue;
+      if (!r.ok) return res.status(r.status).json({ error: "Upstream HTTP " + r.status });
+      const d = await r.json();
+      const t = d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content;
+      if (t && t.trim()) return res.json({ choices: [{ message: { content: t.trim() } }], model });
+    } catch (e) {}
+  }
+  try { const rt = await reserveCall(messages, baseTok, body.temperature != null ? body.temperature : 0.3); if (rt) return res.json({ choices: [{ message: { content: rt } }], model: "reserve" }); } catch (e) {}
+  res.status(503).json({ error: "All brains busy — try again shortly." });
+});
+
 /* optional shared-secret gate */
 app.use((req, res, next) => {
   if (!REQUIRE_SECRET) return next();
