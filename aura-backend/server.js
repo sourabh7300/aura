@@ -326,9 +326,16 @@ const GH_FILE = process.env.GH_FILE || "aura.html";
 const GH_BRANCH = process.env.GH_BRANCH || "main";
 const GH_API = "https://api.github.com";
 async function ghFetchRaw() {
-  const r = await fetch(`https://raw.githubusercontent.com/${GH_REPO}/${GH_BRANCH}/${GH_FILE}?t=${Date.now()}`, { headers: { "Authorization": "Bearer " + GH_TOKEN, "Accept": "text/plain", "User-Agent": "aura-self-integration" }, signal: AbortSignal.timeout(30000) });
-  if (!r.ok) throw new Error("raw fetch HTTP " + r.status);
-  return r.text();
+  try {
+    const r = await fetch(`https://raw.githubusercontent.com/${GH_REPO}/${GH_BRANCH}/${GH_FILE}?t=${Date.now()}`, { headers: { "Authorization": "Bearer " + GH_TOKEN, "Accept": "text/plain", "User-Agent": "aura-self-integration" }, signal: AbortSignal.timeout(30000) });
+    if (r.ok) return r.text();
+  } catch (e) {}
+  /* fallback: Contents API (works with every token type, incl. fine-grained) */
+  const r2 = await fetch(`${GH_API}/repos/${GH_REPO}/contents/${GH_FILE}?ref=${GH_BRANCH}`, { headers: { "Authorization": "Bearer " + GH_TOKEN, "User-Agent": "aura-self-integration", "Accept": "application/vnd.github+json" }, signal: AbortSignal.timeout(30000) });
+  if (!r2.ok) throw new Error("source read failed: HTTP " + r2.status);
+  const j = await r2.json();
+  if (!j.content) throw new Error("source read failed: empty content");
+  return Buffer.from(j.content, "base64").toString("utf8");
 }
 app.get("/v1/dev/status", async (req, res) => {
   const u = await requireRole(req, res, ["maker", "ceo"]);
