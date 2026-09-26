@@ -1,0 +1,24 @@
+name: CI — demo verified
+on: [push, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Every HTML file must be a complete document
+        run: |
+          fail=0
+          for f in $(git ls-files '*.html'); do
+            grep -qi '</html>' "$f" || { echo "✗ $f missing </html>"; fail=1; }
+          done
+          exit $fail
+      - name: README must carry the verified LIVE DEMO badge
+        run: grep -q 'LIVE_DEMO-verified_working' README.md
+      - name: Live demo must answer HTTP 200
+        run: |
+          url=$(grep -o 'https://sourabh7300.github.io[^)]*' README.md | head -1)
+          code=$(curl -s -o /dev/null -w '%{http_code}' -m 20 "$url")
+          echo "$url → $code"
+          [ "$code" = "200" ] || exit 1
