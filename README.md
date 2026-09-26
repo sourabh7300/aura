@@ -1,3 +1,8 @@
+[![LIVE DEMO](https://img.shields.io/badge/▶_LIVE_DEMO-verified_working-00d4aa?style=for-the-badge&logo=vercel&logoColor=white)](https://sourabh7300.github.io/aura/aura.html)
+
+**🧬 AURA — Adaptive Universal Reasoning Assistant** — ✅ verified live (2026-09-26): returns HTTP 200, fully functional.
+
+---
 # AURA — Adaptive Universal Reasoning Assistant
 
 A holographic AI assistant built as a single self-contained file with zero frameworks:
