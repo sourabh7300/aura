@@ -4340,6 +4340,70 @@ updateEngTag();
   const apply=t=>{document.body.dataset.tab=t;bar.querySelectorAll("button").forEach(b=>b.classList.toggle("on",b.dataset.t===t));if(t==="chats")renderSessions();if(t==="code")fitCodePage()};
   bar.querySelectorAll("button").forEach(b=>b.onclick=()=>{const t=b.dataset.t;if(t==="admin"&&typeof AuraAuth!=="undefined"&&!AuraAuth.isAdmin()){AuraAuth.showRestricted("Mission Control","This page is reserved for maker and CEO accounts — roles are verified on the server.");return}apply(t);if(t==="admin"&&window.adminLoad)try{window.adminLoad()}catch(e){}});
   apply("chat");
+// ==== CODE PAGE SETUP ==== //
+(function(){
+  // Create the Code page only once
+  if(!document.getElementById('codePage')){
+    const page=document.createElement('div');
+    page.id='codePage';
+    page.className='page';
+    // ---- Sub‑tab bar (Write / Input / Output) ----
+    const subBar=document.createElement('div');
+    subBar.id='codeTabBar';
+    subBar.style.display='flex';
+    subBar.style.gap='8px';
+    subBar.style.marginBottom='8px';
+    const tabs=[{t:'write',label:'Write'},{t:'input',label:'Input'},{t:'output',label:'Output'}];
+    tabs.forEach(tab=>{
+      const btn=document.createElement('button');
+      btn.dataset.t=tab.t;
+      btn.textContent=tab.label;
+      btn.className='cbtn';
+      btn.onclick=()=>{
+        // update dataset for CSS / state
+        document.body.dataset.codesubtab=tab.t;
+        // highlight active sub‑tab
+        subBar.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.t===tab.t));
+        // hide all sub‑pages, then show the selected one
+        document.querySelectorAll('.code-subpage').forEach(p=>p.style.display='none');
+        const target=document.getElementById('code'+tab.t.charAt(0).toUpperCase()+tab.t.slice(1));
+        if(target) target.style.display='block';
+      };
+      subBar.appendChild(btn);
+    });
+    page.appendChild(subBar);
+    // ---- Write sub‑page ----
+    const writeDiv=document.createElement('div');
+    writeDiv.id='codeWrite';
+    writeDiv.className='code-subpage';
+    writeDiv.innerHTML=`<textarea id="codeEditor" placeholder="Write your code here..." style="width:100%;height:200px;resize:vertical;font-family:var(--mono);background:rgba(4,18,26,.85);color:var(--ice);border:1px solid var(--line);border-radius:8px;padding:8px"></textarea>`;
+    // ---- Input sub‑page ----
+    const inputDiv=document.createElement('div');
+    inputDiv.id='codeInput';
+    inputDiv.className='code-subpage';
+    inputDiv.style.display='none';
+    inputDiv.innerHTML=`<textarea id="codeInputBox" placeholder="Input for your code..." style="width:100%;height:100px;resize:vertical;font-family:var(--mono);background:rgba(4,18,26,.85);color:var(--ice);border:1px solid var(--line);border-radius:8px;padding:8px"></textarea>`;
+    // ---- Output sub‑page ----
+    const outputDiv=document.createElement('div');
+    outputDiv.id='codeOutput';
+    outputDiv.className='code-subpage';
+    outputDiv.style.display='none';
+    outputDiv.innerHTML=`<pre id="codeResult" style="background:rgba(4,18,26,.85);color:var(--ice);border:1px solid var(--line);border-radius:8px;padding:8px;overflow:auto;max-height:300px"></pre>`;
+    // Append sub‑pages to the container
+    page.appendChild(writeDiv);
+    page.appendChild(inputDiv);
+    page.appendChild(outputDiv);
+    // Insert the page before the dock (or at end of body if dock missing)
+    const dock=document.getElementById('dock');
+    if(dock) document.body.insertBefore(page, dock);
+    else document.body.appendChild(page);
+    // ---- Initialise default sub‑tab (Write) ----
+    document.body.dataset.codesubtab='write';
+    subBar.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.t==='write'));
+    const defaultSp=document.getElementById('codeWrite');
+    if(defaultSp) defaultSp.style.display='block';
+  }
+})();
   try{const ro=new ResizeObserver(()=>{if(document.body.dataset.tab==="code")fitCodePage()});ro.observe(bar);const dk=document.getElementById("dock");if(dk)ro.observe(dk)}catch(e){}
   try{window.addEventListener("resize",()=>{if(document.body.dataset.tab==="code")fitCodePage()})}catch(e){}
 })();
