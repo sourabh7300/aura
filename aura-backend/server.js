@@ -1212,13 +1212,17 @@ app.post("/v1/chat/stream", async (req, res) => {
       const key = pickKey();
       if (!key) { sawLimit = true; break outer; }
       try {
+        /* reasoning models (gpt-oss) spend tokens thinking — same floor as the non-stream
+           route, otherwise a small budget returns HTTP 200 with ZERO content chunks */
+        let maxTok = Math.min(body.max_tokens || 1600, 4000);
+        if (model.startsWith("openai/gpt-oss") && maxTok < 600) maxTok = 600;
         const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
           method: "POST",
           headers: { "Authorization": "Bearer " + key, "Content-Type": "application/json" },
           body: JSON.stringify({
             model,
             messages,
-            max_tokens: Math.min(body.max_tokens || 1600, 4000),
+            max_tokens: maxTok,
             temperature: body.temperature != null ? body.temperature : 0.6,
             stream: true
           }),
