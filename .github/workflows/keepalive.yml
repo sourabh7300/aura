@@ -1,0 +1,27 @@
+name: Keep-alive — Render backend warm
+on:
+  schedule:
+    # Every 9 minutes — Render's free tier spins the service down after 15 min idle.
+  - cron: "*/9 * * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: render-keepalive
+  cancel-in-progress: false
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /health to keep the backend awake
+        run: |
+          code=$(curl -s -o /tmp/health.json -w '%{http_code}' -m 60 https://aura-backend-jomj.onrender.com/health)
+          echo "GET /health → $code"
+          if [ "$code" = "200" ]; then
+            echo "backend warm:"
+            head -c 300 /tmp/health.json; echo
+          else
+            echo "backend not healthy — payload:"
+            head -c 400 /tmp/health.json || true
+            exit 1
+          fi
