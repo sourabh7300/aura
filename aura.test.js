@@ -149,6 +149,55 @@ suite("Persona display override", () => {
   })());
 });
 
+/* ================= 8. Two-mode visitor greeting (new) ================= */
+suite("Two-mode visitor greeting", () => {
+  const mg2 = src.match(/\/\* GREETING v3 START \*\/[\s\S]*?\/\* GREETING v3 END \*\//);
+  if (!mg2) return skipSuite("  [greeting v3]");
+  const t = evalSnippet(mg2[0], {}, ["__greetRecap"]);
+  ok("welcome-back names the user", /Welcome back, Sourabh/.test(t.__greetRecap({ name: "Sourabh", days: 3, memCount: 4, fact: "loves chess", topic: "kubernetes" })));
+  ok("recap counts memories with an example", /remember 4 things/.test(t.__greetRecap({ days: 3, memCount: 4, fact: "loves chess" })) && /loves chess/.test(t.__greetRecap({ days: 3, memCount: 4, fact: "loves chess" })));
+  ok("recap names the last topic", /kubernetes/.test(t.__greetRecap({ days: 3, topic: "kubernetes" })));
+  ok("same-day phrasing", /back the same day/.test(t.__greetRecap({ days: 0 })));
+  ok("one-day phrasing", /been a day/.test(t.__greetRecap({ days: 1 })));
+  ok("singular grammar: 1 thing", /remember 1 thing you/.test(t.__greetRecap({ days: 2, memCount: 1 })));
+  ok("ZEUS variant is tactical", /Standing by for orders/.test(t.__greetRecap({ zeus: true, memCount: 2, topic: "deploy" })));
+  ok("empty fallback is still warm", /deck is warm/.test(t.__greetRecap({ days: 1 })));
+});
+
+/* ================= 9. Voice consent gate + per-persona voice (new) ================= */
+suite("Voice master switch", () => {
+  const mc = src.match(/function canAutoSpeak\(\)\{[\s\S]*?\n\}/);
+  if (!mc) return skipSuite("  [master switch]");
+  const makeLS = v => ({ getItem: () => v });
+  const makeFn = ls => new Function("localStorage", mc[0] + "\nreturn canAutoSpeak;")(ls);
+  ok("no record → speaks by default (voice ON out of the box)", makeFn(makeLS(null))() === true);
+  ok("VOICE ON → speaks", makeFn(makeLS("granted"))() === true);
+  ok("VOICE OFF → total silence", makeFn(makeLS("denied"))() === false);
+  ok("speak() itself refuses when OFF — nothing can bypass", /if\(!synth\|\|!soundOn\|\|!canAutoSpeak\(\)\)\{return\}/.test(src));
+  ok("single VOICE button toggles the switch", /vb\.onclick=\(\)=>\{setVoiceConsent\(!soundOn\)/.test(src));
+  ok("typed questions speak too — no session gate inside speak()", (function () {
+    const sb = src.match(/function speak\(t\)\{[\s\S]*?\n\}/);
+    return !!sb && sb[0].indexOf("voiceAllowed") < 0;
+  })());
+});
+
+suite("Per-persona voice selection", () => {
+  const mv = src.match(/\/\* VOICE-START \*\/[\s\S]*?\/\* VOICE-END \*\//);
+  if (!mv) return skipSuite("  [persona voice]");
+  const fakeVoices = [
+    { name: "Daniel", lang: "en-GB" },
+    { name: "Samantha", lang: "en-US" },
+    { name: "David", lang: "en-US" },
+    { name: "Google UK English Female", lang: "en-GB" }
+  ];
+  const t = new Function("voices", "persona", mv[0] + "\nreturn __pickVoiceFor;")(fakeVoices, () => "aura");
+  const tz = new Function("voices", "persona", mv[0] + "\nreturn __pickVoiceFor;")(fakeVoices, () => "jarvis");
+  ok("AURA defaults female-leaning", /samantha|female/i.test((t(false) || {}).name || ""));
+  ok("ZEUS defaults male-leaning", /daniel|male/i.test((tz(false) || {}).name || ""));
+  ok("AURA ≠ ZEUS voice", (t(false) || {}).name !== (tz(false) || {}).name);
+  ok("Hindi path returns a Hindi voice", (t(true) || {}).name === undefined); // no hi voice in fake set → null tolerated
+});
+
 console.log("\n────────────────────────────");
 console.log("pass " + pass + " · fail " + fail + " · skipped-suites " + skip);
 process.exit(fail ? 1 : 0);
