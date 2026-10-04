@@ -946,7 +946,15 @@ body.theme-gold.boot-flash::after,body.persona-zeus.boot-flash::after{background
 body.theme-classical.boot-flash::after{background:radial-gradient(circle at 50% 44%,rgba(139,94,52,.28),rgba(139,94,52,.12) 40%,transparent 70%)}
 @keyframes vioFlash{0%{opacity:0;transform:scale(.55)}22%{opacity:1}100%{opacity:0;transform:scale(1.6)}}
 
-/* ---------- DOCK — dreamy violet glass (input, mic, send, chips) ---------- */
+/* ---------- DOCK — sound master switch + dreamy violet glass ---------- */
+#soundBtn{position:relative;top:auto;left:auto;margin:0;display:inline-block!important;line-height:1;height:46px;padding:0 14px;font-family:var(--mono);font-size:10px;letter-spacing:1.2px;color:var(--vioText);border:1px solid var(--vioLine);background:var(--vioGlass);backdrop-filter:blur(10px);border-radius:10px;cursor:pointer;transition:.2s}
+#soundBtn:hover{color:var(--vio2);border-color:var(--vio);box-shadow:0 0 14px var(--vioGlowSoft)}
+#soundBtn:active{color:var(--vio2);transform:scale(.97)}
+#soundBtn.off{opacity:0.65;border-color:rgba(255,255,255,0.18);background:rgba(20,20,35,0.4);color:var(--vioDim);box-shadow:none}
+#soundBtn .vBtnDot{position:absolute;right:10px;top:50%;transform:translateY(-50%);
+  width:7px;height:7px;border-radius:50%;background:var(--vio2);box-shadow:0 0 8px var(--vioGlow)}
+#micWrap{padding-right:60px}
+#soundBtn .vDotBadge{display:none}
 #q{background:var(--vioGlass);border:1px solid var(--vioLine);color:var(--vioTextBright);backdrop-filter:blur(14px)}
 #q::placeholder{color:var(--vioDim)}
 #q:focus{border-color:var(--vio);box-shadow:0 0 0 3px var(--vioGlowSoft),0 8px 30px var(--vioGlowSoft)}
@@ -1211,7 +1219,7 @@ body.theme-classical .msg.user .who{color:#a16207}
     <button id="sendBtn">▸</button>
   </div>
   <div class="iconrow">
-  <button class="ibtn" id="soundBtn" style="position: relative; top: 0; left: 0; margin: 0; display: inline-block;">VOICE: ON</button>
+  <button class="ibtn" id="soundBtn" style="position: relative; top: 0; left: 0; margin: 0; display: inline-block;">🔊 VOICE: ON</button>
   <button class="ibtn" id="voiceCfgBtn" title="Voice Studio — pick voices, tune speed & pitch for AURA and ZEUS">🎛 VOICE SET</button>
   <button class="ibtn" id="langBtn">LANG: ENG</button>   <button class="ibtn" id="personaBtn" title="Switch interface — AURA (holographic) or ZEUS (owner's tactical protocol)">MODE: AURA</button>
   <button class="ibtn" id="camBtn" title="Live camera vision — show me your world">📷 CAM</button>
@@ -5373,7 +5381,11 @@ if(matchMedia("(max-width:860px)").matches){
 /* VOICE MASTER SWITCH — the one button that decides whether AURA and ZEUS speak */
 (function(){
   const vb=$("soundBtn");if(!vb)return;
-  const paint=()=>{vb.textContent="VOICE: "+(soundOn?"ON":"OFF")};
+  const paint=()=>{
+    const on=soundOn;
+    vb.textContent=on?"🔊 VOICE: ON":"🔇 VOICE: OFF";
+    vb.classList.toggle("off",!on);
+  };
   try{if(localStorage.getItem("aura_voice_consent")==="denied")soundOn=false}catch(e){}
   paint();
   vb.onclick=()=>{setVoiceConsent(!soundOn);paint();};
@@ -5575,8 +5587,19 @@ function canAutoSpeak(){try{return localStorage.getItem("aura_voice_consent")!==
 function setVoiceConsent(on){
   try{localStorage.setItem("aura_voice_consent",on?"granted":"denied")}catch(e){}
   soundOn=!!on;
-  try{const vb=document.getElementById("soundBtn");if(vb)vb.textContent="VOICE: "+(on?"ON":"OFF")}catch(e){}
-  if(on){__onceAllowVoice(45000);speak("Voice on — we'll speak now.")}
+  try{
+    const vb=document.getElementById("soundBtn");
+    if(vb){
+      vb.textContent=on?"🔊 VOICE: ON":"🔇 VOICE: OFF";
+      vb.classList.toggle("off",!on);
+    }
+  }catch(e){}
+  if(on){
+    try{AC=AC||new(window.AudioContext||window.webkitAudioContext)();if(AC&&AC.state==="suspended")AC.resume().catch(()=>{});}catch(e){}
+    try{if(window.speechSynthesis){window.speechSynthesis.cancel();window.speechSynthesis.resume()}}catch(e){}
+    __onceAllowVoice(45000);
+    speak("Voice on — we'll speak now.")
+  }
   else{stopSpeech();try{pushSys("🔇 VOICE OFF — AURA and ZEUS are muted everywhere")}catch(e){}
     try{addMsg(msgTag(),"🔇 Voice off — total silence. Tap the button (or say 'enable voice') to bring us back.","aura")}catch(e){}}
 }
