@@ -926,18 +926,39 @@ body.theme-gold #bootRing::after,body.persona-zeus #bootRing::after{border-color
 @keyframes vioBloom{0%{transform:scale(.02);opacity:0;filter:blur(6px)}38%{opacity:1;filter:blur(1px)}62%{transform:scale(1.14)}100%{transform:scale(1);opacity:1;filter:blur(.5px)}}
 @keyframes vioPulse{0%,100%{box-shadow:0 0 60px 12px var(--vioGlowSoft)}50%{box-shadow:0 0 110px 26px var(--vioGlow)}}
 @keyframes vioOrbit{to{transform:rotate(360deg)}}
-#boot .b-sub{color:var(--vioTextBright)!important;text-shadow:0 0 34px var(--vioGlow),0 0 70px var(--vioGlowSoft)!important;animation:vioWord 2.6s cubic-bezier(.2,.7,.3,1) both!important}
-#boot .b-sub i{color:var(--vio2)!important}
-@keyframes vioWord{0%{opacity:0;letter-spacing:clamp(18px,7vw,30px);filter:blur(10px)}55%{opacity:1;filter:blur(.5px)}100%{letter-spacing:clamp(5px,2.4vw,11px);filter:blur(0)}}
-#boot .b-tag{color:var(--vioDim)!important;animation:vioFade 1.6s ease 1.1s both}
-@keyframes vioFade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-#boot .b-bar{background:rgba(168,85,247,.16)!important}
-#boot .b-bar i{background:linear-gradient(90deg,transparent,var(--vio),var(--vio2),transparent)!important}
-body.theme-gold #boot .b-bar{background:rgba(245,179,1,.16)!important}
-#bootLog{color:var(--vioText)!important;text-shadow:0 0 14px var(--vioGlowSoft)}
-#bootLog .ok{color:var(--vio2)!important}
-#bootSeal{color:var(--vioDim)!important}
-#bootSkip{color:var(--vioDim)!important;letter-spacing:3px;animation:vioFade 1.4s ease 1.6s both}
+
+/* ---------- CINEMATIC INTRO SEQUENCE (10-12s) ---------- */
+#introBeam{position:absolute;top:0;left:50%;transform:translateX(-50%);width:160px;height:0;background:linear-gradient(180deg,rgba(34,211,238,.45),rgba(168,85,247,.2) 60%,transparent 100%);filter:blur(10px);opacity:0;animation:beamDown 2.5s ease-out forwards;z-index:2}
+@keyframes beamDown{0%{height:0;opacity:0}50%{opacity:0.8}100%{height:100vh;opacity:0.35}}
+
+#introOrb{position:absolute;bottom:-100px;left:50%;transform:translateX(-50%) scale(.5);width:280px;height:280px;border-radius:50%;background:radial-gradient(circle,rgba(168,85,247,.6) 0%,rgba(34,211,238,.4) 40%,transparent 70%);filter:blur(16px);opacity:0;animation:orbRise 3s cubic-bezier(.16,.8,.3,1) forwards;z-index:2}
+@keyframes orbRise{0%{bottom:-120px;opacity:0;transform:translateX(-50%) scale(.4)}100%{bottom:28%;opacity:0.85;transform:translateX(-50%) scale(1)}}
+
+#introLogoStage{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;z-index:10;opacity:0;animation:logoStageFade 2s cubic-bezier(.16,.8,.3,1) 2.2s forwards}
+@keyframes logoStageFade{0%{opacity:0;transform:scale(.85)}100%{opacity:1;transform:scale(1)}}
+
+#introRingsStage{position:relative;width:280px;height:280px;display:flex;align-items:center;justify-content:center;z-index:10;opacity:0;animation:ringsStageFade 3s cubic-bezier(.16,.8,.3,1) 4.2s forwards}
+@keyframes ringsStageFade{0%{opacity:0;transform:scale(.7)}100%{opacity:1;transform:scale(1)}}
+
+.orbit-ring{position:absolute;inset:0;border-radius:50%;border:1px solid rgba(34,211,238,.4);box-shadow:0 0 16px rgba(34,211,238,.2);animation:vioOrbit 10s linear infinite}
+.orbit-ring.r2{inset:30px;border-color:rgba(168,85,247,.45);animation-duration:7s;animation-direction:reverse}
+.orbit-ring.r3{inset:60px;border-color:rgba(99,102,241,.5);animation-duration:12s}
+.central-aura-orb{font-family:'Orbitron',sans-serif;font-weight:900;font-size:22px;letter-spacing:4px;color:#fff;text-shadow:0 0 20px rgba(34,211,238,.8);background:rgba(18,25,42,.85);border:1px solid rgba(34,211,238,.4);padding:14px 20px;border-radius:50%;box-shadow:0 0 30px rgba(34,211,238,.35)}
+
+.orbit-bubble{position:absolute;width:44px;height:44px;border-radius:50%;background:rgba(18,25,42,.85);border:1px solid rgba(34,211,238,.4);backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 0 14px rgba(34,211,238,.3);transition:transform .3s}
+
+#introCarouselStage{position:relative;width:min(480px,92vw);height:140px;display:flex;align-items:center;justify-content:center;perspective:1000px;z-index:10;opacity:0;animation:carouselStageFade 2.8s cubic-bezier(.16,.8,.3,1) 7.2s forwards}
+@keyframes carouselStageFade{0%{opacity:0;transform:translateY(30px)}100%{opacity:1;transform:translateY(0)}}
+
+.intro-card{position:absolute;width:280px;padding:14px;background:rgba(13,18,30,.88);border:1px solid rgba(34,211,238,.4);backdrop-filter:blur(16px);border-radius:14px;color:#f1f5f9;font-size:12.5px;box-shadow:0 12px 36px rgba(0,0,0,.6);line-height:1.5}
+
+#introFinalStage{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;z-index:10;opacity:0;animation:finalStageFade 2s ease-out 9.8s forwards}
+@keyframes finalStageFade{0%{opacity:0;transform:scale(.9)}100%{opacity:1;transform:scale(1)}}
+
+#bootSkip{position:absolute;bottom:30px;z-index:20;background:rgba(18,25,42,.8);border:1px solid rgba(34,211,238,.35);color:var(--cy2);font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:2.5px;padding:8px 18px;border-radius:20px;cursor:pointer;backdrop-filter:blur(10px);transition:all .2s;box-shadow:0 0 14px rgba(34,211,238,.2)}
+#bootSkip:hover{background:rgba(34,211,238,.25);border-color:var(--cy);color:#fff;box-shadow:0 0 22px rgba(34,211,238,.4)}
+
+#boot.quick-intro #introBeam,#boot.quick-intro #introOrb,#boot.quick-intro #introLogoStage,#boot.quick-intro #introRingsStage,#boot.quick-intro #introCarouselStage,#boot.quick-intro #introFinalStage{animation-duration:.4s!important;animation-delay:0s!important}
 /* the reveal — violet flash bloom as the app fades in (video f24 moment) */
 body.boot-flash::after{content:"";position:fixed;inset:0;z-index:59;pointer-events:none;
   background:radial-gradient(circle at 50% 44%,rgba(216,180,254,.55),rgba(168,85,247,.25) 38%,transparent 70%);
@@ -1239,13 +1260,45 @@ body.theme-classical .msg.user .who{color:#a16207}
 </div>
 
 <div id="boot">
-  <div id="bootRing"></div>
-  <div class="b-sub">AU<i>RA</i></div>
-  <div class="b-tag">holographic intelligence · own design</div>
-  <div class="b-bar"><i></i></div>
-  <div id="bootLog"></div>
-  <div id="bootSeal" style="margin-top:6px;font-size:9px;letter-spacing:.22em;color:rgba(63,122,138,.55);user-select:none">AURA · © 2026 SOURABH SINGH · JECRC UNIVERSITY · ALL RIGHTS RESERVED</div>
-  <div id="bootSkip">TAP TO SKIP</div>
+  <div id="introBeam"></div>
+  <div id="introOrb"></div>
+
+  <div id="introLogoStage">
+    <div style="font-size:36px;filter:drop-shadow(0 0 16px var(--cy2))">✨</div>
+    <div class="b-sub">AU<i>RA</i></div>
+  </div>
+
+  <div id="introRingsStage">
+    <div class="orbit-ring"></div>
+    <div class="orbit-ring r2"></div>
+    <div class="orbit-ring r3"></div>
+    <div class="central-aura-orb">AURA</div>
+    <div class="orbit-bubble b1" style="top:-10px;left:calc(50% - 22px)" title="Chat">💬</div>
+    <div class="orbit-bubble b2" style="top:calc(50% - 22px);right:-10px" title="Voice">🎙</div>
+    <div class="orbit-bubble b3" style="bottom:-10px;left:calc(50% - 22px)" title="Code">⌨</div>
+    <div class="orbit-bubble b4" style="top:calc(50% - 22px);left:-10px" title="Files">📚</div>
+    <div class="orbit-bubble b5" style="top:25px;right:15px" title="Camera">📷</div>
+    <div class="orbit-bubble b6" style="bottom:25px;left:15px" title="Memory">🧠</div>
+  </div>
+
+  <div id="introCarouselStage">
+    <div class="intro-card c1">
+      <div style="font-family:var(--mono);font-size:10px;color:var(--cy2);margin-bottom:4px">YOU ▸</div>
+      <div>How can AURA help today?</div>
+    </div>
+    <div class="intro-card c2">
+      <div style="font-family:var(--mono);font-size:10px;color:var(--cy2);margin-bottom:4px">AURA ▸</div>
+      <div>Reasoning ready. Voice, code, vision & web search active.</div>
+    </div>
+  </div>
+
+  <div id="introFinalStage">
+    <div class="b-tag">holographic intelligence · own design</div>
+    <div id="bootSeal" style="margin-top:6px;font-size:9px;letter-spacing:.22em;color:rgba(120,190,205,.65);user-select:none">AURA · © 2026 SOURABH SINGH · JECRC UNIVERSITY · ALL RIGHTS RESERVED</div>
+  </div>
+
+  <div id="bootLog" style="display:none"></div>
+  <button id="bootSkip">SKIP INTRO ⏭</button>
 </div>
 <button id="stopBtn">■ STOP VOICE</button>
 
@@ -5737,7 +5790,13 @@ function visitorGreeting(){
 /* GREETING v3 END */
 (function boot(){
   const el=$("bootLog");let i=0;
-  (function step(){if(i<BOOT.length){const d=document.createElement("div");d.innerHTML=BOOT[i++];el.appendChild(d);setTimeout(step,i===BOOT.length?650:300)}})();
+  if(el){(function step(){if(i<BOOT.length){const d=document.createElement("div");d.innerHTML=BOOT[i++];el.appendChild(d);setTimeout(step,i===BOOT.length?650:300)}})();}
+  
+  const played = (function(){try{return sessionStorage.getItem("aura_intro_played")==="1"}catch(e){return false}})() || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const duration = played ? 800 : 11500;
+  try{sessionStorage.setItem("aura_intro_played","1")}catch(e){}
+  if(played&&$("boot")) try{$("boot").classList.add("quick-intro")}catch(e){}
+
   let bootDone=false;const end=()=>{if(bootDone)return;bootDone=true;try{document.body.classList.add("booted")}catch(e){}try{document.body.classList.add("boot-flash");setTimeout(()=>{try{document.body.classList.remove("boot-flash")}catch(e){}},1100)}catch(e){}$("boot").classList.add("gone");
     setTimeout(()=>{try{scheduleDailyBrief()}catch(e){}try{cloudPullAndRestore()}catch(e){}try{sleepConsolidate(false)}catch(e){}try{morningDigest()}catch(e){}try{applyPersonaVisual()}catch(e){}try{applyPersonaTheme()}catch(e){}const n=memGet().name;const P0=PERSONAS[persona()];const histN=(function(){try{return (JSON.parse(localStorage.getItem("aura_history_v1")||"{}").convo||[]).length}catch(e){return 0}})();const replay=(function(){try{return (JSON.parse(localStorage.getItem("aura_history_v1")||"{}").convo||[]).slice(-6)}catch(e){return []}})();
     if(replay.length){const hd=addMsg("SYS","— previous conversation restored —","sys");hd.style.opacity=".55";
@@ -5745,8 +5804,13 @@ function visitorGreeting(){
       const sep=addMsg("SYS","— live now, memory intact —","sys");sep.style.opacity=".55";log.scrollTop=log.scrollHeight;}
     try{memRender()}catch(e){}
     try{visitorGreeting()}catch(e){}},350)};
-  $("boot").addEventListener("click",end,{once:true});
-  setTimeout(end,2600);
+  const bootElem=$("boot");
+  if(bootElem){
+    bootElem.addEventListener("click",end,{once:true});
+    const skipBtn=$("bootSkip");
+    if(skipBtn)skipBtn.addEventListener("click",function(e){e.stopPropagation();end();});
+  }
+  setTimeout(end,duration);
 })();
 /* ================= PUBLIC CONFIG — maker/ceo edit these values in the database; every visitor receives them ================= */
 const AuraConfig={cache:{},
