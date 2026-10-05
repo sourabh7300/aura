@@ -1660,7 +1660,7 @@ body.theme-classical .msg.user .who{color:#a16207}
 #landing:not(.gone) ~ * #boot,
 body:has(#landing:not(.gone)) #boot { pointer-events:none!important; }
 /* Intro overlay sits above everything */
-#introOverlay{z-index:300}
+
 
 /* Grid overlay */
 #landing::before{content:'';position:fixed;inset:0;z-index:1;pointer-events:none;
@@ -1755,25 +1755,6 @@ body:has(#landing:not(.gone)) #boot { pointer-events:none!important; }
 .final-sub{font-size:16px;color:var(--dim-bright);margin-bottom:52px}
 .final-seal{font-family:var(--mono);font-size:10px;letter-spacing:3px;color:rgba(92,225,255,.35);margin-top:64px}
 
-/* ---- Particle canvas in landing ---- */
-#lcanvas{position:fixed;inset:0;z-index:0}
-
-/* ---- 8s intro overlay ---- */
-#introOverlay{position:fixed;inset:0;z-index:300;background:#05070E;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;transition:opacity 1s ease,visibility 1s ease;font-family:'Space Grotesk',sans-serif}
-#introOverlay.gone{opacity:0;visibility:hidden;pointer-events:none}
-#introOverlay canvas{position:absolute;inset:0;z-index:0}
-.intro-content{position:relative;z-index:1;text-align:center;display:flex;flex-direction:column;align-items:center}
-.intro-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(92,225,255,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(92,225,255,.04) 1px,transparent 1px);background-size:60px 60px;opacity:0;transition:opacity 1.5s ease;pointer-events:none}
-.intro-logo{opacity:0;transform:translateY(20px);transition:opacity 1s ease,transform 1s ease;margin-bottom:16px}
-.intro-logo .il-icon{font-size:56px;filter:drop-shadow(0 0 30px rgba(92,225,255,.8));margin-bottom:16px}
-.intro-logo .il-word{font-weight:700;font-size:64px;letter-spacing:12px;color:#fff;text-shadow:0 0 60px rgba(92,225,255,.5)}
-.intro-logo .il-word span{color:var(--cy)}
-.intro-tagline{font-family:'Inter',sans-serif;font-size:16px;color:rgba(232,236,248,.6);letter-spacing:2px;opacity:0;transition:opacity .8s ease;margin-top:8px}
-.intro-progress{width:200px;height:1px;background:rgba(255,255,255,.06);border-radius:1px;margin-top:48px;overflow:hidden;opacity:0;transition:opacity .5s ease}
-.intro-progress i{display:block;height:100%;width:0;background:linear-gradient(90deg,transparent,var(--cy));border-radius:1px;transition:width 8s linear}
-.intro-skip{position:fixed;bottom:40px;right:40px;z-index:2;font-family:var(--mono);font-size:10px;letter-spacing:3px;color:rgba(92,225,255,.4);background:none;border:1px solid rgba(92,225,255,.15);border-radius:20px;padding:8px 20px;cursor:pointer;transition:all .2s}
-.intro-skip:hover{color:var(--cy);border-color:rgba(92,225,255,.4)}
-
 /* ---- Premium inside app updates ---- */
 #topbar{background:rgba(5,7,14,.8);backdrop-filter:blur(20px);border-bottom:1px solid rgba(255,255,255,.05)}
 .wordmark{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:20px;letter-spacing:5px;color:#fff;text-shadow:0 0 20px rgba(92,225,255,.4)}
@@ -1809,7 +1790,7 @@ body:has(#landing:not(.gone)) #boot { pointer-events:none!important; }
 
 /* ---- prefers-reduced-motion safety ---- */
 @media(prefers-reduced-motion:reduce){
-  .sw-bar,.cta-primary,.l-card,.intro-logo,.intro-tagline{animation:none!important;transition:none!important}
+  .sw-bar,.cta-primary,.l-card{animation:none!important;transition:none!important}
   #landing{scroll-behavior:auto}
 }
 
@@ -2062,18 +2043,6 @@ body:not(.theme-classical):not(.theme-gold) .msg.user{
 .final-h em{background:linear-gradient(135deg,var(--g),var(--tl));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
 .final-seal{color:rgba(233,185,73,.35)}
 
-/* ---- intro overlay ---- */
-#introOverlay{background:#04060d}
-.intro-grid{background-image:linear-gradient(rgba(233,185,73,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(233,185,73,.04) 1px,transparent 1px)}
-.intro-logo .il-icon{filter:drop-shadow(0 0 30px rgba(233,185,73,.8))}
-.intro-logo .il-word{text-shadow:0 0 60px rgba(233,185,73,.5)}
-.intro-logo .il-word span{color:var(--g)}
-.intro-tagline{color:rgba(243,234,214,.6)}
-.intro-progress{background:rgba(255,255,255,.06)}
-.intro-progress i{background:linear-gradient(90deg,transparent,var(--g))}
-.intro-skip{color:rgba(233,185,73,.4);border-color:rgba(233,185,73,.15)}
-.intro-skip:hover{color:var(--g);border-color:rgba(233,185,73,.4)}
-
 /* ---- boot screen ---- */
 #boot{background:radial-gradient(900px 520px at 50% 28%,rgba(233,185,73,.1),#04060d 72%)!important}
 #boot .b-sub{color:var(--t)!important;text-shadow:0 0 30px rgba(233,185,73,.5)}
@@ -2286,6 +2255,9 @@ body[data-tab="chat"] #stageEmpty{max-width:880px;margin:0 auto 8px!important;wi
    AURA full-bleed #fx ring field is switched off inside the app. */
 body:not(.on-landing) #fx{display:none!important}
 #fx{display:none!important}
+/* inner intro/landing removed — open straight into the app chat (matches aura-in-next reference) */
+#landing{display:none!important}
+#boot{display:none!important}
 
 /* ---- v5 parity pass 2: sizes, rows and copy locked to the reference file ---- */
 /* the phone chip row duplicates #chips — v5 ships exactly one .chips row */
@@ -2396,6 +2368,8 @@ body{line-height:1.55}
   display:block;font:400 11px 'JetBrains Mono',monospace;
   letter-spacing:.25em!important;color:var(--g)!important;margin-bottom:4px}
 #conv .msg.user .who{color:var(--m)!important;letter-spacing:.14em!important}
+/* v5 .m (AI reply) is plain text — no card. The gold-tint card belongs to .m.u (user bubble) only. */
+#log .msg.aura,#conv .msg.aura{background:none!important;box-shadow:none!important}
 /* v5 never sets a heading font — everything is the body face */
 #stageEmpty h4,#sessPrev h3{font-family:'Space Grotesk',system-ui,sans-serif!important}
 </style>
@@ -2405,23 +2379,6 @@ body{line-height:1.55}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
-
-<!-- =====================================================
-     AURA 4.0 — INTRO OVERLAY (8-second cinematic, once per session)
-     ===================================================== -->
-<div id="introOverlay">
-  <canvas id="lcanvas"></canvas>
-  <div class="intro-grid" id="introGrid"></div>
-  <div class="intro-content">
-    <div class="intro-logo" id="introLogo">
-      <div class="il-icon">✦</div>
-      <div class="il-word">AU<span>RA</span></div>
-    </div>
-    <div class="intro-tagline" id="introTagline">holographic intelligence · own design</div>
-    <div class="intro-progress" id="introProgress"><i id="introBar"></i></div>
-  </div>
-  <button class="intro-skip" id="introSkip">SKIP INTRO ⏭</button>
-</div>
 
 <!-- =====================================================
      AURA 4.0 — LANDING PAGE (OUTSIDE: hero + scroll sections)
@@ -7097,10 +7054,10 @@ const bootAt=Date.now();
 setInterval(()=>{
   /* busy watchdog — a hung network call must never deadlock the conversation */
   if(busy&&askAt&&Date.now()-askAt>45000){busy=false;setMode("idle");pushSys("recovered from a stalled query — try again")}
-  if(document.body.getAttribute("data-tab")!=="system")return;
   const n=new Date();
   $("clockT").textContent=n.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit",second:"2-digit"});
   $("clockD").textContent=n.toLocaleDateString(undefined,{weekday:"short",day:"numeric",month:"short"}).toUpperCase();
+  if(document.body.getAttribute("data-tab")!=="system")return;
   $("tFps").textContent=(fpsVal||"—")+" fps";
   try{const te=$("tEng");if(te&&AuraConfig&&AuraConfig.cache&&AuraConfig.cache.aiEngine)te.textContent=AuraConfig.cache.aiEngine}catch(e){}
   $("tPts").textContent=N+" / "+NMAX;
@@ -10239,9 +10196,7 @@ document.addEventListener("DOMContentLoaded",function(){
   /* ---------- enterAura() — transition landing → app ---------- */
   window.enterAura = function(){
     const landing = document.getElementById('landing');
-    const introOv = document.getElementById('introOverlay');
     if(landing){ landing.classList.add('gone'); setTimeout(()=>{ try{landing.style.display='none';}catch(e){} },900); }
-    if(introOv && !introOv.classList.contains('gone')){ introOv.classList.add('gone'); }
     /* trigger boot if not already done */
     try{
       if(!document.body.classList.contains('booted')){
@@ -10251,6 +10206,9 @@ document.addEventListener("DOMContentLoaded",function(){
       }
     }catch(e){}
   };
+
+  /* Auto-enter: show the app chat immediately — no inner landing/intro screens */
+  setTimeout(function(){ try{ window.enterAura(); }catch(e){} }, 40);
 
   /* ---------- Toast system ---------- */
   window.auraToast = function(msg, type='info', dur=3500){
@@ -10263,154 +10221,6 @@ document.addEventListener("DOMContentLoaded",function(){
     requestAnimationFrame(()=>{ requestAnimationFrame(()=>{ t.classList.add('show'); }); });
     setTimeout(()=>{ t.classList.remove('show'); setTimeout(()=>{ try{t.remove();}catch(e){} }, 350); }, dur);
   };
-
-  /* ---------- Three.js particle orb for intro ---------- */
-  function initIntroParticles(canvas){
-    if(rm || !window.THREE){ return null; }
-    const W = canvas.width = window.innerWidth;
-    const H = canvas.height = window.innerHeight;
-
-    const renderer = new THREE.WebGLRenderer({ canvas, alpha:true, antialias:false });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setSize(W, H);
-
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(60, W/H, 0.1, 1000);
-    camera.position.z = 5;
-
-    const isMob = W < 768;
-    const N = isMob ? 14000 : 40000;
-    const positions = new Float32Array(N * 3);
-    const colors = new Float32Array(N * 3);
-    const sizes = new Float32Array(N);
-
-    for(let i=0; i<N; i++){
-      /* sphere distribution */
-      const phi = Math.acos(2*Math.random()-1);
-      const theta = Math.random() * Math.PI * 2;
-      const r = 1.8 + (Math.random()-0.5)*0.6;
-      positions[i*3]   = r * Math.sin(phi) * Math.cos(theta);
-      positions[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
-      positions[i*3+2] = r * Math.cos(phi);
-
-      /* cyan → violet gradient by Y */
-      const t = (positions[i*3+1] + 2) / 4;
-      colors[i*3]   = 0.36 + t*0.18;
-      colors[i*3+1] = 0.88 - t*0.5;
-      colors[i*3+2] = 1.0;
-      sizes[i] = 0.5 + Math.random() * 1.5;
-    }
-
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    geo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
-
-    const mat = new THREE.ShaderMaterial({
-      uniforms:{ uTime:{value:0}, uState:{value:0} },
-      vertexShader:`
-        attribute float size;
-        attribute vec3 color;
-        varying vec3 vColor;
-        uniform float uTime;
-        void main(){
-          vColor = color;
-          vec3 pos = position;
-          float wave = sin(uTime * 1.2 + pos.x * 1.5 + pos.y) * 0.04;
-          pos += normalize(pos) * wave;
-          vec4 mv = modelViewMatrix * vec4(pos, 1.0);
-          gl_PointSize = size * (300.0 / -mv.z);
-          gl_Position = projectionMatrix * mv;
-        }`,
-      fragmentShader:`
-        varying vec3 vColor;
-        void main(){
-          vec2 uv = gl_PointCoord - 0.5;
-          float d = dot(uv,uv);
-          if(d > 0.25) discard;
-          float alpha = (1.0 - d*4.0) * 0.85;
-          gl_FragColor = vec4(vColor, alpha);
-        }`,
-      transparent:true, vertexColors:true, depthWrite:false,
-      blending: THREE.AdditiveBlending
-    });
-
-    const points = new THREE.Points(geo, mat);
-    scene.add(points);
-
-    let rafId, stopped = false;
-    function animate(t){
-      if(stopped) return;
-      rafId = requestAnimationFrame(animate);
-      mat.uniforms.uTime.value = t * 0.001;
-      points.rotation.y += 0.0025;
-      points.rotation.x += 0.0008;
-      renderer.render(scene, camera);
-    }
-    animate(0);
-
-    /* Resize */
-    const onResize = ()=>{
-      const W2 = window.innerWidth, H2 = window.innerHeight;
-      camera.aspect = W2/H2; camera.updateProjectionMatrix();
-      renderer.setSize(W2, H2);
-    };
-    window.addEventListener('resize', onResize);
-
-    return { stop(){ stopped=true; cancelAnimationFrame(rafId); window.removeEventListener('resize',onResize); } };
-  }
-
-  /* ---------- 8-second intro sequence ---------- */
-  function runIntro(){
-    const overlay = document.getElementById('introOverlay');
-    if(!overlay) return;
-
-    /* skip if already played or reduced motion */
-    if(introPlayed || rm){
-      overlay.classList.add('gone');
-      return;
-    }
-    try{ sessionStorage.setItem('aura_landing_played','1'); }catch(e){}
-
-    /* start Three.js */
-    const canvas = document.getElementById('lcanvas');
-    let particleSys = null;
-    if(canvas && window.THREE){ particleSys = initIntroParticles(canvas); }
-
-    /* Animate the grid in */
-    const grid = document.getElementById('introGrid');
-    if(grid) setTimeout(()=>{ grid.style.opacity='1'; }, 300);
-
-    /* Logo fade in at 2s */
-    const logo = document.getElementById('introLogo');
-    const tag = document.getElementById('introTagline');
-    const prog = document.getElementById('introProgress');
-    const bar = document.getElementById('introBar');
-
-    setTimeout(()=>{
-      if(logo){ logo.style.opacity='1'; logo.style.transform='translateY(0)'; }
-    }, 2000);
-
-    setTimeout(()=>{
-      if(tag) tag.style.opacity='1';
-    }, 3200);
-
-    setTimeout(()=>{
-      if(prog) prog.style.opacity='1';
-      if(bar) setTimeout(()=>{ bar.style.width='100%'; }, 50);
-    }, 3800);
-
-    /* Skip button */
-    const skipBtn = document.getElementById('introSkip');
-    function endIntro(){
-      if(particleSys) particleSys.stop();
-      overlay.classList.add('gone');
-    }
-    if(skipBtn) skipBtn.addEventListener('click', endIntro, {once:true});
-
-    /* Auto-end at 8s, then show landing */
-    setTimeout(endIntro, 8000);
-  }
 
   /* ---------- Landing page particle background (lightweight) ---------- */
   function initLandingBg(){
@@ -10458,9 +10268,9 @@ document.addEventListener("DOMContentLoaded",function(){
   }
 
   /* ---------- Init sequence ---------- */
-  runIntro();
+  /* Landing shows right away — intro overlay removed ---------- */
 
-  /* After intro plays (8s), initialize landing */
+  /* Initialize landing scroll animations */
   setTimeout(()=>{
     initScrollAnimations();
     animateCounters();
@@ -10468,8 +10278,6 @@ document.addEventListener("DOMContentLoaded",function(){
 
   /* If already played: show landing immediately */
   if(introPlayed){
-    const overlay = document.getElementById('introOverlay');
-    if(overlay) overlay.classList.add('gone');
     initScrollAnimations();
   }
 
