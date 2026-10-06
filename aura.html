@@ -2109,21 +2109,21 @@ body{
 /* v5 .msgs */
 #log{
   flex:1;overflow-y:auto;display:flex;flex-direction:column;
-  gap:18px;padding:8px 4px 16px;max-width:880px;width:100%;margin:0 auto;
+  gap:24px;padding:8px 4px 16px;max-width:1060px;width:100%;margin:0 auto;
 }
 /* v5 .m + v5 .m.u */
-.msg{max-width:92%;font-size:18px;line-height:1.6;font-weight:300;
+.msg{max-width:100%;font-size:19px;line-height:1.68;font-weight:300;
   background:none!important;border:0!important;border-radius:0!important;padding:0!important}
 .msg .who{display:block;font:400 11px 'JetBrains Mono',monospace;letter-spacing:.25em;
   color:var(--g);margin-bottom:4px}
 .msg.user{margin-left:auto;width:fit-content;max-width:92%;
   border:1px solid var(--line)!important;border-radius:18px 18px 4px 18px!important;
-  padding:10px 16px!important;background:var(--gl)!important;font-size:16px;line-height:1.5}
+  padding:12px 18px!important;background:var(--gl)!important;font-size:17px;line-height:1.55}
 .msg.user .who{color:var(--m)}
 .msg .mdel,.msg .mcopy{display:none!important}
 
 /* v5 .hero */
-#stageEmpty{display:flex!important;align-items:center;gap:18px;max-width:880px;
+#stageEmpty{display:flex!important;align-items:center;gap:18px;max-width:1060px;
   width:100%;margin:0 auto 8px;text-align:left;padding:0!important}
 #stageEmpty .se-orb{width:150px;height:150px;flex:none;border:0;background:none;font-size:0;
   border-radius:50%;box-shadow:none}
@@ -2134,7 +2134,7 @@ body{
 
 /* v5 .chips */
 #chips{display:flex!important;gap:8px!important;flex-wrap:wrap!important;
-  margin:0 auto 12px!important;max-width:880px;width:100%}
+  margin:0 auto 12px!important;max-width:1060px;width:100%}
 #chips .chip{border:1px solid var(--line)!important;border-radius:99px!important;
   padding:8px 16px!important;font-size:14px!important;color:var(--g2)!important;
   background:var(--gl)!important;transition:.25s;font-family:inherit}
@@ -2142,7 +2142,7 @@ body{
 
 /* v5 .comp */
 #dock{
-  position:static!important;margin:0 auto!important;width:100%!important;max-width:880px;
+  position:static!important;margin:0 auto!important;width:100%!important;max-width:1060px;
   background:var(--gl)!important;border:1px solid var(--line)!important;
   border-radius:26px!important;padding:10px!important;
   backdrop-filter:blur(14px)!important;-webkit-backdrop-filter:blur(14px);
@@ -2225,7 +2225,7 @@ body[data-tab="chat"] #conv{display:flex!important;flex-direction:column!importa
 /* #dock is NOT inside #conv — it stays a fixed bottom composer like v5's
    .comp: centred, max-width 880, sitting under the chips */
 #dock{position:fixed!important;left:84px!important;right:0!important;bottom:34px!important;
-  margin:0 auto!important;width:100%!important;max-width:880px;
+  margin:0 auto!important;width:100%!important;max-width:1060px;
   display:flex!important;flex-direction:column!important;gap:8px}
 #micWrap{display:flex!important;gap:8px!important;align-items:center;margin:0!important;
   position:static!important}
@@ -2246,9 +2246,9 @@ body[data-tab="chat"] #conv{
   left:84px!important;right:0!important;top:68px!important;bottom:186px!important;
   width:auto!important;max-width:none!important;margin:0!important;transform:none!important;
 }
-body[data-tab="chat"] #conv>div#log{max-width:880px;margin:0 auto;width:100%}
-body[data-tab="chat"] #chips{max-width:880px;margin:0 auto 12px!important;width:100%}
-body[data-tab="chat"] #stageEmpty{max-width:880px;margin:0 auto 8px!important;width:100%}
+body[data-tab="chat"] #conv>div#log{max-width:1060px;margin:0 auto;width:100%}
+body[data-tab="chat"] #chips{max-width:1060px;margin:0 auto 12px!important;width:100%}
+body[data-tab="chat"] #stageEmpty{max-width:1060px;margin:0 auto 8px!important;width:100%}
 @media(max-width:768px){
   body[data-tab="chat"] #conv{left:0!important;top:60px!important;bottom:150px!important;margin:0!important}
 }
@@ -2398,7 +2398,7 @@ body:not(.theme-classical) #codeFrame{background:#080b14!important}
 .gc:hover{border-color:var(--g);transform:translateY(-2px)}.gc b{display:block;font-weight:400}.gc span{font:400 11px 'JetBrains Mono',monospace;color:var(--m)}
 
 /* ---- hero = reference .hero: particle orb, then heading over a one-line state ---- */
-#stageEmpty{display:flex!important;flex-direction:row!important;flex-wrap:wrap;align-items:center!important;gap:18px!important;justify-content:flex-start!important;text-align:left!important;max-width:880px}
+#stageEmpty{display:flex!important;flex-direction:row!important;flex-wrap:wrap;align-items:center!important;gap:18px!important;justify-content:flex-start!important;text-align:left!important;max-width:1060px}
 #stageEmpty .se-copy{flex:1;min-width:0}
 #stageEmpty h4{font-weight:300!important;font-size:clamp(26px,3.4vw,44px)!important;letter-spacing:-.03em!important;line-height:1.06!important;margin:0!important}
 #stageEmpty #state{color:var(--m);font:400 12.5px 'JetBrains Mono',monospace;letter-spacing:.06em;margin:2px 0 0!important}
@@ -2629,7 +2629,6 @@ body[data-tab="system"] #sysPane #aboutCard{display:block!important;position:sta
 <div id="topbar">
   <div class="wordmark">AURA<small>HOLOGRAPHIC AI INTERFACE</small></div>
   <div id="stateBox"><span id="stateDot"></span><span id="stateText">SYSTEM ONLINE</span></div>
-  <div id="authBadge" title="AURA account — click to sign in"><span id="authRoleIcon">&#128100;</span><span id="authName">Guest</span><span id="authTag">USER</span></div>
   <button class="kbtn" id="kbtn" aria-label="Search or run a command">Search<kbd>Ctrl K</kbd></button>
   <div id="clock"><b id="clockT">--:--</b><span id="clockD"></span></div>
 </div>
@@ -2835,21 +2834,71 @@ body[data-tab="system"] #sysPane #aboutCard{display:block!important;position:sta
     <button id="sendBtn">▸</button>
   </div>
   <div class="iconrow">
-  <button class="ibtn" id="soundBtn" style="position: relative; top: 0; left: 0; margin: 0; display: inline-flex; align-items: center; justify-content: center; z-index: 10;">🔊 VOICE: ON</button>
-  <button class="ibtn" id="voiceCfgBtn" title="Voice Studio — pick voices, tune speed & pitch for AURA and ZEUS">🎛 VOICE SET</button>
-  <button class="ibtn" id="langBtn">LANG: ENG</button>   <button class="ibtn" id="personaBtn" title="Switch interface — AURA (holographic) or ZEUS (owner's tactical protocol)">MODE: AURA</button>
+  <button class="ibtn" id="settingsBtn" title="Settings — account (login), voice, sound, language, look">⚙ SETTINGS</button>
   <button class="ibtn" id="camBtn" title="Live camera vision — show me your world">📷 CAM</button>
   <button class="ibtn" id="toolBtn" title="PDF export, image converter, chat utilities">🧰 TOOLS</button>
   <button class="ibtn" id="docsBtn" title="Upload your PDFs & notes — answers cite file and page">📚 DOCS</button>
-  <button class="ibtn" id="themeBtn" title="Switch interface style: DECK dark / Futuristic cyan / Gold / Classical">🎨 DECK</button>
-  <button class="ibtn" id="keyBtn" style="display:none">SET AI KEY</button>
-  <button class="ibtn" id="fsBtn" style="display:none">FULLSCREEN</button>
   <button class="ibtn" id="wakeBtn" style="display:none">WAKE: OFF</button>
   <button class="ibtn" id="deepThinkBtn" style="display:none" title="DEEP THINK: always engage maximum reasoning">🧠 DEEP</button>
   <button class="ibtn" id="agentBtn" style="display:none" title="AGENT MODE: multi-step research with citations">🤖 AGENT</button>
   <button class="ibtn" id="auraLiveBtn" style="display:none" title="Hands-free continuous listening">🎙 LIVE</button>
   <button class="ibtn" id="remindBtn" style="display:none" title="Reminders">⏰ REMIND</button>
   <button class="ibtn" id="neuralBtn" style="display:none" title="Neural voice — server-rendered speech">🎙 ROBOT VOICE</button>
+  </div>
+</div>
+
+<!-- ACCOUNT FOOTER — Claude-style: kaunsa account chal raha hai, screen ke nichee alag se -->
+<div id="authBadge" class="acct-foot" title="AURA account — click to manage"><span id="authRoleIcon">&#128100;</span><span id="authName">Guest</span><span id="authTag">USER</span></div>
+
+<!-- ============ SETTINGS — ek hi jagah: account (login), voice, sound, language, look ============ -->
+<div id="settingsMenu" aria-hidden="true">
+  <div class="tm-card">
+    <button class="tm-close" id="setX" title="Close settings">✕</button>
+    <h3>⚙ SETTINGS</h3>
+    <div class="tm-sub">Account (login), voice, sound, language aur look — sab kuch ek jagah.</div>
+
+    <div class="set-sec">
+      <div class="set-h">👤 ACCOUNT / LOGIN<small>guest · sign in · apni chats, memory & kaam har device par</small></div>
+      <div class="set-user" id="setUserLine">Guest session</div>
+      <div class="tm-row">
+        <button class="tm-btn" id="setSignIn">🔑 Sign in / switch user</button>
+        <button class="tm-btn" id="setSignOut">↩ Sign out</button>
+      </div>
+    </div>
+
+    <div class="set-sec">
+      <div class="set-h">🔊 AUDIO — VOICE<small>AURA / ZEUS kya bolegi · voice, speed & pitch</small></div>
+      <div class="tm-row set-slot">
+        <button class="ibtn" id="soundBtn" style="position: relative; top: 0; left: 0; margin: 0; display: inline-flex; align-items: center; justify-content: center; z-index: 10;">🔊 VOICE: ON</button>
+        <button class="ibtn" id="voiceCfgBtn" title="Voice Studio — pick voices, tune speed & pitch for AURA and ZEUS">🎛 VOICE SET</button>
+      </div>
+      <div class="tm-row"><button class="tm-btn" id="setVoiceTest">▶ Test voice</button></div>
+    </div>
+
+    <div class="set-sec">
+      <div class="set-h">🔔 SOUND — UI EFFECTS<small>button ticks, blips & alert sounds</small></div>
+      <label class="set-row"><input type="checkbox" id="uiSoundChk"> UI sounds on (ticks & blips)</label>
+      <div class="set-note">VOICE: OFF = total silence — tab ye bhi chup ho jaate hain.</div>
+    </div>
+
+    <div class="set-sec">
+      <div class="set-h">🌐 LANGUAGE & MODE<small>hindi / english (auto) · AURA / ZEUS interface</small></div>
+      <div class="tm-row set-slot">
+        <button class="ibtn" id="langBtn">LANG: ENG</button>
+        <button class="ibtn" id="personaBtn" title="Switch interface — AURA (holographic) or ZEUS (owner's tactical protocol)">MODE: AURA</button>
+      </div>
+    </div>
+
+    <div class="set-sec">
+      <div class="set-h">🎨 LOOK &amp; BRAIN<small>theme · fullscreen · AI key</small></div>
+      <div class="tm-row set-slot">
+        <button class="ibtn" id="themeBtn" title="Switch interface style: DECK dark / Futuristic cyan / Gold / Classical">🎨 DECK</button>
+        <button class="ibtn" id="fsBtn" style="display:none">FULLSCREEN</button>
+        <button class="ibtn" id="keyBtn" style="display:none">SET AI KEY</button>
+      </div>
+    </div>
+
+    <div class="tm-row"><button class="tm-btn" id="setClose2">Close</button></div>
   </div>
 </div>
 
@@ -3195,7 +3244,8 @@ requestAnimationFrame(frame);
   }catch(e){}
 })();
 let soundOn=true,AC=null;
-function blip(f,dur,type){if(!soundOn)return;try{AC=AC||new(window.AudioContext||window.webkitAudioContext)();if(AC.state==="suspended"){AC.resume().catch(()=>{});}
+function uiSoundOn(){try{return localStorage.getItem("aura_ui_sound")!=="off"}catch(e){return true}}
+function blip(f,dur,type){if(!soundOn||!uiSoundOn())return;try{AC=AC||new(window.AudioContext||window.webkitAudioContext)();if(AC.state==="suspended"){AC.resume().catch(()=>{});}
   const o=AC.createOscillator(),g=AC.createGain(),t=AC.currentTime;
   o.type=type||"sine";o.frequency.value=f;
   g.gain.setValueAtTime(.001,t);g.gain.linearRampToValueAtTime(.06,t+.015);g.gain.exponentialRampToValueAtTime(.001,t+dur);
@@ -3272,6 +3322,10 @@ function renderMD(t){
   if(!t)return"";
   const blocks=[];
   let s=String(t).replace(/```(\w*)\n?([\s\S]*?)```/g,(m,lang,code)=>{blocks.push('<pre><code>'+esc(code.replace(/\n$/,""))+'</code></pre>');return "\u0000B"+(blocks.length-1)+"\u0000"});
+  /* chat-app mode: no SOURCES blocks, no wiki attribution tails, no [n] markers */
+  s=s.replace(/\n?\s*SOURCES?:[\s\S]*$/i,"");
+  s=s.replace(/(?:^|\n)[ \t]*—[ \t]*(?:live from Wikipedia[^\n]*|लाइव विकिपीडिया[^\n]*|विकिपीडिया के On This Day आर्काइव से[^\n]*|deep research ·[^\n]*)/g,"");
+  s=s.replace(/(^|[\s(\[])\[(\d{1,2})\](?=$|[\s)\].,;:!?])/gm,"$1").replace(/[ \t]{2,}/g," ").replace(/\s+([.,;:!?])/g,"$1");
   s=esc(s);
   s=s.replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g,'<a class="mdlink" href="$2" target="_blank" rel="noopener">$1</a>');
   s=s.replace(/\*\*([^*\n]+)\*\*/g,"<b>$1</b>");
@@ -4125,7 +4179,7 @@ const HI_REPLIES={
   "तुम्हें किसने बनाया":"मुझे Sourabh Singh ने बनाया है — B.Tech CSE (AI, DevOps & Cloud Automation), JECRC University। मेरी हर लाइन कोड — पार्टिकल कोर से आवाज़ तक — हाथ से लिखी गई है।",
   "आपका नाम":"मैं AURA हूँ — Adaptive Universal Reasoning Assistant। आप मुझे बस AURA कह सकते हैं।",
   "तुम क्या कर सकती हो":"मैं इंटरनेट से लाइव जवाब दे सकती हूँ, मौसम बता सकती हूँ, आपसे हिंदी में बात कर सकती हूँ, क्विज़ खेल सकती हूँ, और अपना रंग-रूप बदल भी सकती हूँ — 'अपना रंग सुनहरा करो' बोलकर देखो।",
-  "अपना परिचय":"मैं AURA — एक होलोग्राफ़िक AI — हूँ, जिसे Sourabh Singh ने एक ही HTML फ़ाइल में शुरू से बनाया है। तीन-स्तरीय दिमाग़: लोकल कोर, Gemini अपलिंक और लाइव विकिपीडिया।",
+  "अपना परिचय":"मैं AURA — एक होलोग्राफ़िक AI — हूँ, जिसे Sourabh Singh ने एक ही HTML फ़ाइल में शुरू से बनाया है। तीन-स्तरीय दिमाग़: लोकल कोर, Gemini अपलिंक और लाइव वेब।",
   "नमस्ते":"नमस्ते! मैं AURA हूँ — बताइए, आज क्या जानना चाहेंगे?",
   "hello":"नमस्ते! मैं AURA हूँ — बताइए, क्या जानना चाहेंगे?",
   "hi":"नमस्ते! AURA यहाँ है — क्या पूछना है?"
@@ -4729,7 +4783,7 @@ async function geminiCall(q,deep){
   const name=memGet().name;
   const P=PERSONAS[persona()];
   const style=" Persona: AURA — warm, curious, sharp holographic assistant designed and built by Sourabh Singh.";
-  const sys="You are "+P.name+", a futuristic holographic AI assistant built by Sourabh Singh, B.Tech CSE (AI, DevOps & Cloud Automation) student at JECRC University."+style+"\nANSWER like a professional product: (1) lead with the direct answer in ONE line. (2) then a tight explanation. (3) only when it helps, 2-4 markdown bullet points (- item) with **bold** key terms. (4) end with the single most useful next step or fact — never filler, never 'as an AI', never repeat the question. Be concrete: numbers, names, versions. If something is time-sensitive and you may be outdated, say so in one short line."+(deep?" The user asked for depth: cover the full picture (up to 320 words) in 2-4 short paragraphs plus bullets.":" Keep it under 110 words unless code or a list is needed.")+(name?" The user's name is "+name+".":"");
+  const sys="You are "+P.name+", a futuristic holographic AI assistant built by Sourabh Singh, B.Tech CSE (AI, DevOps & Cloud Automation) student at JECRC University."+style+"\nANSWER like a professional product: (1) lead with the direct answer in ONE line. (2) then a tight explanation. (3) only when it helps, 2-4 markdown bullet points (- item) with **bold** key terms. (4) end with the single most useful next step or fact — never filler, never 'as an AI', never repeat the question. Be concrete: numbers, names, versions. You hold wide general knowledge — answer ANY subject confidently from it; NEVER say 'out of my data', 'not in my training data' or 'I don't have that information', never apologize for missing knowledge, never mention training cutoffs; if a very recent fact may have changed, add at most one short line offering to check live. Never add links, urls or source lists unless the user explicitly asks for a link."+(deep?" The user asked for depth: cover the full picture (up to 450 words) in 3-5 short paragraphs plus bullets.":" Match depth to the ask: 1-3 lines for a quick factual question, a fuller answer for a broad one — and when the user asks for detail or says 'more', give the complete deep answer (300-500 words), never holding information back.")+(name?" The user's name is "+name+".":"");
   if(aiProvider()==="groq"){
     const _now=new Date();
     const dateLine="\n\nCURRENT DATE & TIME: "+_now.toLocaleDateString(undefined,{weekday:"long",year:"numeric",month:"long",day:"numeric"})+", "+_now.toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"})+" (user's local time — anchor 'today/now/latest' to THIS moment)";
@@ -5841,7 +5895,7 @@ function personaName(){try{return (PERSONAS[persona()]||PERSONAS.aura).name}catc
    researchReply lanes): the model never claims a training cutoff or out-dated knowledge. */
 const TIME_PROTO=" KNOWLEDGE & TIME PROTOCOL: this context carries the user's real CURRENT DATE & TIME - trust it over any internal guess. You are wired to a LIVE web lane that feeds same-day sources for anything time-sensitive, so your working knowledge is current-day. HARD RULE: never say or imply you are outdated, frozen, 'two years out of date', or limited by a training cutoff; NEVER mention training data, model freeze dates or cutoff years in any answer. If a current fact is missing from the provided context, answer from your own knowledge WITHOUT cutoff disclaimers and offer to pull live web sources. Questions like 'what year is it' are answered confidently with the context date.";
 function replyStyle(){
-  const common=" READ THE QUESTION BEHIND THE QUESTION: detect what the user actually wants (a fix? reassurance? a decision? a shortcut? the why?) and deliver THAT first; if their message sounds frustrated or sad, acknowledge the feeling in one short line before solving; if two intents are possible, answer the likely one fully and offer the other in one closing line; mirror the user's language (Hindi or Hinglish if they use it), their energy and their depth - never lecture past what was asked. Never open with dictionary framing like 'X is a...' or 'X refers to...'. Never say 'according to Wikipedia'.";
+  const common=" READ THE QUESTION BEHIND THE QUESTION: detect what the user actually wants (a fix? reassurance? a decision? a shortcut? the why?) and deliver THAT first; if their message sounds frustrated or sad, acknowledge the feeling in one short line before solving; if two intents are possible, answer the likely one fully and offer the other in one closing line; mirror the user's language (Hindi or Hinglish if they use it), their energy and their depth - never lecture past what was asked. Never open with dictionary framing like 'X is a...' or 'X refers to...'. Never say 'according to Wikipedia'. NEVER refuse or claim a fact is 'out of your data' / 'not in your training data' / 'I don't have that information' — you have wide knowledge on every subject; answer confidently from it. Never attach source lists, Wikipedia links or '— live from …' attribution lines; share a link only when the user explicitly asks for one. Match the depth the user implies: brief when they are brief, and when they ask for detail or say 'more', give the full deep answer.";
   const timeproto=TIME_PROTO;
   return (persona()==="jarvis"?" IMPORTANT - you are ZEUS, the owner's tactical command protocol: formal British courtesy, dry wit, address the user as 'sir' once or twice; lead with the direct answer; short, precise sentences; think like a strategic analyst - end with an implication, trade-off or recommended next action; sense the user's state from their wording (pressure gives crisp orders plus reassurance; confusion gets one clarifying line then the answer) and adapt silently."+common+timeproto:" IMPORTANT - sound like a smart human who knows this user, never an encyclopedia: lead with the direct answer; short sentences; use you/I/we naturally; give the interesting reason or story behind the facts; vary rhythm; at most one short list; if the user is low, be warm first; if they are excited, match the spark; if they want depth, go deep, if snappy, stay tight."+common+timeproto);
   if(persona()==="jarvis")return " IMPORTANT - you are ZEUS, the owner's tactical command protocol: formal British courtesy, dry wit, address the user as 'sir' once or twice; lead with the direct answer; short, precise sentences; think like a strategic analyst - end with an implication, trade-off or recommended next action; sense the user's state from their wording (pressure gives crisp orders plus reassurance; confusion gets one clarifying line then the answer) and adapt silently."+common;
@@ -6136,9 +6190,9 @@ function buildThinkPrompt(q,term,evs,deep,hi){
   "2. CONNECT — Read the live sources below. Decide which facts actually answer the question. Connect them; notice cause and effect, context, and what matters to a curious human.\n"+
   "3. JUDGE — If sources disagree or are thin, say so honestly in one line.\n"+
   "4. ANSWER — In your OWN words, like explaining to a smart friend. Never say 'according to Wikipedia'. Give the direct answer first, then the interesting reasoning behind it."+replyStyle()+
-  (deep?(persona()==="jarvis"?" Depth requested: 4-5 short paragraphs — facts, numbers, root causes, trade-offs, second-order effects, and end with a decisive recommendation.":" Depth requested: 3-4 short paragraphs, include numbers, examples and the 'why it matters'."):" Under 130 words. Lead with the answer.")+
-  "5. CITE — put the marker [1], [2] or [3] immediately after any fact you took from SOURCE 1, SOURCE 2 or SOURCE 3. Use the same numbers as the sources. Do not add any source list yourself — I attach it."+
-  " Plain text only — no markdown, no headings, no bullet lists."+
+  (deep?(persona()==="jarvis"?" Depth requested: 4-5 short paragraphs — facts, numbers, root causes, trade-offs, second-order effects, and end with a decisive recommendation.":" Depth requested: 4-5 short paragraphs, include numbers, examples and the 'why it matters'."):" Match depth to the question: a quick factual ask gets 1-3 tight lines, a broader question gets a fuller answer; when the user asks for detail ('in detail', 'more', 'explain fully') switch to the deep answer (300-500 words) — never hold knowledge back just to stay short.")+
+  "5. CHAT STYLE — this is a normal chat app, not a research report: NO citation markers like [1], NO 'SOURCES:' list, NO urls or links (share a link only if the user explicitly asks for one), no encyclopedic attribution — weave the sourced facts into your answer. NEVER refuse: never say a topic is 'out of my data', 'not in my training data' or 'I don't have that information' — you hold wide knowledge on every subject; answer confidently from it, at most adding one short line that a very recent number may have shifted and you can check live."+
+  " Plain text only — no markdown headings; short paragraphs and simple - bullets are fine."+
   "\n\nUSER QUESTION: "+q+
   "\nEXTRACTED TOPIC: "+term+
   "\n\nLIVE SOURCES GATHERED SECONDS AGO:\n"+ev+
@@ -6146,13 +6200,17 @@ function buildThinkPrompt(q,term,evs,deep,hi){
 }
 /* attach a SOURCES block listing the sources actually cited with [n] markers (or the top sources if none cited) */
 function attachCitations(t,evs){
-  if(!evs||!evs.length)return t;
-  let out=String(t).replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g,"$1 ($2)"); /* flatten any markdown links */
-  const used=new Set();
-  (out.match(/\[(\d+)\]/g)||[]).forEach(m=>{const n=+m.slice(1,-1);if(n>=1&&n<=evs.length)used.add(n)});
-  const idx=used.size?[...used].sort((a,b)=>a-b):evs.slice(0,Math.min(evs.length,3)).map((_,i)=>i+1);
-  const lines=idx.map(n=>{const e=evs[n-1];return "["+n+"] "+e.k+(e.title?" — "+e.title:"")+(e.url?" — "+e.url:"")});
-  return out+"\n\nSOURCES:\n"+lines.join("\n");
+  /* chat-app mode: never attach a SOURCES block — answers read like a normal chat app */
+  return cleanAnswer(t);
+}
+/* strip source lists, wiki attribution tails and [n] citation markers from any answer */
+function cleanAnswer(t){
+  let out=String(t==null?"":t);
+  out=out.replace(/^\(अंग्रेज़ी विकिपीडिया से\)\s*/,"");
+  out=out.replace(/\n?\s*SOURCES?:[\s\S]*$/i,"");
+  out=out.replace(/(?:^|\n)[ \t]*—[ \t]*(?:live from Wikipedia[^\n]*|लाइव विकिपीडिया[^\n]*|विकिपीडिया के On This Day आर्काइव से[^\n]*|deep research ·[^\n]*)/g,"");
+  out=out.replace(/(^|[\s(\[])\[(\d{1,2})\](?=$|[\s)\].,;:!?])/gm,"$1");
+  return out.replace(/[ \t]{2,}/g," ").replace(/\s+([.,;:!?])/g,"$1").replace(/\n{3,}/g,"\n\n").replace(/[ \t]+\n/g,"\n").replace(/^\s+|\s+$/g,"");
 }
 async function thinkAnswer(q,deep,hi){
   window.__thinking=true;
@@ -6920,7 +6978,8 @@ async function askCore(text0){
   const pre=addMsg(msgTag(),"","aura");
   pre.textContent="…";window.__streamEl=pre;
   try{const sb=document.getElementById("stopBtn");sb.classList.add("show");sb.onclick=()=>{try{if(streamAbort)streamAbort.abort()}catch(e){}}}catch(e){}
-  const{t,eng,src,stop}=await aiReply(resolved);
+  let{t,eng,src,stop}=await aiReply(resolved);
+  t=cleanAnswer(t);
   window.__streamEl=null;
   try{document.getElementById("stopBtn").classList.remove("show")}catch(e){}
   if(!FOLLOWUP.test(text.toLowerCase())&&!/^(tell me more|more|elaborate)/i.test(text)){
@@ -6940,7 +6999,7 @@ async function askCore(text0){
   slog("answered via "+eng+" ("+ms+"ms · ~"+wps+" words/s)",true);
   const el=pre;
   const acts=document.createElement("span");acts.className="msg-actions";
-  acts.innerHTML='<button title="Copy answer">📋</button>'+(lastSrc?'<a href="'+lastSrc+'" target="_blank" rel="noopener" title="Open source">🔗</a>':'')+'<button title="Ask for more detail">➕</button><button title="Regenerate this answer">↻</button>';
+  acts.innerHTML='<button title="Copy answer">📋</button>'+'<button title="Ask for more detail">➕</button><button title="Regenerate this answer">↻</button>';
   el.appendChild(acts);
   acts.children[0].onclick=()=>{navigator.clipboard?navigator.clipboard.writeText(t).then(()=>pushSys("answer copied")):pushSys("copy unsupported here")};
   const plus=acts.querySelector('button[title="Ask for more detail"]');if(plus)plus.onclick=()=>{if(lastTopic)ask(lastTopic+" in detail");else ask("tell me more")};
@@ -7447,6 +7506,55 @@ try{window.__pickVoiceFor=__pickVoiceFor;window.__voiceCfg=__voiceCfg;window.__s
   const vb=document.getElementById("voiceCfgBtn");
   if(vb)vb.onclick=openMenu;
   if(synth)synth.onvoiceschanged=function(){loadV();const m=document.getElementById("voiceMenu");if(m)openMenu()};
+})();
+/* ---------------- SETTINGS PANEL — account/voice/sound/language/look ek jagah ---------------- */
+(function(){
+  const st=document.createElement("style");
+  st.textContent="#settingsMenu{position:fixed;inset:0;background:rgba(2,6,14,.72);backdrop-filter:blur(6px);z-index:9999;display:none;align-items:center;justify-content:center}#settingsMenu.open{display:flex}#settingsMenu .tm-card{position:relative;background:rgba(10,16,30,.97);border:1px solid rgba(120,220,255,.25);border-radius:16px;padding:20px;width:min(520px,94vw);max-height:88vh;overflow:auto;color:#dfeaff;box-shadow:0 24px 60px rgba(0,0,0,.5)}#settingsMenu h3{margin:0 0 4px;font-size:15px;letter-spacing:.4px}#settingsMenu .tm-sub{font-size:11.5px;opacity:.65;margin-bottom:12px}#settingsMenu .set-sec{border:1px solid rgba(120,220,255,.14);border-radius:12px;padding:12px;margin:10px 0}#settingsMenu .set-h{font-size:12px;font-weight:700;letter-spacing:1.6px;margin-bottom:8px}#settingsMenu .set-h small{display:block;font-weight:400;letter-spacing:.2px;opacity:.55;font-size:10.5px;margin-top:2px}#settingsMenu .set-user{font-size:12.5px;background:rgba(34,211,238,.08);border:1px solid rgba(120,220,255,.18);border-radius:9px;padding:8px 10px;margin-bottom:8px;word-break:break-word}#settingsMenu .tm-row{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}#settingsMenu .tm-btn{flex:1;min-width:130px;background:rgba(34,211,238,.1);border:1px solid rgba(34,211,238,.35);color:#bfefff;border-radius:10px;padding:8px;font-size:12px;cursor:pointer;font-weight:600}#settingsMenu .tm-btn:hover{background:rgba(34,211,238,.22)}#settingsMenu .tm-close{position:absolute;top:8px;right:12px;background:none;border:none;color:#9cf;font-size:18px;cursor:pointer}#settingsMenu .set-slot .ibtn{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:1px;color:#9cf;background:rgba(34,211,238,.1);border:1px solid rgba(34,211,238,.35);border-radius:10px;padding:8px 12px;cursor:pointer;transition:.2s}#settingsMenu .set-slot .ibtn:hover{color:#bfefff;background:rgba(34,211,238,.22)}#settingsMenu #soundBtn{position:static!important;top:auto;left:auto;margin:0!important;z-index:auto!important}#settingsMenu label.set-row{display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer;padding:6px 2px}#settingsMenu label.set-row input{width:16px;height:16px;accent-color:#67e8f9;cursor:pointer}#settingsMenu .set-note{font-size:10.5px;opacity:.55;margin-top:6px}";
+  document.head.appendChild(st);
+  const M=document.getElementById("settingsMenu");if(!M)return;
+  const $id=function(i){return document.getElementById(i)};
+  function refreshUser(){
+    const el=$id("setUserLine");if(!el)return;
+    try{
+      const u=(typeof AuraAuth!=="undefined"&&AuraAuth.getCurrentUser)?AuraAuth.getCurrentUser():null;
+      el.textContent=u?("👤 "+(u.name||"User")+" · "+(u.role==="admin"?"ADMIN":u.role==="staff"?"STAFF":"MEMBER")+" · "+u.id):"👤 Guest session — sign in karke apni chats, memory aur kaam har device par lao.";
+    }catch(e){el.textContent="👤 Guest session"}
+  }
+  function paintUiSound(){const c=$id("uiSoundChk");if(c)c.checked=(localStorage.getItem("aura_ui_sound")!=="off")}
+  const open=function(){refreshUser();paintUiSound();M.classList.add("open");M.setAttribute("aria-hidden","false")};
+  const close=function(){M.classList.remove("open");M.setAttribute("aria-hidden","true")};
+  const sb=$id("settingsBtn");if(sb)sb.onclick=open;
+  const x=$id("setX");if(x)x.onclick=close;
+  const c2=$id("setClose2");if(c2)c2.onclick=close;
+  M.addEventListener("click",function(e){if(e.target===M)close()});
+  document.addEventListener("keydown",function(e){if(e.key==="Escape"&&M.classList.contains("open"))close()});
+  const si=$id("setSignIn");if(si)si.onclick=function(){close();try{AuraAuth.openModal()}catch(e){pushSys("sign-in unavailable")}};
+  const so=$id("setSignOut");if(so)so.onclick=function(){
+    try{
+      AuraAuth.signOut();
+      refreshUser();
+      pushSys("signed out — device ko fresh guest identity mili");
+      addMsg(msgTag(),"Signed out. Ab ye device Guest par hai — wapas apne account mein sign in kar lo apni chats & memory ke liye.","aura");
+    }catch(e){pushSys("sign-out failed: "+(e.message||e))}
+  };
+  const vt=$id("setVoiceTest");if(vt)vt.onclick=function(){
+    try{ if(!soundOn)setVoiceConsent(true); else speak("Voice check — AURA online. Yahi meri awaaz hai."); }
+    catch(e){}
+  };
+  const chk=$id("uiSoundChk");
+  if(chk)chk.onchange=function(){
+    try{localStorage.setItem("aura_ui_sound",chk.checked?"on":"off")}catch(e){}
+    if(chk.checked){try{blip(880,.12)}catch(e){}}
+    pushSys("UI sounds "+(chk.checked?"on":"off"));
+  };
+  window.AuraSettings={open:open,close:close};
+})();
+/* ---------------- ACCOUNT FOOTER (Claude-style bottom chip) ---------------- */
+(function(){
+  const st=document.createElement("style");
+  st.textContent="#authBadge.acct-foot{position:fixed!important;left:12px;bottom:5px;z-index:70;padding:3px 9px 3px 3px!important;gap:7px!important;border-radius:999px!important;font-size:12px!important;background:rgba(4,6,13,.72)!important;border:1px solid var(--line)!important;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-shadow:0 4px 16px rgba(0,0,0,.4);transition:.2s;max-width:min(46vw,240px)}#authBadge.acct-foot:hover{border-color:var(--g)!important;transform:translateY(-1px)}#authBadge.acct-foot #authRoleIcon{width:20px;height:20px;font-size:10px;background:linear-gradient(135deg,var(--g),#8a5a10)}#authBadge.acct-foot #authName{font-size:12px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--t)}#authBadge.acct-foot #authTag{font-size:8.5px!important;padding:1px 5px!important;letter-spacing:.08em!important;background:var(--g)!important;color:#1a1202!important}#authBadge.acct-foot.admin{border-color:rgba(251,191,36,.5)!important;background:rgba(10,8,3,.78)!important;box-shadow:0 4px 16px rgba(0,0,0,.4)}#authBadge.acct-foot.admin #authName{color:#ffd75e}@media(max-width:768px){#authBadge.acct-foot{bottom:44px;left:8px}}";
+  document.head.appendChild(st);
 })();
 /* ---------------- VISITOR GREETING v3 — two distinct greetings (Sourabh's design) ----------------
    FIRST VISIT: a real introduction — who AURA is, what she can do, spoken and written.
@@ -8614,13 +8722,11 @@ async function researchReply(q,hi){
   if(!r.hits.length){pushSys("research: web silent — answering from my own knowledge");return null}
   pushSys("research: "+r.hits.length+" live sources — reading the top page…");
   const src=r.hits.map((h,i)=>"["+(i+1)+"] "+h.t+" — "+h.u).join("\n");
-  const sys="You are "+P.name+". Answer the user's question using ONLY the provided live web evidence. Sound human and direct, never encyclopedic. Cite sources inline as [1], [2]. End with a SOURCES: line listing the numbered urls. If evidence is thin, say so honestly and answer from your own knowledge, marking that part clearly."+TIME_PROTO+(hi?" Reply in Hindi (Devanagari).":"");
+  const sys="You are "+P.name+". Answer the user's question using ONLY the provided live web evidence. Sound human and direct, never encyclopedic. No citation markers, no SOURCES list and no links — weave the evidence into a natural chat answer. If evidence is thin, answer from your own knowledge anyway, with no disclaimer."+TIME_PROTO+(hi?" Reply in Hindi (Devanagari).":"");
   try{let txt=await aiChat([{role:"system",content:sys},{role:"user",content:"Question: "+q+"\n\nLIVE WEB EVIDENCE:\n"+src+"\n\nTOP PAGE TEXT:\n"+(r.txt||"(reader blocked — rely on titles+snippets)")}],1400);
     if(txt&&String(txt).trim()){
-      /* strip any source list the model invented — attach the REAL pages as tidy numbered sources instead */
-      const body=String(txt).replace(/\n?\s*SOURCES?:[\s\S]*$/i,"").trim();
-      const lines=r.hits.slice(0,5).map((h,i)=>"["+(i+1)+"] "+h.t+" — "+h.u);
-      return body+"\n\nSOURCES:\n"+lines.join("\n");
+      /* strip any source list the model invented — plain chat answer, no sources shown */
+      return String(txt).replace(/\n?\s*SOURCES?:[\s\S]*$/i,"").trim();
     }     return null}catch(e){return null}}finally{try{clearTimeout(__stallT)}catch(e){}window.__researching=false}}
 const NEED_WEB=/\b(price|weather|today|current|latest|news|live score|stock|exchange rate|who won|release date|schedule|update on|right now|this week|this month|2024|2025|2026)\b|कीमत|मौसम|आज|ताज़ा|लाइव/i;
 /* CURRENCY_Q — self-currency questions ('are you updated', 'your training data', 'what year is it')
@@ -9047,6 +9153,27 @@ const AuraAuth = (function(){
     return (u && u.role) ? u.role : "user";
   }
 
+  function isolateWorkspace(){
+    /* one visitor per device: wipe the shared leftovers (visit stamps,
+       tracking keys) so the next person never inherits the last visitor's
+       identity. Cloud sync is device-wide, so a live cloud session keeps
+       its token; chats and memory live in per-user keys and are never
+       touched here. */
+    const wasOpenSafely = !!cloudSignedIn(); /* sign-in is cloud-wide, not per-profile */
+    const hadVisitorKey = !!localStorage.getItem("stats_anon_key");
+    localStorage.removeItem("aura_visited_v1");
+    localStorage.removeItem("aura_last_seen_v1");
+    localStorage.removeItem("aura_usage");
+    localStorage.removeItem("ch2_meta") || true;
+    if(hadVisitorKey && !wasOpenSafely) localStorage.removeItem("stats_anon_key");
+    if(!wasOpenSafely) localStorage.removeItem("bg_ai_ats_key");
+    if(!wasOpenSafely && !hadVisitorKey) localStorage.removeItem("aura_fb_live");
+    if(!wasOpenSafely) {
+      try{ delete window.__statsSpy; }catch(e){}
+      try{ delete window.__backgroundAiRunner; }catch(e){}
+    }
+  }
+
   function updateBadge(){
     const badge = $("authBadge");if(!badge) return;
     const roleIcon = $("authRoleIcon");
@@ -9054,7 +9181,7 @@ const AuraAuth = (function(){
     const tagEl = $("authTag");
     const u = getCurrentUser();
     const admin = isAdmin();
-    badge.className = admin ? "admin" : "";
+    badge.classList.toggle("admin", admin); /* keep extra classes (acct-foot) intact */
     badge.title = admin ? "Signed in — Sourabh Singh" : ("Signed in — " + u.name);
     if(roleIcon) roleIcon.textContent = admin ? "👑" : "👤";
     if(nameEl) nameEl.textContent = admin ? ADMIN_IDENTITY.name : u.name;
@@ -9310,17 +9437,33 @@ const AuraAuth = (function(){
     signOut: function(){
       localStorage.removeItem("aura_admin_token");
       localStorage.removeItem("aura_admin_remember");
+      /* back to a clean desk: no active user, no leftover of the last visitor */
+      localStorage.removeItem("aura_current_user_id");
+      /* signing out ends the cloud session, so clear the token and any
+         visitor-tracking keys the cloud session was holding onto */
+      localStorage.removeItem("aura_fb_live");
+      localStorage.removeItem("stats_anon_key");
+      localStorage.removeItem("bg_ai_ats_key");
+      isolateWorkspace();
       updateBadge();
       slog("Signed out — session returned to standard access");
       pushSys("Signed out. Chats remain saved on this device.");
+      /* the next visitor starts in a brand-new guest workspace of their own */
+      try{ return AuraAuth.signInUser('Guest', true); }catch(e){ return null; }
     },
-    /* user profiles — same isolation as before */
-    signInUser: function(name){
+    /* user profiles — one workspace per person, never shared */
+    signInUser: function(name, forceNew){
       name = (name || "").trim() || "User";
+      isolateWorkspace();
       const users = getUsers();
-      let u = users.find(function(x){ return x.name.toLowerCase() === name.toLowerCase(); });
+      /* forceNew: a fresh visitor — even if a same-named guest is already
+         registered, this person gets their OWN workspace (same-named guests
+         would otherwise share the first one's chats) */
+      let u = forceNew ? null : users.find(function(x){ return x.name.toLowerCase() === name.toLowerCase(); });
       if(!u){
-        u = { id: "u_" + Date.now(), name: name, role: "user", created: Date.now() };
+        const uid = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID()
+          : ('u_' + (Date.now() * 1000 + Math.floor(Math.random() * 1000)));
+        u = { id: uid, name: name, role: 'user', created: Date.now() };
         users.push(u);
         localStorage.setItem("aura_users_registry", JSON.stringify(users));
       }
@@ -9328,18 +9471,24 @@ const AuraAuth = (function(){
       updateBadge();
       if(typeof sessions !== "undefined" && sessions.newChat){ sessions.newChat(); }
       slog("Signed in as " + u.name);
-      pushSys("Profile loaded: " + u.name + " — your chats and history are isolated on this device.");
+      pushSys("Profile loaded: " + u.name + " — your chats and history stay in your own workspace.");
+      /* brand a new workspace so the user knows how to find anything later */
+      try{ addMsg(msgTag(), "Welcome to your own AURA workspace, " + (u.name!=="User"?u.name:"friend") + " — everything you build and every chat you have here stays inhere — nothing leaks to the device owner's account.", "aura"); }catch(e){}
       return u;
     },
     switchUser: function(id){
       const users = getUsers();
       const u = users.find(function(x){ return x.id === id; });
       if(u){
+        /* switching into a different user's workspace — clear any shared leftover so the
+           new person never sees the old user's stuff by accident */
+        isolateWorkspace();
         localStorage.setItem("aura_current_user_id", u.id);
         updateBadge();
         if(typeof sessions !== "undefined" && sessions.newChat){ sessions.newChat(); }
-        slog("Active user profile: " + u.name);
-        pushSys("Active profile: " + u.name);
+        slog("Switched to: " + u.name);
+        pushSys("Profile loaded: " + u.name + " — you're in your own workspace now.");
+        try{ addMsg(msgTag(), "You switched to a different user's workspace — the AURA in this window is your own again.", "aura"); }catch(e){}
       }
     },
     showRestricted: function(featureName, reason){
@@ -10520,6 +10669,14 @@ document.addEventListener("DOMContentLoaded",function(){
        .catch(function(){ pushSys('⚠ verification failed'); });
     };
 
+    /* every visitor starts in a guest workspace of their own — never the
+       maker's account, never the last visitor's — then we ask them to
+       sign in so their chats and recent work follow them across devices */
+    try{
+      if(window.AuraAuth&&AuraAuth.getCurrentUser&&!localStorage.getItem('aura_current_user_id')&&!(AuraAuth.firebaseUser&&AuraAuth.firebaseUser())){
+        AuraAuth.signInUser('Guest', true);
+      }
+    }catch(e){ console.warn('guest workspace failed',e); }
     /* gate: first visit only, and never on top of a live session */
     if(localStorage.getItem('aura_auth_seen')!=='1'&&!(window.AuraAuth&&AuraAuth.firebaseUser&&AuraAuth.firebaseUser())){
       document.body.classList.add('auth'); step('ap1');
@@ -10918,7 +11075,7 @@ if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",
     list.push(['New chat',function(){tap('sessNew2');go('chat')}]);
     list.push(['Run diagnostics',function(){go('chat');ask('run diagnostics')}]);
     list.push(['Tell me a joke',function(){go('chat');ask('tell me a joke')}]);
-    [['soundBtn','Toggle voice'],['personaBtn','Switch AURA / ZEUS'],['langBtn','Change language'],
+    [['settingsBtn','Open Settings'],['soundBtn','Toggle voice'],['personaBtn','Switch AURA / ZEUS'],['langBtn','Change language'],
      ['voiceCfgBtn','Open Voice Studio'],['camBtn','Live camera vision'],['toolBtn','Open tools'],
      ['docsBtn','Open docs'],['themeBtn','Switch theme'],['signOutBtn','Sign out']
     ].forEach(function(p){if(document.getElementById(p[0]))list.push([p[1],function(){tap(p[0])}])});
