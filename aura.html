@@ -9075,6 +9075,10 @@ async function _aiToolsAnswer(q){
 }
 async function aiToolsText(q){
   if(!/\b(ai|model|llm|gpt|claude|gemini|llama|deepseek|qwen|mistral|groq|openai|anthropic|google ai|meta ai|hugging ?face|langchain|llama ?index|ollama|vllm|cursor|copilot|perplexity|elevenlabs|whisper|pinecone|chroma|qdrant|weaviate|vector (db|database)|midjourney|dall|stable diffusion|flux|sora|runway|veo|n8n|zapier|make\.com|automation (tool|platform)|puter)\b/i.test(q))return null;
+  /* NEWS-SHAPED asks ('latest news in AI', 'AI headlines today', 'what's new in models') are
+     CURRENT-EVENTS questions — the live research lane must answer them from the web, never
+     this cached leaderboard snapshot. */
+  if(/\b(news|headlines?|happenings?|updates?)\b|what'?s new/i.test(q))return null;
   const a=await _aiToolsAnswer(q);return a;
 }
 function _deviceSnapshot(){
