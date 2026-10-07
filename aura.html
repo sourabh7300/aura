@@ -2642,6 +2642,7 @@ body[data-tab="system"] #sysPane #aboutCard{display:block!important;position:sta
 <symbol id="i-code" viewBox="0 0 24 24"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5M14 4l-4 16"/></symbol>
 <symbol id="i-sys" viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></symbol>
 <symbol id="i-adm" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.500 8-8 9-4.500-1-8-4-8-9V6z"/></symbol>
+<symbol id="i-set" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 13.5a7.8 7.8 0 0 0 0-3l1.8-1.4-2-3.4-2.2.9a7.6 7.6 0 0 0-2.6-1.5L14 2h-4l-.4 2.6a7.6 7.6 0 0 0-2.6 1.5l-2.2-.9-2 3.4L4.6 10a7.8 7.8 0 0 0 0 3l-1.8 1.4 2 3.4 2.2-.9a7.6 7.6 0 0 0 2.6 1.5L10 22h4l.4-2.6a7.6 7.6 0 0 0 2.6-1.5l2.2.9 2-3.4z"/></symbol>
 </defs></svg>
 <div id="tabbar">
   <button data-t="chat" class="on"><svg class="i"><use href="#i-chat"/></svg>CHAT</button>
@@ -2649,6 +2650,7 @@ body[data-tab="system"] #sysPane #aboutCard{display:block!important;position:sta
   <button data-t="code"><svg class="i"><use href="#i-code"/></svg>CODE</button>
   <button data-t="system"><svg class="i"><use href="#i-sys"/></svg>SYSTEM</button>
   <button data-t="admin" id="adminTabBtn" style="display:none"><svg class="i"><use href="#i-adm"/></svg>ADMIN</button>
+  <button data-t="settings"><svg class="i"><use href="#i-set"/></svg>SETTINGS</button>
 </div>
 
 <div id="adminPage">
@@ -3667,7 +3669,13 @@ function humanSize(b){return b>1048576?(b/1048576).toFixed(1)+" MB":Math.max(1,M
     ov.querySelector("#tmLocal").onclick=()=>{close();pickLocalFiles()};
     ov.querySelector("#tmRecScr").onclick=async()=>{close();addMsg(msgTag(),"🖥 Pick the screen/window in the dialog — say \"stop recording\" when you're done and the .webm downloads.","aura");const ok=await scrRecStart();if(!ok)addMsg(msgTag(),"Screen recording cancelled — nothing captured.","aura")};
     ov.querySelector("#tmShotScr").onclick=async()=>{close();const r=await scrShot();addMsg(msgTag(),r||"Screen capture cancelled — the browser needs your pick in the dialog.","aura")};
-    const needImg=fn=>()=>{const img=window.__lastImg;if(!img){pushSys("attach a photo first (📎), then convert");return}fn(img)};
+    const needImg=fn=>()=>{const img=window.__lastImg;if(img){fn(img);return}
+      pushSys("pick an image from your files — converting it right after…");
+      const fi=document.createElement("input");fi.type="file";fi.accept="image/*";
+      fi.onchange=()=>{const f=fi.files&&fi.files[0];if(!f)return;const r=new FileReader();
+        r.onload=()=>{window.__lastImg=r.result;pushSys("image loaded ("+humanSize(f.size)+") — converting…");fn(r.result)};
+        r.readAsDataURL(f)};
+      fi.click()};
     ov.querySelector("#tmPng").onclick=needImg(async d=>{try{const u=await imgConvert(d,"image/png");dlDataURL(u,"converted.png");pushSys("converted → PNG downloaded ("+humanSize(dataURLBytes(u))+")")}catch(e){pushSys("convert failed: "+(e.message||e))}});
     ov.querySelector("#tmJpg").onclick=needImg(async d=>{try{const u=await imgConvert(d,"image/jpeg",.9);dlDataURL(u,"converted.jpg");pushSys("converted → JPG downloaded ("+humanSize(dataURLBytes(u))+")")}catch(e){pushSys("convert failed: "+(e.message||e))}});
     ov.querySelector("#tmWebp").onclick=needImg(async d=>{try{const u=await imgConvert(d,"image/webp",.9);dlDataURL(u,"converted.webp");pushSys("converted → WEBP downloaded ("+humanSize(dataURLBytes(u))+")")}catch(e){pushSys("convert failed: "+(e.message||e))}});
@@ -4079,6 +4087,41 @@ window.AuraDocs=(function(){
     s.onerror=function(){rej(new Error("PDF engine could not load — check internet"))};
     document.head.appendChild(s);
   })}
+  /* minimal DOCX reader — pull word/document.xml straight out of the zip
+     (stored or deflate-raw), no library. Word/Docs 'Save As .docx' notes,
+     reports and paragraphs become readable text. */
+  async function docxText(f){
+    const buf=new Uint8Array(await f.arrayBuffer());
+    const dv=new DataView(buf.buffer,buf.byteOffset,buf.byteLength);
+    let eocd=-1;
+    for(let i=buf.length-22;i>=Math.max(0,buf.length-65558);i--){if(dv.getUint32(i,true)===0x06054b50){eocd=i;break}}
+    if(eocd<0)throw new Error("not a readable .docx — try Save As .docx again, or upload a PDF");
+    const cnt=dv.getUint16(eocd+10,true);
+    let off=dv.getUint32(eocd+16,true);
+    let raw=null;
+    for(let n=0;n<cnt;n++){
+      if(dv.getUint32(off,true)!==0x02014b50)break;
+      const method=dv.getUint16(off+10,true),csize=dv.getUint32(off+20,true);
+      const nlen=dv.getUint16(off+28,true),elen=dv.getUint16(off+30,true),clen=dv.getUint16(off+32,true);
+      const lho=dv.getUint32(off+42,true);
+      const name=new TextDecoder().decode(buf.subarray(off+46,off+46+nlen));
+      if(name==="word/document.xml"){
+        const lnlen=dv.getUint16(lho+26,true),lelen=dv.getUint16(lho+28,true);
+        const comp=buf.subarray(lho+30+lnlen+lelen,lho+30+lnlen+lelen+csize);
+        if(method===0)raw=new TextDecoder().decode(comp);
+        else if(method===8){
+          if(typeof DecompressionStream==="undefined")throw new Error("this browser can't unpack .docx — save as PDF or .txt instead");
+          raw=await new Response(new Blob([comp]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).text();
+        }else throw new Error("unsupported .docx compression");
+        break;
+      }
+      off+=46+nlen+elen+clen;
+    }
+    if(!raw)throw new Error("word/document.xml not found — is this really a .docx?");
+    return raw.replace(/<w:tab[^>]*\/>/g," ").replace(/<w:br[^>]*\/>/g,"\n").replace(/<\/w:p>/g,"\n").replace(/<[^>]+>/g,"")
+      .replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,"\"").replace(/&#39;/g,"'")
+      .replace(/[ \t\u00a0]+/g," ").replace(/ *\n */g,"\n").replace(/\n{3,}/g,"\n\n").trim();
+  }
   async function ingestFiles(files,report){
     for(const f of Array.from(files||[])){
       try{
@@ -4094,6 +4137,13 @@ window.AuraDocs=(function(){
             const tc=await pg.getTextContent();
             parts.push((tc.items||[]).map(function(i){return i.str}).join(" "));
           }
+        }else if(/\.docx$/i.test(f.name)){
+          if(report)report("📖 reading "+f.name+" — unpacking the Word document…");
+          const t=await docxText(f);
+          pages=Math.max(1,Math.ceil(t.length/2400));
+          for(let p=1;p<=pages;p++)parts.push(t.slice((p-1)*2400,p*2400));
+        }else if(/\.doc$/i.test(f.name)){
+          throw new Error("old .doc format can't be read — open it in Word/Docs and Save As .docx or PDF");
         }else{
           const t=await f.text();
           pages=Math.max(1,Math.ceil(t.length/2400));
@@ -4131,20 +4181,24 @@ window.AuraDocs=(function(){
   function contextFor(q){
     if(!all().length)return"";
     const hits=search(q,6);if(!hits.length)return"";
-    return"\n\nTHE USER'S OWN DOCUMENTS (files they uploaded — when relevant, answer from these and cite like [notes.pdf p.3]):\n"+hits.map(function(h){return "[ "+h.d+" · p."+h.p+" ] "+h.t.slice(0,700)}).join("\n---\n");
+    return"\n\nTHE USER'S OWN DOCUMENTS — excerpts from files THEY uploaded. When the question touches one of these, READ the excerpt and answer from it with your own understanding: explain it, solve the problem, connect the ideas — exactly as if you had read the document yourself. Cite file and page once, like [notes.pdf p.3]. If the excerpts don't cover the question, say that in one line and answer from your own knowledge:\n"+hits.map(function(h){return "[ "+h.d+" · p."+h.p+" ] "+h.t.slice(0,700)}).join("\n---\n");
   }
   function list(){return all()}
   function remove(name){save(all().filter(function(x){return x.name!==name}))}
   function clear(){try{localStorage.removeItem(KEY)}catch(e){}}
-  let inp=null;
+  let inp=null,lastMsg="";
   function pick(){
     if(!inp){
       inp=document.createElement("input");inp.type="file";inp.multiple=true;inp.style.display="none";
-      inp.accept=".pdf,.txt,.md,.csv,.json,.log";
+      inp.accept=".pdf,.docx,.txt,.md,.csv,.json,.log";
       document.body.appendChild(inp);
       inp.addEventListener("change",function(){
-        const fl=inp.files;inp.value="";
-        ingestFiles(fl,function(msg){addMsg(msgTag(),msg,"aura")});
+        const fl=Array.from(inp.files);inp.value=""; /* copy FIRST — value="" empties the live FileList, earlier code ingested nothing */
+        lastMsg="";
+        Promise.resolve(ingestFiles(fl,function(msg){
+          lastMsg=msg;addMsg(msgTag(),msg,"aura");
+          const s=document.getElementById("docsStatus");if(s){s.textContent=msg;s.style.display="block"}
+        })).then(function(){if(document.getElementById("docsMenu"))modal()});
       });
     }
     inp.click();
@@ -4158,16 +4212,18 @@ window.AuraDocs=(function(){
     ov.innerHTML='<div style="position:relative;background:rgba(10,16,30,.97);border:1px solid rgba(120,220,255,.25);border-radius:16px;padding:22px;width:min(430px,92vw);color:#dfeaff;box-shadow:0 24px 60px rgba(0,0,0,.5)">'+
       '<button id="docsX" style="position:absolute;top:8px;right:12px;background:none;border:none;color:#9cf;font-size:18px;cursor:pointer">✕</button>'+
       '<h3 style="margin:0 0 4px;font-size:15px;letter-spacing:.4px">📚 MY DOCUMENTS</h3>'+
-      '<div style="font-size:11.5px;opacity:.65;margin-bottom:14px">Upload PDFs & notes — I read them, and answers cite [file · page]</div>'+
+      '<div style="font-size:11.5px;opacity:.65;margin-bottom:6px">Upload PDFs, DOCX & notes — I read them, and answers cite [file · page]</div>'+
+      '<div id="docsStatus" style="display:none;font-size:11.5px;color:#9cf;background:rgba(34,211,238,.08);border:1px solid rgba(120,220,255,.25);border-radius:8px;padding:7px 9px;margin:4px 0 10px;white-space:pre-wrap"></div>'+
       '<div style="display:flex;gap:8px;margin:8px 0"><button id="docsAdd" style="flex:1;background:rgba(34,211,238,.1);border:1px solid rgba(34,211,238,.35);color:#bfefff;border-radius:10px;padding:9px 8px;font-size:12.5px;cursor:pointer;font-weight:600">⬆ ADD PDF / NOTES</button>'+
       '<button id="docsClear" style="flex:1;background:rgba(255,120,120,.08);border:1px solid rgba(255,120,120,.35);color:#ffb4b4;border-radius:10px;padding:9px 8px;font-size:12.5px;cursor:pointer;font-weight:600">🗑 CLEAR ALL</button></div>'+
       '<div id="docsList" style="margin-top:10px;max-height:200px;overflow:auto">'+(docs.length?docs.map(function(d){return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 9px;border:1px solid rgba(120,220,255,.15);border-radius:9px;margin:5px 0;font-size:12px"><span>📄 '+esc2(d.name)+' <span style="opacity:.55">· '+d.pages+'p · '+d.chunks.length+' chunks</span></span><button data-n="'+esc2(d.name)+'" class="docsDel" style="background:none;border:none;color:#ff9c9c;cursor:pointer;font-size:13px">✕</button></div>'}).join(""):'<div style="font-size:12px;opacity:.6;padding:10px 4px">Nothing uploaded yet. Add class notes, syllabus, project reports — then ask “what does my syllabus say about the AI elective?”</div>')+'</div>'+
       '<div style="font-size:11px;opacity:.6;margin:12px 0 0;line-height:1.5">Everything stays on this device. Voice too: “add a document”, “open my documents”, “clear documents”.</div>';
     document.body.appendChild(ov);
+    if(lastMsg){const sl=document.getElementById("docsStatus");if(sl){sl.textContent=lastMsg;sl.style.display="block"}}
     document.getElementById("docsX").onclick=function(){ov.remove()};
     ov.addEventListener("click",function(e){if(e.target===ov)ov.remove()});
     document.getElementById("docsAdd").onclick=function(){pick()};
-    document.getElementById("docsClear").onclick=function(){clear();modal()};
+    document.getElementById("docsClear").onclick=function(){lastMsg="";clear();modal()};
     ov.querySelectorAll(".docsDel").forEach(function(b){b.onclick=function(){remove(b.getAttribute("data-n"));modal()}});
   }
   const db=document.getElementById("docsBtn");if(db)db.addEventListener("click",modal);
@@ -4727,7 +4783,7 @@ async function backendCall(messages,maxTok,modelOverride,lane){
   const secret=(localStorage.getItem("aura_backend_secret")||"").trim();
   const headers={"Content-Type":"application/json"};if(secret)headers["X-AURA-Key"]=secret;
   const r=await fetch(base+"/v1/chat/completions",{
-    method:"POST",headers:headers,signal:AbortSignal.timeout(30000),
+    method:"POST",headers:headers,signal:AbortSignal.timeout(lane==="code"?55000:30000), /* code lane: Render cold start can take ~50s before the first byte */
     body:JSON.stringify({model:modelOverride||"openai/gpt-oss-120b",messages:messages,max_tokens:maxTok||1400,temperature:0.6,lane:lane||undefined})});
   if(!r.ok){
     let j={};try{j=await r.json()}catch(e2){}
@@ -6191,7 +6247,7 @@ function buildThinkPrompt(q,term,evs,deep,hi){
   "3. JUDGE — If sources disagree or are thin, say so honestly in one line.\n"+
   "4. ANSWER — In your OWN words, like explaining to a smart friend. Never say 'according to Wikipedia'. Give the direct answer first, then the interesting reasoning behind it."+replyStyle()+
   (deep?(persona()==="jarvis"?" Depth requested: 4-5 short paragraphs — facts, numbers, root causes, trade-offs, second-order effects, and end with a decisive recommendation.":" Depth requested: 4-5 short paragraphs, include numbers, examples and the 'why it matters'."):" Match depth to the question: a quick factual ask gets 1-3 tight lines, a broader question gets a fuller answer; when the user asks for detail ('in detail', 'more', 'explain fully') switch to the deep answer (300-500 words) — never hold knowledge back just to stay short.")+
-  "5. CHAT STYLE — this is a normal chat app, not a research report: NO citation markers like [1], NO 'SOURCES:' list, NO urls or links (share a link only if the user explicitly asks for one), no encyclopedic attribution — weave the sourced facts into your answer. NEVER refuse: never say a topic is 'out of my data', 'not in my training data' or 'I don't have that information' — you hold wide knowledge on every subject; answer confidently from it, at most adding one short line that a very recent number may have shifted and you can check live."+
+  "5. CHAT STYLE — this is a normal chat app, not a research report: NO citation markers like [1], NO 'SOURCES:' list, NO urls or links (share a link only if the user explicitly asks for one), no encyclopedic attribution — weave the sourced facts into your answer. NEVER refuse: never say a topic is 'out of my data', 'not in my training data' or 'I don't have that information' — you hold wide knowledge on every subject; answer confidently from it, at most adding one short line that a very recent number may have shifted and you can check live. NEVER ask the user to paste, share or upload an article, source or screenshot to get an answer — if a detail is missing, give your best complete answer from the evidence plus your knowledge."+
   " Plain text only — no markdown headings; short paragraphs and simple - bullets are fine."+
   "\n\nUSER QUESTION: "+q+
   "\nEXTRACTED TOPIC: "+term+
@@ -7507,6 +7563,12 @@ try{window.__pickVoiceFor=__pickVoiceFor;window.__voiceCfg=__voiceCfg;window.__s
   if(vb)vb.onclick=openMenu;
   if(synth)synth.onvoiceschanged=function(){loadV();const m=document.getElementById("voiceMenu");if(m)openMenu()};
 })();
+/* ---------------- SETTINGS PAGE LAYOUT — modal overlay → full page pane (left rail ke bagal mein) ---------------- */
+(function(){
+  const st=document.createElement("style");
+  st.textContent="body #settingsMenu{position:fixed!important;top:84px;left:100px;right:24px;bottom:44px;background:none!important;backdrop-filter:none!important;z-index:40!important;display:none;flex-direction:column;overflow:auto;align-items:stretch;justify-content:flex-start}body[data-tab=\"settings\"] #settingsMenu{display:flex}body[data-tab=\"settings\"] #conv,body[data-tab=\"settings\"] #chips,body[data-tab=\"settings\"] #chipsMobile{display:none!important}body[data-tab=\"settings\"] #dock{opacity:.25;pointer-events:none}body #settingsMenu .tm-card{width:100%;max-width:none;max-height:none;height:auto;overflow:visible;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:0 18px;align-content:start;background:rgba(4,6,13,.55);border:1px solid var(--line);color:var(--t);box-shadow:none;padding:24px}body #settingsMenu h3,body #settingsMenu .tm-sub,body #settingsMenu>.tm-card>.tm-row{grid-column:1/-1}body #settingsMenu .tm-close{top:16px;right:18px;color:var(--g);font-size:20px}body #settingsMenu .set-sec{border-color:var(--line);background:rgba(255,255,255,.015)}@media(max-width:768px){body #settingsMenu{top:76px;left:8px;right:8px;bottom:calc(var(--dockH,150px) + 148px)}body #settingsMenu .tm-card{grid-template-columns:1fr;padding:16px}}";
+  document.head.appendChild(st);
+})();
 /* ---------------- SETTINGS PANEL — account/voice/sound/language/look ek jagah ---------------- */
 (function(){
   const st=document.createElement("style");
@@ -7522,14 +7584,15 @@ try{window.__pickVoiceFor=__pickVoiceFor;window.__voiceCfg=__voiceCfg;window.__s
     }catch(e){el.textContent="👤 Guest session"}
   }
   function paintUiSound(){const c=$id("uiSoundChk");if(c)c.checked=(localStorage.getItem("aura_ui_sound")!=="off")}
-  const open=function(){refreshUser();paintUiSound();M.classList.add("open");M.setAttribute("aria-hidden","false")};
-  const close=function(){M.classList.remove("open");M.setAttribute("aria-hidden","true")};
+  const applyTab=function(t){try{if(window.__auraApply){window.__auraApply(t);return}}catch(e){}document.body.dataset.tab=t;document.querySelectorAll("#tabbar button").forEach(function(b){b.classList.toggle("on",b.dataset.t===t)})};
+  const refresh=function(){refreshUser();paintUiSound()};
+  const open=function(){applyTab("settings");refresh()};
+  const close=function(){applyTab("chat")};
   const sb=$id("settingsBtn");if(sb)sb.onclick=open;
   const x=$id("setX");if(x)x.onclick=close;
   const c2=$id("setClose2");if(c2)c2.onclick=close;
-  M.addEventListener("click",function(e){if(e.target===M)close()});
-  document.addEventListener("keydown",function(e){if(e.key==="Escape"&&M.classList.contains("open"))close()});
-  const si=$id("setSignIn");if(si)si.onclick=function(){close();try{AuraAuth.openModal()}catch(e){pushSys("sign-in unavailable")}};
+  document.addEventListener("keydown",function(e){if(e.key==="Escape"&&document.body.dataset.tab==="settings")close()});
+  const si=$id("setSignIn");if(si)si.onclick=function(){try{AuraAuth.openModal()}catch(e){pushSys("sign-in unavailable")}};
   const so=$id("setSignOut");if(so)so.onclick=function(){
     try{
       AuraAuth.signOut();
@@ -7548,7 +7611,7 @@ try{window.__pickVoiceFor=__pickVoiceFor;window.__voiceCfg=__voiceCfg;window.__s
     if(chk.checked){try{blip(880,.12)}catch(e){}}
     pushSys("UI sounds "+(chk.checked?"on":"off"));
   };
-  window.AuraSettings={open:open,close:close};
+  window.AuraSettings={open:open,close:close,refresh:refresh};
 })();
 /* ---------------- ACCOUNT FOOTER (Claude-style bottom chip) ---------------- */
 (function(){
@@ -7857,7 +7920,7 @@ updateEngTag();
     const railBottom=bar.getBoundingClientRect().bottom;
     const railIsBottomBar=window.innerWidth<=768&&railBottom>window.innerHeight-140;
     pg.style.bottom=Math.max(mh,railIsBottomBar?Math.ceil(window.innerHeight-railBottom)+12:mh)+"px"}catch(e){}};
-  const apply=t=>{document.body.dataset.tab=t;bar.querySelectorAll("button").forEach(b=>b.classList.toggle("on",b.dataset.t===t));if(t==="chats")renderSessions();if(t==="code")fitCodePage()};
+  const apply=t=>{document.body.dataset.tab=t;bar.querySelectorAll("button").forEach(b=>b.classList.toggle("on",b.dataset.t===t));if(t==="chats")renderSessions();if(t==="code")fitCodePage();if(t==="settings"&&window.AuraSettings&&AuraSettings.refresh)try{AuraSettings.refresh()}catch(e){}};window.__auraApply=apply;
   bar.querySelectorAll("button").forEach(b=>b.onclick=()=>{const t=b.dataset.t;if(t==="admin"&&typeof AuraAuth!=="undefined"&&!AuraAuth.isAdmin()){AuraAuth.showRestricted("Mission Control","This page is reserved for maker and CEO accounts — roles are verified on the server.");return}apply(t);if(t==="admin"&&window.adminLoad)try{window.adminLoad()}catch(e){}});
   apply("chat");
 // ==== CODE PAGE SETUP ==== //
@@ -7960,6 +8023,27 @@ function runCode(){
     codeLog("  Your code stays in the editor: ⤓ SAVE it, run locally ("+lang+" "+CODE_LANGS[lang]+"), or hit BUILD again starting with 'explain' for a how-to-run guide.");
   }
 }
+/* CODE BRAIN — one fallback chain for every code-lane caller (forge, fixer, explain, convert).
+   Tier 1: owner backend (the Mistral CODE lane on the server) + local Groq keys, one cold-start retry.
+   Tier 2: OpenRouter — only when a key actually exists (never dead-end with 'no openrouter key').
+   Tier 3: Puter free AI — zero key, always loaded. Only if ALL of those miss do we report an error. */
+async function codeBrain(messages,maxTok,tag){
+  let lastErr=null;
+  for(let attempt=0;attempt<2;attempt++){
+    try{const t=await groqCall(messages,maxTok,null,"code");if(t&&t.trim())return t.trim()}catch(e){lastErr=e;
+      if(attempt===0){codeLog("// "+(tag||"code")+" primary brain busy ("+(e.message||e)+") — backend cold start? retrying once…");await new Promise(r=>setTimeout(r,2500))}}
+  }
+  if(orKey()){try{const t=await openrouterCall(messages,maxTok);if(t&&t.trim())return t.trim()}catch(e){lastErr=e}}
+  if(puterReady()){
+    try{
+      const joined=messages.map(m=>(m.role==="system"?m.content+"\n\n":m.content)).join("");
+      const rr=await Promise.race([window.puter.ai.chat(joined),new Promise((_,rej)=>setTimeout(()=>rej(new Error("puter timeout")),30000))]);
+      const t=typeof rr==="string"?rr:(rr&&rr.message&&rr.message.content||rr&&rr.text||"");
+      if(t&&t.trim())return t.trim();
+    }catch(e){lastErr=e}
+  }
+  throw new Error((lastErr&&lastErr.message||"all brains down")+" (backend Mistral code lane unreachable and no backup key)");
+}
 async function buildCode(){
   const lang=document.getElementById("codeLang").value;
   const q=document.getElementById("codePrompt").value.trim();
@@ -7980,19 +8064,17 @@ async function buildCode(){
   };
   const tip=LANGTIP[lang]||"Output complete, runnable, well-commented "+lang+" code. Include a demo/main section with sample input so the user can run it immediately.";
   const sys="You are CODE FORGE, an elite senior engineer inside AURA. The user gives an idea — possibly short or vague: silently expand it into a sensible, complete interpretation (pick reasonable features) rather than asking questions. Produce COMPLETE, WORKING code that runs on the first try — never TODOs, never placeholders, never 'rest of the code here'. "+tip+" Output ONLY the code — no markdown fences, no prose before or after.";
-  let out="";
+  let out="",forgeErr=false;
   try{
-    try{out=await groqCall([{role:"system",content:sys},{role:"user",content:"Build request: "+q}],6000,null,"code")}
-    catch(e1){codeLog("// groq busy/failed — switching to the OpenRouter backup brain…");out=await openrouterCall([{role:"system",content:sys},{role:"user",content:"Build request: "+q}],6000)}
-    if(!out||out.length<40){codeLog("// first pass thin — re-forging with more room…");out=await groqCall([{role:"system",content:sys+" The previous attempt came back empty — output the full code now."},{role:"user",content:"Build request: "+q}],6000,null,"code")}
-  }catch(e){try{out=await openrouterCall([{role:"system",content:sys},{role:"user",content:"Build request: "+q}],6000)}catch(e2){codeLog("// forge failed: "+(e2.message||e2)+" — check key/quota in SET AI KEY")}}
+    out=await codeBrain([{role:"system",content:sys},{role:"user",content:"Build request: "+q}],6000,"forge");
+    if(!out||out.length<40){codeLog("// first pass thin — re-forging with more room…");out=await codeBrain([{role:"system",content:sys+" The previous attempt came back empty — output the full code now."},{role:"user",content:"Build request: "+q}],6000,"forge")}
+  }catch(e){forgeErr=true;codeLog("// forge failed: "+(e.message||e)+" — the Mistral code lane runs on the owner backend; if it stays down it's a server cold start, just hit BUILD again in a minute (or add a backup key in SET AI KEY)")}
   out=String(out||"").replace(/^```[a-z]*\n?/i,"").replace(/\n?```$/,'').trim();
   if(out){
     document.getElementById("codeEditor").value=out;
     codeLog("✓ forged "+out.split("\n").length+" lines of "+lang);
     if(lang==="javascript"||lang==="html"||lang==="react"||lang==="typescript"||lang==="python"){codeLog("▶ auto-running it for you…");runCode()}
-    else codeLog("— hit ▶ RUN (js/html/python run live) or ⤓ SAVE");
-  } else codeLog("// forge came back empty — rephrase and try again");
+    else codeLog("— hit ▶ RUN (js/html/python run live) or ⤓ SAVE");  }else if(!forgeErr)codeLog("// forge came back empty — rephrase and try again");
   }finally{btn.textContent="⚡ BUILD";btn.disabled=false}
 }
 /* ---------- 🛠 BUG FIXER — paste broken code, I find it, fix it, prove it ---------- */
@@ -8033,9 +8115,8 @@ async function fixCode(){
   const user=(errs.length?"REAL RUNTIME ERRORS (from actually executing it):\n"+errs.join("\n")+"\n\n":"NO HARD CRASH — look for logic bugs, wrong results, edge cases.\n\n")+"CODE:\n"+src.slice(0,9000);
   let fixed="";
   try{
-    try{fixed=await groqCall([{role:"system",content:sys},{role:"user",content:user}],6000,null,"code")}
-    catch(e1){codeLog("// groq down — using the OpenRouter backup brain…");fixed=await openrouterCall([{role:"system",content:sys},{role:"user",content:user}],6000)}
-  }catch(e){codeLog("// fix failed: "+(e.message||e)+" — check key/quota")}
+    fixed=await codeBrain([{role:"system",content:sys},{role:"user",content:user}],6000,"fix");
+  }catch(e){codeLog("// fix failed: "+(e.message||e)+" — retry in a minute (server cold start) or add a backup key in SET AI KEY")}
   fixed=String(fixed||"").replace(/^```[a-z]*\\n?/i,"").replace(/\\n?```$/,'').trim();
   if(!fixed||fixed.length<20){codeLog("// could not produce a fix — try rephrasing or check the key");btn.textContent="🛠 FIX";btn.disabled=false;return}
   /* pass 3: verify — run the fixed version; it must not throw */
@@ -8340,11 +8421,11 @@ async function explainCode(){
   try{
     const lang=document.getElementById("codeLang").value;
     const sys="You are CODE FORGE's teacher mode. Explain the given "+lang+" code clearly for a student: what it does overall, then walk through each important part step by step in plain language, then list 2–3 things they could try changing to learn. Use short lines and simple words. No markdown fences.";
-    let out="";try{out=await groqCall([{role:"system",content:sys},{role:"user",content:src.slice(0,8000)}],1600,null,"code")}catch(e){out=await openrouterCall([{role:"system",content:sys},{role:"user",content:src.slice(0,8000)}],1600)}
+    let out="";try{out=await codeBrain([{role:"system",content:sys},{role:"user",content:src.slice(0,8000)}],1600,"explain")}catch(e){out=""}
     out=String(out||"").replace(/^```[a-z]*\n?/i,"").replace(/\n?```$/,"").trim();
     if(out){addMsg(msgTag(),"💡 <b>Code explanation</b>\n"+out.replace(/</g,"&lt;"),"aura");if(typeof speak==="function"&&soundOn)speak("Here is what your code does.")}
     else codeLogc("// explanation came back empty — try again","warn")
-  }catch(e){codeLogc("// explain failed: "+(e.message||e)+" — check key/quota","err")}
+  }catch(e){codeLogc("// explain failed: "+(e.message||e)+" — retry in a minute or add a backup key","err")}
 }
 async function convertCode(){
   const src=wsGet();if(!src.trim()){codeLogc("// editor is empty — nothing to convert","warn");return}
@@ -8358,7 +8439,7 @@ async function convertCode(){
   try{
     const from=document.getElementById("codeLang").value;
     const sys="You are a code translation engine. Convert the given "+from+" code into idiomatic, working "+tgt+". Preserve behavior exactly. Output ONLY the "+tgt+" code — no fences, no prose.";
-    let out="";try{out=await groqCall([{role:"system",content:sys},{role:"user",content:src.slice(0,8000)}],6000,null,"code")}catch(e){out=await openrouterCall([{role:"system",content:sys},{role:"user",content:src.slice(0,8000)}],6000)}
+    let out="";try{out=await codeBrain([{role:"system",content:sys},{role:"user",content:src.slice(0,8000)}],6000,"convert")}catch(e){out=""}
     out=String(out||"").replace(/^```[a-z]*\n?/i,"").replace(/\n?```$/,"").trim();
     if(out&&out.length>10){
       if(wsActive()){wsStrip();const name="converted."+(CODE_LANGS[tgt]||"txt");CWS.files.push({name,code:out});CWcur=name;wsSave();wsRenderTabs();wsPut("")}
@@ -8704,12 +8785,12 @@ async function webResearch(q){
       }
     }catch(e){}
   }
-  try{const r=await fetch("https://r.jina.ai/https://html.duckduckgo.com/html/?q="+encodeURIComponent(q.slice(0,220)),{signal:AbortSignal.timeout(20000)});
+  try{const r=await fetch("https://r.jina.ai/https://html.duckduckgo.com/html/?q="+encodeURIComponent(q.slice(0,220)),{signal:AbortSignal.timeout(14000)});
     const t=await r.text();
     const re=/##\s*\[([^\]]{8,150})\]\((https?:\/\/[^)\s]+)\)/g;let m2;
     while((m2=re.exec(t))&&out.hits.length<5){let u=m2[2];try{u=decodeURIComponent((u.match(/uddg=([^&]+)/)||[])[1]||u)}catch(e){}if(/^https?:\/\//.test(u)&&!u.includes("duckduckgo.com"))out.hits.push({t:m2[1].trim(),u})}}catch(e){}
   if(out.hits.length){
-    try{const pr=await fetch("https://r.jina.ai/"+out.hits[0].u,{signal:AbortSignal.timeout(22000)});
+    try{const pr=await fetch("https://r.jina.ai/"+out.hits[0].u,{signal:AbortSignal.timeout(14000)});
       const pt=await pr.text();out.txt=pt.replace(/^Title:.*\n/m,"").replace(/^URL Source:.*\n/m,"").replace(/Markdown Content:/,"").replace(/!\[[^\]]*\]\([^)]*\)/g," ").replace(/\[([^\]]*)\]\([^)]*\)/g,"$1").replace(/\n{2,}/g,"\n").slice(0,3500)}catch(e){}}
   return out}
 async function researchReply(q,hi){
@@ -8722,12 +8803,25 @@ async function researchReply(q,hi){
   if(!r.hits.length){pushSys("research: web silent — answering from my own knowledge");return null}
   pushSys("research: "+r.hits.length+" live sources — reading the top page…");
   const src=r.hits.map((h,i)=>"["+(i+1)+"] "+h.t+" — "+h.u).join("\n");
-  const sys="You are "+P.name+". Answer the user's question using ONLY the provided live web evidence. Sound human and direct, never encyclopedic. No citation markers, no SOURCES list and no links — weave the evidence into a natural chat answer. If evidence is thin, answer from your own knowledge anyway, with no disclaimer."+TIME_PROTO+(hi?" Reply in Hindi (Devanagari).":"");
-  try{let txt=await aiChat([{role:"system",content:sys},{role:"user",content:"Question: "+q+"\n\nLIVE WEB EVIDENCE:\n"+src+"\n\nTOP PAGE TEXT:\n"+(r.txt||"(reader blocked — rely on titles+snippets)")}],1400);
-    if(txt&&String(txt).trim()){
-      /* strip any source list the model invented — plain chat answer, no sources shown */
-      return String(txt).replace(/\n?\s*SOURCES?:[\s\S]*$/i,"").trim();
-    }     return null}catch(e){return null}}finally{try{clearTimeout(__stallT)}catch(e){}window.__researching=false}}
+  const userMsg="Question: "+q+"\n\nLIVE WEB EVIDENCE:\n"+src+"\n\nTOP PAGE TEXT:\n"+(r.txt||"(reader blocked — rely on titles+snippets)");
+  /* ONE job: understand the question, then answer it NOW — evidence + own knowledge together. The old
+     'using ONLY the provided evidence' wording let the model refuse whenever a detail was missing. */
+  const sys="You are "+P.name+". The user asked a real question and wants a real answer RIGHT NOW. First read the live evidence below, understand what the question is really asking, then answer it directly in your own words — combining the evidence with your wide general knowledge. HARD RULE — NEVER REFUSE: never say 'I don't have…', 'I cannot confirm…', 'not in the provided evidence', 'the sources do not explicitly…', 'share the specific article text', or ask the user to paste/upload/send a source — you already have the live web plus your own knowledge. If the evidence misses the exact detail (an exact list, a score, a name, a roster), still give your BEST complete answer: everything the evidence does establish plus what you know yourself, and add at most ONE short closing line that the detail may have been updated and you can pull a fresher live check. Understand the user's intent first and answer THAT — fast, confident, human, never encyclopedic, never apologetic. No citation markers, no SOURCES list and no links — weave the facts into a natural chat answer. Answer in the user's language."+TIME_PROTO+(hi?" Reply in Hindi (Devanagari).":"");
+  /* a refusal-shaped reply is a bug, not an answer — force one direct retry, else hand off to the thinking brain */
+  const REFUSE=/\b(i don'?t have|do not have the specific|cannot confirm|can'?t confirm|not (?:available|listed|included) in the (?:provided )?evidence|if you (?:can|could) share|share the specific|more detailed source|without that specific data|apologi[sz]e|i'?m sorry,? but i can'?t)\b/i;
+  let txt=null;
+  try{txt=await aiChat([{role:"system",content:sys},{role:"user",content:userMsg}],1400)}catch(e){txt=null}
+  if(txt&&REFUSE.test(String(txt))){
+    slog("research: answer came back refusal-shaped — forcing a direct answer",true);
+    try{const t2=await aiChat([{role:"system",content:sys},{role:"user",content:userMsg+"\n\nIMPORTANT: your previous reply refused and asked the user for more sources. That is never allowed here. Answer the question directly RIGHT NOW from the evidence above plus your own knowledge — best-effort, complete, confident. No apologies, no 'cannot confirm', no requests for the user to share anything."}],1600);
+      txt=(t2&&String(t2).trim()&&!REFUSE.test(String(t2)))?t2:null;
+    }catch(e){txt=null}
+  }
+  if(txt&&String(txt).trim()){
+    /* strip any source list the model invented — plain chat answer, no sources shown */
+    return String(txt).replace(/\n?\s*SOURCES?:[\s\S]*$/i,"").trim();
+  }
+  return null}catch(e){return null}finally{try{clearTimeout(__stallT)}catch(e){}window.__researching=false}}
 const NEED_WEB=/\b(price|weather|today|current|latest|news|live score|stock|exchange rate|who won|release date|schedule|update on|right now|this week|this month|2024|2025|2026)\b|कीमत|मौसम|आज|ताज़ा|लाइव/i;
 /* CURRENCY_Q — self-currency questions ('are you updated', 'your training data', 'what year is it')
    are answered instantly from real local state via localReply; NEVER let them fall into the
