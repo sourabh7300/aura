@@ -778,6 +778,17 @@ body.theme-classical #sendBtn{box-shadow:0 1px 4px rgba(90,60,20,.15)}
 .auth-acct b{display:block;font-weight:400;font-size:14px}
 .auth-acct small{display:block;color:var(--m);font-size:12px}
 .auth-av{width:30px;height:30px;flex:0 0 30px;border-radius:50%;background:linear-gradient(135deg,var(--g),#8a5a10);display:grid;place-items:center;font-weight:500;color:#1a1202}
+/* ---- identity verification — badge chip + signed-in account card (Google-account-picker look) ---- */
+#authVerify{display:none;align-items:center;justify-content:center;min-width:15px;height:15px;padding:0 4px;border-radius:8px;background:rgba(52,211,153,.16);border:1px solid rgba(52,211,153,.5);color:#34d399;font-size:9px;font-weight:700;line-height:1}
+#authBadge.verified #authVerify{display:inline-flex}
+.auth-who{display:flex;gap:12px;align-items:center;padding:12px 14px;margin:0 0 12px;border:1px solid rgba(66,130,244,.55);border-radius:14px;background:rgba(66,130,244,.10);box-shadow:0 0 0 1px rgba(66,130,244,.22),0 0 16px rgba(66,130,244,.12);width:100%;text-align:left;color:inherit;font:inherit}
+.auth-who.guest{border-color:var(--line);background:transparent;box-shadow:none}
+.auth-who b{display:block;font-weight:600;font-size:14px;color:var(--ice)}
+.auth-who small{display:block;color:var(--m);font-size:12px}
+.who-vfy{margin-left:auto;display:inline-flex;align-items:center;gap:4px;font-family:var(--mono);font-size:9.5px;letter-spacing:.05em;color:#34d399;white-space:nowrap}
+.who-none{margin-left:auto;font-family:var(--mono);font-size:9.5px;letter-spacing:.05em;color:var(--dim);white-space:nowrap}
+.auth-acct.active{border-color:#4285f4;background:rgba(66,130,244,.14);box-shadow:0 0 0 1px rgba(66,130,244,.35)}
+#doneVerify{display:none;margin-top:8px;font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;color:#34d399}
 /* v5 glass note box */
 .auth-status-box{
   background:var(--gl);border:1px solid var(--line);border-radius:12px;
@@ -2850,7 +2861,7 @@ body[data-tab="system"] #sysPane #aboutCard{display:block!important;position:sta
 </div>
 
 <!-- ACCOUNT FOOTER — Claude-style: kaunsa account chal raha hai, screen ke nichee alag se -->
-<div id="authBadge" class="acct-foot" title="AURA account — click to manage"><span id="authRoleIcon">&#128100;</span><span id="authName">Guest</span><span id="authTag">USER</span></div>
+<div id="authBadge" class="acct-foot" title="AURA account — click to manage"><span id="authRoleIcon">&#128100;</span><span id="authName">Guest</span><span id="authTag">USER</span><span id="authVerify">&#10003;</span></div>
 
 <!-- ============ SETTINGS — ek hi jagah: account (login), voice, sound, language, look ============ -->
 <div id="settingsMenu" aria-hidden="true">
@@ -9280,10 +9291,46 @@ const AuraAuth = (function(){
     const u = getCurrentUser();
     const admin = isAdmin();
     badge.classList.toggle("admin", admin); /* keep extra classes (acct-foot) intact */
-    badge.title = admin ? "Signed in — Sourabh Singh" : ("Signed in — " + u.name);
+    /* identity verified = a real Firebase session (Google popup or phone OTP),
+       or the server-verified owner role. A local guest profile never verifies —
+       the flag lives only in the session record, never in a writable field. */
+    let cloud = null; try{ cloud = fbUser(); }catch(e){}
+    const vfyMethod = cloud ? (cloud.email ? "Google" : (cloud.phone ? "phone OTP" : "")) : "";
+    const verified = !!vfyMethod || admin;
+    badge.classList.toggle("verified", verified);
+    badge.title = admin ? "Signed in — Sourabh Singh · identity verified"
+      : verified ? ("Signed in — " + u.name + " · identity verified (" + vfyMethod + ")")
+      : ("Local profile — " + u.name + " · not verified");
     if(roleIcon) roleIcon.textContent = admin ? "👑" : "👤";
     if(nameEl) nameEl.textContent = admin ? ADMIN_IDENTITY.name : u.name;
     if(tagEl){ tagEl.textContent = admin ? "PRO" : "USER"; tagEl.style.display = "inline-block"; }
+    /* mirror the state into the account card + done screen (DOM-safe) */
+    try{ syncVerifiedUi(verified, vfyMethod || (admin ? "owner" : ""), cloud); }catch(e){}
+  }
+
+  /* paints the modal's signed-in card and the done-screen verified line */
+  function syncVerifiedUi(verified, method, cloud){
+    const card = $("authWho");
+    if(card){
+      card.style.display = "flex";
+      card.classList.toggle("guest", !verified);
+      const av = $("authWhoAv"), nm = $("authWhoName"), hd = $("authWhoHandle"), st = $("authWhoState");
+      const cu = getCurrentUser();
+      const label = cloud ? ((cloud.name || cu.name || "User").trim()) : (cu.name || "Guest");
+      const handle = cloud ? (cloud.email || cloud.phone || "") : "saved on this device only";
+      if(av){ av.textContent = (label || "U").charAt(0).toUpperCase(); }
+      if(nm) nm.textContent = label;
+      if(hd) hd.textContent = handle;
+      if(st){
+        st.className = verified ? "who-vfy" : "who-none";
+        st.textContent = verified ? ("✓ IDENTITY VERIFIED" + (method && method!=="owner" ? " · " + method.toUpperCase() : "")) : "NOT VERIFIED";
+      }
+    }
+    const dv = $("doneVerify");
+    if(dv){
+      dv.style.display = verified ? "block" : "none";
+      dv.textContent = verified ? ("✓ IDENTITY VERIFIED · " + ((method||"").toUpperCase() || "GOOGLE")) : "";
+    }
   }
 
   let otp = null, otpExp = 0, otpElevate = false;
@@ -9604,8 +9651,10 @@ const AuraAuth = (function(){
         $("doneAvatar").innerHTML="&#128081;";
         $("doneTitle").textContent="SOURABH SINGH";
         $("doneSub").textContent="Full control active on this device.";
+        try{ updateBadge(); }catch(e){}
       }else{
         dn.style.display="none"; s2.style.display="none"; s1.style.display="block";
+        try{ updateBadge(); }catch(e){}
         this.renderUsers();
       }
     },
@@ -9856,6 +9905,7 @@ document.addEventListener("DOMContentLoaded",function(){
     $("authStep2").style.display = "none";
     $("authDone").style.display = "block";
     pushSys("Signed in with Google" + (u.email ? " — " + u.email : ""));
+    try{ AuraAuth.updateBadge(); }catch(e){}
   };
 
   const sendBtn2 = $("sendCodeBtn");
@@ -9900,6 +9950,7 @@ document.addEventListener("DOMContentLoaded",function(){
     $("authStep2").style.display = "none";
     $("authDone").style.display = "block";
     pushSys("Signed in via phone OTP" + (u.phone ? " — " + u.phone : ""));
+    try{ AuraAuth.updateBadge(); }catch(e){}
   };
 
   const otpBack = $("otpBackBtn");
@@ -11086,6 +11137,7 @@ if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",
 <button class="wiz-x" id="authModalX">&#x2715;</button>
 </div>
 <div id="authStep1">
+<div id="authWho" class="auth-who" style="display:none"><span class="auth-av" id="authWhoAv">U</span><span><b id="authWhoName">Guest</b><small id="authWhoHandle"></small></span><span id="authWhoState" class="who-none">NOT VERIFIED</span></div>
 <div class="auth-status-box">One account across the whole interface — chat, code and voice stay yours, on every device.</div>
 <button class="auth-btn" id="googleSignInBtn" style="background:#fff;color:#1f2937;border:1px solid #dadce0;display:flex;align-items:center;justify-content:center;gap:10px"><svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>Continue with Google</button>
 <div style="display:flex;align-items:center;gap:10px;margin:14px 0"><div style="flex:1;height:1px;background:var(--line2)"></div><span style="font-size:10px;color:var(--dim)">or sign in with phone</span><div style="flex:1;height:1px;background:var(--line2)"></div></div>
@@ -11118,6 +11170,7 @@ if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",
 <div style="font-size:40px" id="doneAvatar">&#128100;</div>
 <h3 id="doneTitle" style="font-family:'Orbitron',sans-serif;color:#67e8f9;letter-spacing:2px;margin:8px 0 4px">SIGNED IN</h3>
 <p id="doneSub" style="font-size:12px">Your chats and history sync across your devices.</p>
+<div id="doneVerify" style="display:none"></div>
 <div id="dataCtrlRow" style="display:flex;gap:8px;margin-top:14px">
 <button class="auth-btn" id="exportDataBtn" style="flex:1;background:transparent;border:1px solid var(--line);color:var(--cy2);font-size:11px;padding:9px">⤓ EXPORT MY DATA</button>
 <button class="auth-btn" id="deleteDataBtn" style="flex:1;background:transparent;border:1px solid rgba(239,68,68,.5);color:#f87171;font-size:11px;padding:9px">🗑 DELETE MY DATA</button>
