@@ -13,6 +13,7 @@
    ─ AURA::7300353703::JECRC::PROVENANCE-SEAL-v1 ─
   ═══════════════════════════════════════════════════════════════
 -->
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Manrope:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
 <meta name="theme-color" content="#05070E">
@@ -896,6 +897,13 @@ body.theme-classical #sendBtn{box-shadow:0 1px 4px rgba(90,60,20,.15)}
   color:var(--m)!important;font:400 10px 'JetBrains Mono',monospace!important;
   letter-spacing:.1em!important;transition:.25s;white-space:nowrap;
 }
+/* OWNER-ONLY ADMIN TAB — the rail rule above forces display:flex!important,
+   which beats the inline style="display:none" on #adminTabBtn (inline styles
+   lose to !important). That leaked ADMIN to every guest. Hide it here with a
+   higher-specificity !important; applyRoleUi() adds .admin-on ONLY when
+   isAdmin() (server-verified maker/ceo, or the owner's local elevation). */
+#tabbar #adminTabBtn{display:none!important}
+#tabbar #adminTabBtn.admin-on{display:flex!important}
 #tabbar button:hover{color:var(--t)!important;background:var(--gl)!important}
 /* v5 .rail button.on */
 body[data-tab="chat"]   #tabbar button:nth-child(1),
@@ -2693,7 +2701,37 @@ body[data-tab="system"] #sysPane #aboutCard{display:block!important;position:sta
     <h4>👥 PEOPLE <span id="adUsersHint" style="color:var(--dim);font-weight:400"></span></h4>
     <div id="adUsersList"><small style="color:var(--dim)">loading…</small></div>
   </div>
-  <div class="admin-card" id="suCard" style="border-color:rgba(120,101,233,.4)">
+  <div class="admin-card" id="botsCard" style="border-color:rgba(34,211,238,.45)">
+    <h4>⚡ KRATOS SQUAD <span style="color:var(--dim);font-weight:400">— 👑 KRATOS (head) · ERLANG · ARTHUR · PHOENIX · admin only</span></h4>
+    <p style="font-size:12px;color:var(--dim);line-height:1.55;margin-bottom:10px">Mythos-trained squad, four departments: <b style="color:var(--cy2)">👑 KRATOS</b> <i>COMMAND</i> — takes your orders, dispatches the depts, reports back; <b style="color:var(--cy2)">🛡 ERLANG</b> <i>RELIABILITY</i> — telecom-grade sweeps of her own source, deterministic so it works with zero keys; <b style="color:var(--cy2)">⚔ ARTHUR</b> <i>ENGINEERING</i> — plans, writes and dry-run verifies repairs on the admin KEY BANK tiers, falls back to an honest keyless plan, nothing ships without your approval; <b style="color:var(--cy2)">🔥 PHOENIX</b> <i>KNOWLEDGE</i> — keeps the squad training database stamped with real-world time, dates and live briefs. Assign their next work below — every AI call is recorded in the KEY BANK ledger.</p>
+    <div class="bot-grid" id="botRoster"></div>
+    <textarea id="botOrder" placeholder="Tell the team their next work — e.g. Run a full test sweep · Fix whatever the last sweep found · Add a welcome banner to the landing gate"></textarea>
+    <div class="suRow" style="margin-top:8px">
+      <button class="suBtn go" id="botAssignBtn">👑 ASSIGN TO SQUAD</button>
+      <button class="suBtn" id="botTestBtn">🛡 RUN TEST SWEEP</button>
+      <button class="suBtn" id="botReportBtn">📋 HEAD REPORT</button>
+      <button class="suBtn" id="botAutoBtn" style="margin-left:auto">⏱ AUTO: ON</button>
+    </div>
+    <div id="botReportOut"></div>
+    <div id="botLog"></div>
+    <style>
+      .bot-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:8px;margin:10px 0}
+      .bot-tile{border:1px solid var(--line);border-radius:10px;padding:9px 10px;background:rgba(2,10,16,.45);display:flex;flex-direction:column;gap:3px;transition:border-color .2s ease-out,box-shadow .2s ease-out}
+      .bot-tile:hover{border-color:rgba(34,211,238,.4);box-shadow:0 0 14px rgba(34,211,238,.12)}
+      .bot-tile b{font:600 11.5px Rajdhani;letter-spacing:1.5px;color:var(--cy2)}
+      .bot-tile small{font-size:10px;color:var(--dim);line-height:1.4}
+      .bot-dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:6px;vertical-align:middle;background:#6b7280}
+      .bot-dot.running{background:#5CE1FF;box-shadow:0 0 8px #5CE1FF;animation:pp 1.1s infinite}
+      .bot-dot.ok{background:#34d399;box-shadow:0 0 6px rgba(52,211,153,.7)}
+      .bot-dot.fail{background:#f87171;box-shadow:0 0 6px rgba(248,113,113,.7)}
+      .bot-dot.order{background:#fbbf24;box-shadow:0 0 6px rgba(251,191,36,.7)}
+      #botOrder{width:100%;min-height:58px;background:rgba(2,10,16,.5);border:1px solid var(--line);border-radius:10px;color:var(--ice);font:12.5px Rajdhani;padding:10px;resize:vertical;box-sizing:border-box}
+      #botReportOut{display:none;white-space:pre-wrap;border:1px solid rgba(34,211,238,.35);border-radius:10px;padding:10px;margin-top:10px;font:11.5px ui-monospace,monospace;color:var(--ice);max-height:260px;overflow:auto}
+      #botLog{margin-top:10px;max-height:200px;overflow:auto;background:rgba(2,10,16,.55);border:1px solid var(--line);border-radius:10px;padding:10px;font:11px ui-monospace,monospace;display:flex;flex-direction:column;gap:3px}
+      #botLog .bl-fail{color:#f87171}#botLog .bl-ok{color:#34d399}#botLog .bl-dim{color:var(--dim)}
+    </style>
+  </div>
+  <div class="admin-card" id="suCard" style="border-color:rgba(120,101,233,.4);display:none">
     <h4>🧬 SELF-INTEGRATION <span style="color:var(--dim);font-weight:400">— AURA upgrades herself</span></h4>
     <p style="font-size:12px;color:var(--dim);line-height:1.55;margin-bottom:10px">Describe any change in plain words — a new feature, a design tweak, a fix. AURA plans it, writes the code, shows you a live preview, and can ship it to the real site with your approval. You stay the publisher; she stays the engineer.</p>
     <div id="suBox">
@@ -2825,6 +2863,7 @@ body[data-tab="system"] #sysPane #aboutCard{display:block!important;position:sta
     <div id="codeOutWrap"><h4><span>OUTPUT</span><span class="hbtns"><button class="cbtn" id="codePhone" style="padding:5px 10px;font-size:10px" title="Preview your page inside a phone frame">📱 PHONE</button> <button class="cbtn" id="codeOutDl" style="padding:5px 10px;font-size:10px;border-color:rgba(52,211,153,.55);color:#34d399" title="Download your work to this laptop — runnable file, ready to keep">⤓ DOWNLOAD</button> <button class="cbtn" id="codeZip" style="padding:5px 10px;font-size:10px;border-color:rgba(52,211,153,.55);color:#34d399" title="Download the whole multi-file project as one ready-to-run bundle">📦 PROJECT</button> <button class="cbtn" id="codeClear" style="padding:5px 10px;font-size:10px">✕ clear</button></span></h4><div id="codeOutBody"><iframe id="codeFrame" sandbox="allow-scripts allow-modals allow-popups allow-forms"></iframe><div id="codeLog"></div></div></div>
   </div>
 </div>
+
 
 <div id="dock">
   <div id="chipsMobile" style="display:flex;gap:7px;flex-wrap:nowrap;overflow-x:auto;justify-content:flex-start;scrollbar-width:none"></div>
@@ -6623,6 +6662,32 @@ async function askCore(text0){
       addMsg("YOU ▸",text,"user");addMsg(msgTag(),"📅 Calendar unlinked and the stored address erased.","aura");
       setMode("idle");busy=false;if(typeof wake!=="undefined"&&wake)armWake(400);return;
     }
+    /* BOT TEAM — admin-only squad commands: report / sweep / assign work */
+    if(admin&&typeof window.BotTeam!=="undefined"){
+      if(/^(bot (team )?(report|status)|team (report|status)|head report|show bots|bots status)$/.test(ol)){
+        addMsg("YOU ▸",text,"user");
+        addMsg(msgTag(),BotTeam.report(),"aura");
+        if(voiceAllowed())speak("Bot team report ready on your admin page.");
+        setMode("idle");busy=false;if(typeof wake!=="undefined"&&wake)armWake(400);return;
+      }
+      if(/^(run|start) (a )?(bot |team )?test sweep$|^run (the )?tests$|^bot test$/.test(ol)){
+        addMsg("YOU ▸",text,"user");
+        addMsg(msgTag(),"🛡 ERLANG — sweeping my own source now…","aura");
+        BotTeam.sweep(false).then(function(r){
+          if(r)addMsg(msgTag(),r.fail?("✗ "+r.fail+" check(s) failed — ⚔ ARTHUR dispatched. Full details in ADMIN → KRATOS SQUAD."):("✓ all "+r.pass+" checks green — the squad is standing down."),"aura");
+        });
+        setMode("idle");busy=false;if(typeof wake!=="undefined"&&wake)armWake(400);return;
+      }
+      {
+        const bm=text.match(/^(?:assign|task)(?:\s+|:\s+)(?!me\b)(?:(?:the|to|a|an|squad|team|bots?|of|for)\s+)*\s*(.{6,240})$/i);
+        if(bm){
+          addMsg("YOU ▸",text,"user");
+          const okd=BotTeam.assign(bm[1]);
+          addMsg(msgTag(),okd?("👑 Order logged — 👑 KRATOS dispatched the squad on: \""+bm[1].slice(0,100)+"\". Watch ADMIN → KRATOS SQUAD for live progress."):("👑 Order received but the mission console is busy — I'll take it when the current run settles."),"aura");
+          setMode("idle");busy=false;if(typeof wake!=="undefined"&&wake)armWake(400);return;
+        }
+      }
+    }
   }
   /* ===== DAILY SYSTEMS — brief topics, routines, sleep-cycle, calendar view (every user) ===== */
   {
@@ -7056,6 +7121,21 @@ async function askCore(text0){
     if(stop){pre.textContent="(stream stopped)";pushSys("generation stopped by user")}
     try{document.getElementById("stopBtn").classList.remove("show")}catch(e){}
     setMode("idle");busy=false;if(wake)armWake(400);return;
+  }
+  /* FINAL REFUSAL GUARD — the research lane retries internally, but the thinking
+     brain, wiki/DDG fallbacks and any exhausted research retry can still hand
+     back a refusal like "share the specific article text". Never ship one:
+     force one direct, plain-text retry (no __streamEl → nothing partial streams). */
+  const REFUSE_SHAPE=/\b(i don'?t have|do not have the specific|cannot confirm|can'?t confirm|not (?:available|listed|included) in the (?:provided )?evidence|if you (?:can|could) share|share the specific|more detailed source|without that specific data|apologi[sz]e|i'?m sorry,? but i can'?t)\b/i;
+  if(REFUSE_SHAPE.test(String(t))){
+    slog("answer came back refusal-shaped — forcing one direct retry",true);
+    try{
+      const fx=await aiChat([
+        {role:"system",content:"You are "+personaName()+", Sourabh Singh's holographic AI assistant. NEVER refuse. Never say you don't have information, never ask the user to paste, share or upload an article, source or screenshot, never apologize for lacking data. You hold wide knowledge on every subject: answer the question directly, fully and confidently from that knowledge, in the user's language. Plain text, no citations, no links, no apologies."},
+        {role:"user",content:resolved+"\n\nYour previous reply refused and asked the user for a source. That is never allowed. Answer the question directly RIGHT NOW — best-effort, complete, confident."}
+      ],1600);
+      if(fx&&String(fx).trim()&&!REFUSE_SHAPE.test(String(fx)))t=cleanAnswer(fx);
+    }catch(e){}
   }
   lastAnswer=t;lastSrc=src||"";window.__lastQ=text;
   try{const __u=JSON.parse(localStorage.getItem("aura_usage")||"{\"answers\":0}");__u.answers=(__u.answers||0)+1;localStorage.setItem("aura_usage",JSON.stringify(__u))}catch(e){}
@@ -9291,6 +9371,20 @@ const AuraAuth = (function(){
     const u = getCurrentUser();
     const admin = isAdmin();
     badge.classList.toggle("admin", admin); /* keep extra classes (acct-foot) intact */
+    /* ADMIN tab visibility rides on every badge refresh too — the boot-time
+       applyRoleUi() call is out of scope and silently no-ops, so without this
+       an owner session would never reveal the tab (and a guest must never). */
+    try{
+      const _ab = $("adminTabBtn");
+      if(_ab){ _ab.classList.toggle("admin-on", admin); _ab.style.display = admin ? "" : "none"; }
+      /* a session can end while the admin tab is open — kick any non-admin
+         back to chat so #adminPage never stays on screen */
+      if(!admin && document.body && document.body.dataset && document.body.dataset.tab === "admin"){
+        document.body.dataset.tab = "chat";
+        document.querySelectorAll("#tabbar button").forEach(function(b){ b.classList.toggle("on", b.dataset.t === "chat"); });
+        try{ if(typeof renderSessions === "function") renderSessions(); }catch(e){}
+      }
+    }catch(e){}
     /* identity verified = a real Firebase session (Google popup or phone OTP),
        or the server-verified owner role. A local guest profile never verifies —
        the flag lives only in the session record, never in a writable field. */
@@ -9453,7 +9547,13 @@ const AuraAuth = (function(){
   function applyRoleUi(){
     try{
       const btn = document.getElementById("adminTabBtn");
-      if(btn) btn.style.display = isAdmin() ? "" : "none";
+      const on = isAdmin();
+      if(btn){
+        /* class is the real switch — inline display can't beat the rail's
+           display:flex!important, so guests would still see the tab */
+        btn.classList.toggle("admin-on", on);
+        btn.style.display = on ? "" : "none";
+      }
       updateBadge();
     }catch(e){}
   }  /* role refresh retry chain — one background loop, never a pile-up */
@@ -10068,6 +10168,245 @@ document.addEventListener("DOMContentLoaded",function(){
   AuraAuth.updateBadge();
   setTimeout(function(){ try{ applyRoleUi(); }catch(e){} }, 800);
 
+  /* ================= KRATOS SQUAD — 👑 KRATOS (head) + ERLANG/ARTHUR/PHOENIX =================
+     Admin-only Mythos-class squad in the KRATOS SQUAD card (element id kept: botsCard).
+     KRATOS (COMMAND): accepts owner orders, dispatches depts, reports.
+     ERLANG (RELIABILITY): deterministic self-test sweeps — passes with ZERO AI keys.
+     ARTHUR (ENGINEERING): drives AGENT MISSION on the Key Bank tiers; keyless or
+       no-maker sessions get an honest offline plan, never fake output; ship = owner approval.
+     PHOENIX (KNOWLEDGE): training DB (BOT_DB) + real-world stamps (date/time/briefs)
+       + persistent lessons learned. State: localStorage aura_bots_v1. */
+  window.BotTeam=(function(){
+    const KEY="aura_bots_v1";
+    const S={auto:true,log:[],orders:[],sweep:null,arthur:"idle",world:null,learned:[]};
+    try{const p=JSON.parse(localStorage.getItem(KEY)||"null");if(p&&typeof p==="object"){S.auto=p.auto!==false;S.log=Array.isArray(p.log)?p.log.slice(-120):[];S.orders=Array.isArray(p.orders)?p.orders.slice(-40):[];S.sweep=p.sweep||null;S.world=p.world||null;S.learned=Array.isArray(p.learned)?p.learned.slice(-30):[]}}catch(e){}
+    function save(){try{localStorage.setItem(KEY,JSON.stringify({auto:S.auto,log:S.log.slice(-120),orders:S.orders.slice(-40),sweep:S.sweep,world:S.world,learned:S.learned.slice(-30)}))}catch(e){}}
+    function isAdmin(){try{return typeof AuraAuth!=="undefined"&&AuraAuth.isAdmin()}catch(e){return false}}
+    /* TRAINING DATABASE — the squad's Mythos-class playbook (code-embedded, always current;
+       PHOENIX persists learned lessons + world stamps alongside it in localStorage). */
+    const BOT_DB={
+      protocol:"MYTHOS-CLASS AGENT PROTOCOL v1: (1) REASON like a senior engineer — core constraint → edge cases → failure modes → security → fix; never superficial. (2) PLAN first on multi-step work (Step 1/2/3), then execute; single-step asks get direct answers, no plan spam. (3) TOOLS — name the REAL lane you use (live web research, code forge, vision, mission console, squad DB); never fake or simulate tool output. (4) MEMORY — consult the squad database before acting; persist every new fact or lesson. (5) CURRENCY — trust the injected CURRENT DATE & TIME over any training guess; time-sensitive facts come from live or cached brief lanes; never answer 'my data is old'. (6) VOICE — crisp, structured, engineering precision with a sharp persona.",
+      depts:{
+        kratos:"COMMAND: take the owner's order, decompose it into dept tasks (ERLANG=verify/test, ARTHUR=code/fix, PHOENIX=knowledge), dispatch, confirm completion, then report. Never do another dept's job. Report = per-dept status + sweep + world sync + key mode.",
+        erlang:"RELIABILITY: verify before trusting — parse checks, structural sentinels, refusal-guard + admin-gate integrity, DOM presence, keyless-lane presence. A failed check becomes a bug report to ARTHUR, never a silent pass. Deterministic only — must pass with zero AI keys.",
+        arthur:"ENGINEERING: minimal complete production-ready edits anchored in real code; dry-run verify every find-string; self-repair up to 3 rounds; stage the ship and WAIT for owner approval. Never touch auth, keys or the backend URL. Keyless mode: honest offline plan only — never fake code output.",
+        phoenix:"KNOWLEDGE: maintain the squad DB (playbooks, lessons, order history), stamp every run with real date/time, pull cached real-world briefs without keys, surface freshness in reports. An unstamped fact is stale — re-stamp it."
+      }
+    };
+    const BOTS=[
+      {id:"kratos",icon:"👑",name:"KRATOS",dept:"COMMAND",role:"head — dispatch, oversight, your report",st:"ok"},
+      {id:"erlang",icon:"🛡",name:"ERLANG",dept:"RELIABILITY",role:"auto-test — telecom-grade source sweeps",st:"idle"},
+      {id:"arthur",icon:"⚔",name:"ARTHUR",dept:"ENGINEERING",role:"auto-fix — plan, write, verify (you approve the ship)",st:"idle"},
+      {id:"phoenix",icon:"🔥",name:"PHOENIX",dept:"KNOWLEDGE",role:"training DB + real-world stamps, keeps the log",st:"ok"}
+    ];
+    function bot(id){return BOTS.find(b=>b.id===id)||BOTS[0]}
+    function setSt(id,st){bot(id).st=st;render()}
+    function entry(who,msg,cls){
+      S.log.push({t:Date.now(),who:who,m:String(msg),c:cls||""});
+      if(S.log.length>120)S.log=S.log.slice(-120);
+      save();renderLog();
+    }
+    function render(){
+      const g=$("botRoster");if(!g)return;
+      g.innerHTML=BOTS.map(b=>'<div class="bot-tile"><b><span class="bot-dot '+(b.st==="idle"?"":b.st)+'"></span>'+b.icon+' '+b.name+'</b><small><span style="color:var(--cy2);letter-spacing:1.2px;font-size:9px">'+b.dept+'</span> · '+b.role+'</small></div>').join("");
+      const ab=$("botAutoBtn");if(ab)ab.textContent="⏱ AUTO: "+(S.auto?"ON":"OFF");
+    }
+    function renderLog(){
+      const el=$("botLog");if(!el)return;
+      if(!S.log.length){el.innerHTML='<span class="bl-dim">log is quiet — assign the squad their first task, or run a sweep.</span>';return}
+      el.innerHTML=S.log.slice(-40).map(e=>'<span class="'+(e.c==="fail"?"bl-fail":e.c==="ok"?"bl-ok":"bl-dim")+'">['+new Date(e.t).toLocaleTimeString(undefined,{hour12:false})+'] '+e.who+': '+String(e.m).replace(/</g,"&lt;")+'</span>').join("");
+      el.scrollTop=el.scrollHeight;
+    }
+    /* ---------- ERLANG (RELIABILITY): deterministic checks — pass with ZERO AI keys ---------- */
+    async function sweep(quiet){
+      if(!isAdmin()){entry("kratos","sweep refused — admin only","fail");return null}
+      if(bot("erlang").st==="running"){entry("erlang","already sweeping — wait for this run","dim");return null}
+      setSt("erlang","running");
+      if(!quiet)entry("erlang","sweep started — fetching her own source (keyless lane)…","dim");
+      const checks=[];
+      const ck=(n,ok,d)=>checks.push({n:n,ok:!!ok,d:d||""});
+      try{
+        const r=await fetch(location.href,{cache:"no-store"});
+        const src=await r.text();
+        ck("source fetched",src.length>50000,src.length+" bytes");
+        /* inline script blocks — same extraction the Node harness uses */
+        const blocks=[];const re=/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g;let m;
+        while((m=re.exec(src))){if(m[1].trim())blocks.push(m[1])}
+        ck("inline blocks located ("+blocks.length+")",blocks.length>=2);
+        for(let i=0;i<blocks.length;i++){
+          try{new Function(blocks[i]);ck("block "+(i+1)+" parses",true)}
+          catch(e){ck("block "+(i+1)+" parses",false,String(e.message||e).slice(0,140))}
+        }
+        ck("refusal guard intact",(src.match(/REFUSE_SHAPE/g)||[]).length>=2,(src.match(/REFUSE_SHAPE/g)||[]).length+" sites");
+        ck("provenance seal intact",/PROVENANCE-SEAL-v1/.test(src));
+        ck("admin gate intact",/id="adminTabBtn"/.test(src));
+        ck("KRATOS squad installed",/id="botsCard"/.test(src)&&/window\.BotTeam/.test(src));
+        ck("training DB installed",/MYTHOS-CLASS AGENT PROTOCOL/.test(src)&&/BOT_DB/.test(src));
+        ck("key bank lane wired",/loadKeyBank/.test(src));
+        ck("keyless fallback lanes",/wikiAnswer|ddgAnswer/.test(src));
+        ck("real-world brief lane",/dailyBriefBlock/.test(src));
+        ck("time protocol shipped",/TIME_PROTO/.test(src));
+        ck("no PART-1 leftovers",!/AURA\.state/.test(src));
+        ck("document closes cleanly",/<\/html>\s*$/.test(src));
+        ck("live DOM: chat log + input",!!($("log")&&$("q")));
+        ck("live DOM: admin page + squad card",!!($("adminPage")&&$("botsCard")));
+      }catch(e){ck("sweep run",false,String(e.message||e).slice(0,140))}
+      const fail=checks.filter(c=>!c.ok);
+      const prev=S.sweep;
+      const res={at:Date.now(),pass:checks.length-fail.length,fail:fail.length,failed:fail.map(c=>c.n+(c.d?" — "+c.d:""))};
+      S.sweep=res;
+      if(!fail.length&&prev&&prev.fail>0){
+        S.learned.push({t:Date.now(),m:"recovered "+prev.fail+" failed check(s): "+(prev.failed||[]).slice(0,3).join("; ").slice(0,140)});
+        if(S.learned.length>30)S.learned=S.learned.slice(-30);
+        entry("phoenix","learned — recovered: "+(prev.failed||[]).slice(0,2).join(" | ").slice(0,120),"ok");
+      }
+      save();
+      if(fail.length){
+        setSt("erlang","fail");
+        entry("erlang","✗ "+fail.length+" of "+checks.length+" checks failed: "+fail.map(c=>c.n).join(", "),"fail");
+        /* ARTHUR auto-engages: drive the existing agent-mission loop with the failure list */
+        if(S.auto)dispatch("Fix these failed self-test checks in aura.html (run a sweep first to reproduce): "+res.failed.slice(0,5).join(" | "),true);
+      }else{
+        setSt("erlang","ok");
+        entry("erlang","✓ all "+checks.length+" checks green (zero keys used)","ok");
+      }
+      return res;
+    }
+    /* ---------- ARTHUR (ENGINEERING): full mission on keys, honest offline plan without ---------- */
+    function keyMode(){
+      try{if(typeof backendUrl==="function"&&backendUrl())return "backend proxy tier (Key Bank) — AI missions live"}catch(e){}
+      try{if(typeof geminiKey==="function"&&geminiKey())return "local key bank — AI missions live"}catch(e){}
+      return "keyless — deterministic depts only (ERLANG sweep, offline plans, PHOENIX cache)";
+    }
+    function offlinePlan(task,why){
+      return "⚔ ARTHUR — OFFLINE PLAN ("+why+"; no AI call made, nothing faked)\nTASK: "+String(task).slice(0,180)+
+        "\n1. ERLANG pre-check — reproduce with a deterministic sweep (works keyless)."+
+        "\n2. Anchor the change in the real source (exact find-strings)."+
+        "\n3. Write the minimal complete, style-matched edit."+
+        "\n4. Verify: find-string unique + syntax check + 4 suites green."+
+        "\n5. Stage → KRATOS reports → owner SHIP approval.\nPLAYBOOK: "+BOT_DB.depts.arthur;
+    }
+    function dispatch(task,auto){
+      if(!isAdmin()){entry("kratos","dispatch refused — admin only","fail");return false}
+      const ap=$("amPrompt"),go=$("amGoBtn");
+      const hasMaker=(function(){try{return !!(typeof AuraAuth!=="undefined"&&AuraAuth.suAllowed&&AuraAuth.suAllowed())}catch(e){return false}})();
+      const hasKeys=(function(){
+        try{if(typeof backendUrl==="function"&&backendUrl())return true}catch(e){}
+        try{if(typeof geminiKey==="function"&&geminiKey())return true}catch(e){}
+        return false;
+      })();
+      const order={t:Date.now(),task:String(task).slice(0,200),by:auto?"auto":"owner",mode:(hasMaker&&hasKeys&&ap&&go)?"mission":"offline"};
+      S.orders.push(order);
+      if(S.orders.length>40)S.orders=S.orders.slice(-40);
+      save();
+      if(!hasMaker||!hasKeys||!ap||!go){
+        const why=(!ap||!go)?"mission console missing":(!hasMaker?"maker session off":"AI keys out");
+        order.plan=offlinePlan(task,why);save();
+        setSt("arthur","ok");
+        entry("kratos","order accepted → ARTHUR offline lane ("+why+")","dim");
+        entry("arthur","keyless plan staged — full mission runs when maker session + keys are up","ok");
+        const out=$("botReportOut");if(out){out.style.display="block";out.textContent=order.plan}
+        return true;
+      }
+      if(go.disabled){entry("arthur","a mission is already running — wait for it","dim");return false}
+      setSt("arthur","running");
+      entry("kratos","order logged → ARTHUR (ENGINEERING): "+String(task).slice(0,110),"dim");
+      entry("arthur","mission launched with MYTHOS protocol — plan → code → verify; ship waits for YOUR approval","ok");
+      ap.value="KRATOS DIRECTIVE — MYTHOS PROTOCOL\n"+BOT_DB.protocol+"\n\n"+BOT_DB.depts.arthur+"\nCURRENT DATE & TIME: "+new Date().toString()+"\n\nTASK: "+task;
+      try{AuraMetrics.event("event","bot-arthur-mission")}catch(e){}
+      go.click();
+      /* watch the mission log: it flips ARTHUR's status back when the run settles */
+      const t0=Date.now();
+      const iv=setInterval(function(){
+        const log=$("amLog");
+        if(go.disabled===false&&log&&Date.now()-t0>4000){
+          const txt=log.textContent||"";
+          if(/waiting on you|verified/i.test(txt)){setSt("arthur","ok");entry("arthur","✓ verified — staged for your approval (SHIP button in AGENT MISSION)","ok")}
+          else if(/mission failed|no edit list|malformed/.test(txt)){setSt("arthur","fail");entry("arthur","✗ mission failed — details in AGENT MISSION log","fail")}
+          else setSt("arthur","idle");
+          clearInterval(iv);
+        }else if(Date.now()-t0>360000){clearInterval(iv);setSt("arthur","idle")}
+      },2000);
+      return true;
+    }
+    /* ---------- PHOENIX (KNOWLEDGE): real-world freshness stamps — keyless cache lanes ---------- */
+    function worldSync(){
+      try{
+        const now=new Date();
+        let brief="",fresh=false;
+        try{if(typeof dailyBriefBlock==="function")brief=String(dailyBriefBlock()||"").replace(/\s+/g," ").slice(0,420)}catch(e){}
+        try{
+          if((!brief||brief.length<40)&&typeof briefLoad==="function"){
+            const b=briefLoad();
+            if(b&&b.items&&b.items.length){brief="HEADLINES: "+b.items.slice(0,4).join(" · ").slice(0,400);fresh=(typeof briefFresh==="function")?!!briefFresh(b):false}
+          }
+        }catch(e){}
+        S.world={at:now.getTime(),stamp:now.toString(),brief:brief,fresh:fresh};save();
+        setSt("phoenix","ok");
+        entry("phoenix","world sync — "+now.toLocaleString()+(brief?(fresh?" · live brief lane fresh":" · cached brief (keyless)"):" · offline stamp (keyless)"),"ok");
+        return S.world;
+      }catch(e){entry("phoenix","world sync failed: "+(e.message||e),"fail");return null}
+    }
+    /* ---------- KRATOS (COMMAND): the head's report — depts, sweep, world, key mode ---------- */
+    function report(){
+      if(!S.world||(Date.now()-(S.world.at||0))>3600000){try{worldSync()}catch(e){}}
+      const L=[];
+      L.push("👑 KRATOS COMMAND REPORT — "+new Date().toLocaleString());
+      L.push("");
+      BOTS.forEach(b=>L.push(b.icon+" "+b.name+" ["+b.dept+"]: "+(b.st==="running"?"⏳ working…":b.st==="fail"?"✗ needs attention":b.st==="ok"?"✓ ready":"· idle")));
+      L.push("");
+      if(S.sweep){
+        const age=Math.max(0,Math.round((Date.now()-S.sweep.at)/60000));
+        L.push("🛡 ERLANG (RELIABILITY): "+(S.sweep.fail?"✗ ":"✓ ")+S.sweep.pass+"/"+(S.sweep.pass+S.sweep.fail)+" checks · "+(age<1?"just now":age+" min ago"));
+        if(S.sweep.failed&&S.sweep.failed.length)S.sweep.failed.slice(0,5).forEach(f=>L.push("   ✗ "+f));
+      }else L.push("🛡 ERLANG (RELIABILITY): never swept");
+      L.push("⚔ ARTHUR (ENGINEERING): "+S.orders.length+" order(s) on record"+(S.orders.length?" — last: "+S.orders[S.orders.length-1].task.slice(0,70):""));
+      if(S.learned.length){const lw=S.learned[S.learned.length-1];L.push("🔥 PHOENIX (KNOWLEDGE): "+S.learned.length+" lesson(s) · last: "+lw.m.slice(0,80))}
+      if(S.world){
+        const wAge=Math.max(0,Math.round((Date.now()-S.world.at)/60000));
+        L.push("🌍 WORLD SYNC: "+(wAge<1?"just now":wAge+" min ago")+" — "+String(S.world.stamp).slice(0,56)+(S.world.fresh?" · live brief":" · keyless cache"));
+        if(S.world.brief)L.push("   "+S.world.brief.slice(0,150)+"…");
+      }else L.push("🌍 WORLD SYNC: never — PHOENIX stamps on first run");
+      L.push("🔑 KEY MODE: "+keyMode()+(S.auto?" · AUTO-LOOP ON":" · AUTO-LOOP OFF"));
+      L.push("");
+      L.push("RECENT ACTIVITY:");
+      const recent=S.log.slice(-6);
+      if(!recent.length)L.push("  (quiet — no runs yet)");
+      recent.forEach(e=>L.push("  ["+new Date(e.t).toLocaleTimeString(undefined,{hour12:false})+"] "+e.who+": "+e.m.slice(0,90)));
+      return L.join("\n");
+    }
+    function assign(task){
+      task=String(task||"").trim();if(!task)return false;
+      entry("kratos","owner assigned new work: "+task.slice(0,110),"dim");
+      if(/\b(test|sweep|check|verify|scan|audit)\b/i.test(task)&&!/\bfix|repair|bug\b/i.test(task)){
+        return sweep(false).then(r=>{const out=$("botReportOut");if(out){out.style.display="block";out.textContent=report()}return r});
+      }
+      return dispatch(task,false);
+    }
+    /* auto loop: quiet sweep every 5 min when enabled + admin present */
+    setInterval(function(){
+      if(!S.auto||!isAdmin()||document.hidden)return;
+      if(bot("erlang").st==="running"||bot("arthur").st==="running")return;
+      sweep(true);
+    },300000);
+    /* PHOENIX: keep the world stamp fresh every 30 min while the admin is around (keyless) */
+    setInterval(function(){
+      if(!isAdmin()||document.hidden)return;
+      if(!S.world||(Date.now()-(S.world.at||0))>1800000)worldSync();
+    },1800000);
+    /* ---------- boot: wire the card (admin page may be hidden — elements still exist) ---------- */
+    function boot(){
+      render();renderLog();
+      const a=$("botAssignBtn");if(a)a.onclick=function(){const t=$("botOrder").value.trim();if(!t){entry("kratos","give the squad their next work first","dim");return}$("botOrder").value="";assign(t);};
+      const s=$("botTestBtn");if(s)s.onclick=function(){sweep(false)};
+      const rp=$("botReportBtn");if(rp)rp.onclick=function(){const out=$("botReportOut");if(!out)return;const txt=report();if(out.style.display==="block"&&out.textContent===txt){out.style.display="none"}else{out.style.display="block";out.textContent=txt}};
+      const ab=$("botAutoBtn");if(ab)ab.onclick=function(){S.auto=!S.auto;save();render();entry("kratos","auto-fix loop "+(S.auto?"ON — failed sweeps dispatch ⚔ ARTHUR automatically":"OFF"),S.auto?"ok":"dim")};
+      entry("kratos","KRATOS SQUAD online — Mythos protocol loaded, admin-only","ok");
+      setTimeout(function(){if(isAdmin())worldSync()},4000);
+    }
+    if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",boot);else boot();
+    return {sweep:sweep,assign:assign,dispatch:dispatch,report:report,render:render,worldSync:worldSync,db:function(){return {protocol:BOT_DB.protocol,depts:BOT_DB.depts,world:S.world,learned:S.learned,orders:S.orders,keyMode:keyMode()}}};
+  })();
   /* ================= ADMIN PAGE — server-verified maker/ceo only; edits live database config ================= */
   /* FIREBASE TOKENS EXPIRE AFTER 1 HOUR — every admin call now force-refreshes a
      fresh token first, so the console never dies with "sign in" while you ARE
@@ -11219,8 +11558,13 @@ if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",
     [].forEach.call(document.querySelectorAll('#tabbar button'),function(b){
       if(!b.offsetParent)return; /* hidden tabs — Mission Control stays owner-only */
       var t=b.getAttribute('data-t');
+      /* explicit map — the old `else` fallback labelled SETTINGS as "Open
+         Mission Control", so every guest saw an admin-looking palette entry
+         even while the ADMIN tab itself was hidden */
       var label=t==='chat'?'Go to Chat':t==='chats'?'Go to Chats':t==='code'?'Go to Code Forge':
-                t==='system'?'Go to System':'Open Mission Control';
+                t==='system'?'Go to System':t==='settings'?'Go to Settings':
+                t==='admin'?'Open Mission Control':null;
+      if(!label)return;
       list.push([label,function(){go(t)}]);
     });
     list.push(['New chat',function(){tap('sessNew2');go('chat')}]);
