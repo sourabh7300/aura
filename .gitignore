@@ -8,3 +8,8 @@ __pycache__/
 Thumbs.db
 _archive/
 .site-mirror/
+# snapshot backups and scratch artifacts — never commit these
+aura-pre-*.html
+aura-landing-backup.html
+*.b64
+devserver.log
