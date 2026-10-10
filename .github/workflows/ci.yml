@@ -16,6 +16,16 @@ jobs:
           exit $fail
       - name: README must carry the verified LIVE DEMO badge
         run: grep -q 'LIVE_DEMO-verified_working' README.md
+      - name: Node available for regression suites
+        run: node --version
+      - name: "Squad regression — daily shift + Hinglish router"
+        run: node squad.test.js
+      - name: "Core regression — engine, auth, voice, syntax"
+        run: |
+          node aura.test.js
+          node user-profile.test.js
+          node voice-regress.test.js
+          node syntax-check.js
       - name: Live demo must answer HTTP 200
         run: |
           url=$(grep -o 'https://sourabh7300.github.io[^)]*' README.md | head -1)
