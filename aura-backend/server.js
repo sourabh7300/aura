@@ -333,7 +333,7 @@ const OWNER_SECRET = process.env.SECRET || "";
 app.use((req, res, next) => {
   const origin = req.headers.origin || "";
   const okOrigin = ALLOW_ORIGINS.includes(origin) || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
-  if (req.path === "/health" || req.path === "/" || req.path === "/v1/ping") {
+  if (req.path === "/health" || req.path === "/" || req.path === "/v1/ping" || req.path === "/v1/squad/beat") {
     /* public paths still need CORS headers or browsers block the boot ping */
     if (okOrigin) { res.setHeader("Access-Control-Allow-Origin", origin); res.setHeader("Vary", "Origin"); }
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -1005,12 +1005,45 @@ async function squadSignReport(state) {
   } catch (e) {}
   return null;
 }
+/* DURABLE STATE — the squad's memory. Firestore first (no git noise at all: the
+   repo only ever gets REAL feature publishes), GitHub file as the fallback so a
+   deployment without Firestore still keeps its in-flight work across restarts. */
+async function squadLoadState() {
+  if (fbDb) {
+    try { const d = await fbDb.collection("aura_squad").doc("autopilot").get(); if (d.exists) { const v = d.data() || {}; if (v.state && v.state.v) return v.state; } } catch (e) {}
+  }
+  return ghGetJson(SQUAD_STATE_FILE);
+}
+async function squadSaveState(state) {
+  if (fbDb) {
+    try { await fbDb.collection("aura_squad").doc("autopilot").set({ state: state, updated: Date.now() }, { merge: true }); return; }
+    catch (e) { /* fall through to the repo file */ }
+  }
+  if (GH_TOKEN) await ghPutFile(JSON.stringify(state, null, 1), "AURA autopilot: state " + (state.day || "") + " (" + (state.cyclesToday || 0) + " cycle(s))", SQUAD_STATE_FILE);
+}
+/* RESEARCH — the squad's own librarian: live search + read, no keys, real sources */
+async function squadResearch(mission) {
+  const q = (mission && (mission.research || mission.title)) || "";
+  if (!q) return "";
+  const hits = await toolSearch(q);
+  if (!hits || !hits.length) return "";
+  const top = hits.slice(0, 3);
+  let page = "";
+  try { page = (await toolFetch(top[0].url)) || ""; } catch (e) {}
+  return top.map((h, i) => "[" + (i + 1) + "] " + h.title + " — " + h.url).join(" | ") + (page ? "\nKEY FACTS: " + page.slice(0, 700) : "");
+}
+async function squadProbeWith(storeDurable) {
+  const p = await squadProbe();
+  p.storeDurable = !!storeDurable;
+  return p;
+}
 const autopilot = autopilotLib.createAutopilot({
-  loadState: () => ghGetJson(SQUAD_STATE_FILE),
-  saveState: async (state) => { if (GH_TOKEN) await ghPutFile(JSON.stringify(state, null, 1), "AURA autopilot: state " + (state.day || "") + " (cycle " + (state.cyclesToday || 0) + ")", SQUAD_STATE_FILE); },
-  probe: squadProbe,
+  loadState: squadLoadState,
+  saveState: squadSaveState,
+  probe: () => squadProbeWith(!!fbDb || !!GH_TOKEN),
   readSource: ghFetchRaw,
   brain: squadBrain,
+  research: squadResearch,
   commit: (content, message) => ghPutFile(content, message, GH_FILE),
   verifyLive: squadVerifyLive,
   worldWatch: squadWorldWatch,
@@ -1052,7 +1085,7 @@ app.post("/v1/squad/tick", async (req, res) => {
   if (!(await squadAuth(req, res))) return;
   const b = req.body || {};
   try {
-    const out = await autopilot.tick({ trigger: b.trigger || "manual", force: !!b.force, dryRun: !!b.dryRun, noAI: !!b.noAI });
+    const out = await autopilot.tick({ trigger: b.trigger || "manual", force: !!b.force, dryRun: !!b.dryRun, noAI: !!b.noAI, publishNow: !!b.publishNow });
     if (out.skipped) return res.json({ ok: true, skipped: out.skipped, state: await autopilot.snapshot() });
     res.json({ ok: true, cycle: out.cycle, report: out.report, state: await autopilot.snapshot() });
   } catch (e) { res.status(502).json({ ok: false, error: e.message || String(e) }); }
@@ -1064,6 +1097,27 @@ app.post("/v1/squad/autopilot", async (req, res) => {
     const out = await autopilot.setEnabled(!!b.enabled);
     res.json(Object.assign({ ok: true }, out, { state: await autopilot.snapshot() }));
   } catch (e) { res.status(502).json({ ok: false, error: e.message || String(e) }); }
+});
+/* PUSH POLICY — batch (one push per finished feature) or hold (wait for the admin) */
+app.post("/v1/squad/policy", async (req, res) => {
+  if (!(await squadAuth(req, res))) return;
+  try {
+    const out = await autopilot.setPublish((req.body || {}).publish);
+    res.json(Object.assign({ ok: true }, out, { state: await autopilot.snapshot() }));
+  } catch (e) { res.status(502).json({ ok: false, error: e.message || String(e) }); }
+});
+/* THE ADMIN'S WORD — push every verified feature the squad has queued up */
+app.post("/v1/squad/publish", async (req, res) => {
+  if (!(await squadAuth(req, res))) return;
+  try { res.json(await autopilot.publishQueued()); }
+  catch (e) { res.status(502).json({ ok: false, error: e.message || String(e) }); }
+});
+/* PUBLIC HEARTBEAT for the browser extension — counters only: no code, no shas,
+   no report text, no admin data. This is what keeps the badge honest on the go. */
+app.get("/v1/squad/beat", async (req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  try { res.json(await autopilot.beat()); }
+  catch (e) { res.status(502).json({ ok: false, error: e.message || String(e) }); }
 });
 
 /* keep-warm whisper — public by design (a heartbeat needs no secrets, reveals none) */
