@@ -1741,5 +1741,8 @@ app.listen(PORT, () => {
   if (process.env.SQUAD_AUTOPILOT !== "0") {
     const t = autopilot.boot();
     console.log("[squad autopilot] armed — tick every " + (autopilotLib.DEFAULTS.tickMinutes) + " min, " + autopilotLib.DEFAULTS.maxCyclesPerDay + " cycle(s)/day, auto-ship " + (autopilotLib.DEFAULTS.autoShip ? "ON" : "OFF") + (t ? "" : " (timer not started — cadence too short)"));
+    /* a fresh deploy starts work immediately instead of waiting a full tick —
+       the engine's own daily budget decides whether anything real happens */
+    setTimeout(() => { autopilot.tick({ trigger: "boot" }).catch(e => console.log("[squad autopilot] boot cycle failed: " + (e.message || e))); }, 20000);
   } else console.log("[squad autopilot] disabled (SQUAD_AUTOPILOT=0)");
 });
