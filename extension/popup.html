@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AURA · KRATOS Autopilot</title>
+<style>
+  :root{--bg:#04121b;--ice:#dff3ff;--cy:#22d3ee;--dim:#8ea6bd;--line:rgba(34,211,238,.22)}
+  body{margin:0;width:330px;background:linear-gradient(180deg,#061a26,#03101a);color:var(--ice);font:13px/1.5 Rajdhani,system-ui,Arial,sans-serif}
+  header{display:flex;align-items:center;gap:8px;padding:11px 13px;border-bottom:1px solid var(--line);background:rgba(34,211,238,.06)}
+  header b{font-size:13px;letter-spacing:1.4px;color:#67e8f9}
+  #badge{margin-left:auto;font:600 9px monospace;letter-spacing:1px;border-radius:99px;padding:3px 9px;background:rgba(148,163,184,.2);color:#cbd5e1}
+  #badge.on{background:linear-gradient(135deg,#34d399,#10b981);color:#06231a}
+  #badge.paused{background:linear-gradient(135deg,#fcd34d,#f59e0b);color:#2a1d02}
+  #badge.err{background:rgba(248,113,113,.25);color:#fee2e2}
+  main{padding:12px 13px;display:flex;flex-direction:column;gap:9px}
+  .row{display:flex;justify-content:space-between;gap:10px;font:10.5px/1.6 'JetBrains Mono',monospace;color:var(--dim)}
+  .row b{color:var(--ice);font-weight:600}
+  #batch{border:1px dashed rgba(34,211,238,.4);border-radius:9px;padding:8px 10px;font:10.5px/1.6 'JetBrains Mono',monospace;color:#9fd7e8;white-space:pre-wrap}
+  #queue{border:1px dashed rgba(52,211,153,.45);border-radius:9px;padding:8px 10px;font:10.5px/1.6 'JetBrains Mono',monospace;color:#a7f3d0;white-space:pre-wrap;display:none}
+  #err{display:none;border:1px solid rgba(248,113,113,.5);border-radius:9px;padding:8px 10px;font:10.5px/1.55 monospace;color:#fecaca}
+  .btns{display:flex;gap:6px;flex-wrap:wrap}
+  button{font:600 11px Rajdhani,sans-serif;letter-spacing:.6px;color:#cbe9f5;border:1px solid var(--line);border-radius:9px;padding:8px 12px;background:rgba(2,10,16,.5);cursor:pointer;transition:.18s}
+  button:hover{color:#67e8f9;border-color:rgba(34,211,238,.6);background:rgba(34,211,238,.08)}
+  #go{border-color:rgba(34,211,238,.6);background:linear-gradient(135deg,rgba(34,211,238,.18),rgba(14,165,233,.12))}
+  footer{padding:9px 13px;border-top:1px solid var(--line);font:9.5px/1.5 monospace;color:#5d7a94}
+</style>
+</head>
+<body>
+<header><span style="font-size:16px">⚡</span><b>KRATOS AUTOPILOT</b><span id="badge">…</span></header>
+<main>
+  <div class="row"><span>cycles today</span><b id="cycles">—</b></div>
+  <div class="row"><span>missions published</span><b id="missions">—</b></div>
+  <div class="row"><span>publishes (total)</span><b id="publishes">—</b></div>
+  <div class="row"><span>last cycle</span><b id="last">—</b></div>
+  <div class="row"><span>day</span><b id="day">—</b></div>
+  <div id="batch">🔧 loading squad state…</div>
+  <div id="queue"></div>
+  <div id="err"></div>
+  <div class="btns">
+    <button id="go">Open ADMIN squad →</button>
+    <button id="refresh">↻ Refresh</button>
+  </div>
+</main>
+<footer id="foot">Kaam SERVER pe chalta hai — browser band ho tab bhi squad cycles chalati hai. Isme koi key/token nahi hai.</footer>
+<script src="popup.js"></script>
+</body>
+</html>

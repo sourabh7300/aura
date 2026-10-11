@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "AURA · KRATOS Autopilot Watch",
+  "version": "1.0.0",
+  "description": "AURA ke KRATOS squad ka live status — autopilot cycles, mission progress, publish queue. Backend ko warm rakhta hai aur publish hone pe notify karta hai. Koi key/token isme nahi hota.",
+  "permissions": ["alarms", "notifications", "storage"],
+  "host_permissions": ["https://aura-backend-jomj.onrender.com/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "AURA · KRATOS Autopilot"
+  },
+  "icons": {
+    "128": "icon.png"
+  }
+}
