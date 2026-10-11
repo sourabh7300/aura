@@ -587,7 +587,7 @@ suite("Autonomy clock + source lane — the squad works with nobody watching", (
   ok("the engineer is told anchors must be unique", auto.indexOf("must appear EXACTLY ONCE in the whole file") >= 0);
 
   /* memory lane: the owner must be able to see WHERE the state landed */
-  ok("the owner can see where the squad's memory landed", srv.indexOf("const storeLast = {") >= 0 && srv.indexOf("store: Object.assign({}, storeLast)") >= 0);
+  ok("the owner can see where the squad's memory landed", srv.indexOf("const storeLast = {") >= 0 && srv.indexOf("store: Object.assign({}, storeLast, storeWhere())") >= 0);
   ok("both memory lanes report their verdict", srv.indexOf('storeVerdict("save", "firestore")') >= 0 && srv.indexOf('storeVerdict("save", "repo file (fallback)")') >= 0 && srv.indexOf('storeVerdict("save", "memory-only")') >= 0);
   ok("a failed write keeps its real upstream reason", srv.indexOf('"firestore write: "') >= 0 && srv.indexOf('"repo write: "') >= 0);
   ok("the load lane says which store answered", srv.indexOf('storeVerdict("load", "firestore")') >= 0 && srv.indexOf('"repo file (fallback)"') >= 0);
