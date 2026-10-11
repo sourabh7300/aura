@@ -592,6 +592,9 @@ suite("Autonomy clock + source lane — the squad works with nobody watching", (
   ok("a failed write keeps its real upstream reason", srv.indexOf('"firestore write: "') >= 0 && srv.indexOf('"repo write: "') >= 0);
   ok("the load lane says which store answered", srv.indexOf('storeVerdict("load", "firestore")') >= 0 && srv.indexOf('"repo file (fallback)"') >= 0);
   ok("the verdict names the exact project + doc to open in the console", srv.indexOf("const storeWhere = () =>") >= 0 && srv.indexOf('doc: "aura_squad/autopilot"') >= 0 && srv.indexOf("storeWhere()") >= 0);
+  /* the lazy-init bug: the boot cycle saved state before Firestore was initialised */
+  ok("the memory lanes force firestore init instead of hoping someone hits /health", /async function squadLoadState\(\) \{\s*\/\*[\s\S]{0,400}?fbInit\(\);/.test(srv) && /async function squadSaveState\(state\) \{\s*fbInit\(\);/.test(srv));
+  ok("an init failure keeps its real reason", srv.indexOf("fbDbErr = String(e.message") >= 0 && srv.indexOf('(fbDbErr ? " — " + fbDbErr : "")') >= 0);
 });
 
 function finish() {
