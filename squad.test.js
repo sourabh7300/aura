@@ -270,7 +270,7 @@ suite("Autopilot — mission picker, sweep verdict, KRATOS report", () => {
 
 /* --- engine cycles: real state machine, mocked IO --- */
 function mkDeps(over) {
-  const calls = { commit: [], brain: 0 };
+  const calls = { commit: [], brain: 0, research: 0, lastPrompt: "" };
   const store = { state: null };
   const base = {
     calls: calls, store: store,
@@ -279,7 +279,8 @@ function mkDeps(over) {
     saveState: async (s) => { store.state = JSON.parse(JSON.stringify(s)); },
     probe: async () => ({ alive: true, keysTotal: 2, adminLane: true, github: true, githubState: "ok", liveCode: 200, liveBytes: 60000, searchOk: true, squadLoaded: true }),
     readSource: async () => fakeSource(),
-    brain: async () => { calls.brain++; return editsJson(BOTS_ANCHOR, HEAL_REPLACE); },
+    brain: async (msgs) => { calls.brain++; calls.lastPrompt = JSON.stringify(msgs); return editsJson(BOTS_ANCHOR, HEAL_REPLACE); },
+    research: async (mission) => { calls.research++; return "research digest for " + mission.id + " — [1] a real source"; },
     commit: async (content, message) => { calls.commit.push({ content: content, message: message }); return { sha: "deadbee" + calls.commit.length }; },
     verifyLive: async () => ({ ok: true, bytes: 60000 }),
     worldWatch: async () => "world watch — test headline",
@@ -340,15 +341,68 @@ function mkDeps(over) {
     await ap5.tick({});
     ok("mission parks after the attempt budget", !!d5.store.state.missions[auto.MISSIONS[0].id].parked);
 
-    /* 6 — roadmap complete → the squad STOPS and says so */
+    /* 6 — BATCH POLICY: a feature takes as many cycles as it needs, work is
+       stored, and exactly ONE push happens when the feature is complete */
+    const d7 = mkDeps();
+    d7.brain = async (msgs) => {
+      d7.calls.brain++; d7.calls.lastPrompt = JSON.stringify(msgs);
+      /* cycle 1 → a piece of the feature; cycle 2 → the piece that completes it */
+      return d7.calls.brain === 1
+        ? editsJson(BOTS_ANCHOR, BOTS_ANCHOR + "\n<!-- step one -->")
+        : editsJson("<!-- step one -->", "<!-- step one --><!-- AURA_LANE_HEAL -->");
+    };
+    const ap7 = auto.createAutopilot(d7);
+    const c1 = await ap7.tick({});
+    ok("cycle 1 stores the work WITHOUT pushing", d7.calls.commit.length === 0 && !!d7.store.state.wip, JSON.stringify(d7.store.state.wip && d7.store.state.wip.edits.length));
+    ok("the stored batch is visible to the report", (c1.report.text || "").indexOf("BUILDING:") >= 0);
+    ok("feature in progress does not count as published", !d7.store.state.missions[auto.MISSIONS[0].id].done);
+    await ap7.tick({});
+    ok("cycle 2 publishes the COMPLETE feature (one commit)", d7.calls.commit.length === 1 && !!d7.store.state.missions[auto.MISSIONS[0].id].done);
+    ok("the publish carries the whole batch, not just the last part", d7.calls.commit[0].content.indexOf("step one") >= 0 && d7.calls.commit[0].content.indexOf("AURA_LANE_HEAL") >= 0);
+    ok("batch is cleared after publishing", d7.store.state.wip === null);
+    ok("research ran once for the feature and reached the prompt", d7.calls.research === 1 && /RESEARCH/.test(d7.calls.lastPrompt || ""), "research=" + d7.calls.research + " promptHasResearch=" + /RESEARCH/.test(d7.calls.lastPrompt || "") + " brain=" + d7.calls.brain + " commits=" + d7.calls.commit.length);
+    ok("exactly one publish for the whole feature", d7.store.state.ships.length === 1);
+
+    /* 6b — HOLD policy: finished features queue up for the admin's word */
+    const d8 = mkDeps({ config: { maxCyclesPerDay: 4, maxAttempts: 3, autoShip: true, tickMinutes: 0, maxWipCycles: 4, publish: "hold" } });
+    const ap8 = auto.createAutopilot(d8);
+    await ap8.tick({});
+    ok("hold mode queues the verified feature instead of pushing", d8.calls.commit.length === 0 && d8.store.state.queue.length === 1);
+    const pub = await ap8.publishQueued();
+    ok("the admin's publish pushes the queue", pub.published === 1 && d8.calls.commit.length === 1 && d8.store.state.queue.length === 0);
+    ok("published-on-word is credited with the mission", !!d8.store.state.missions[auto.MISSIONS[0].id].done);
+
+    /* 6c — a batch that never completes is parked honestly, never pushed */
+    const d9 = mkDeps({ config: { maxCyclesPerDay: 4, maxAttempts: 3, autoShip: true, tickMinutes: 0, maxWipCycles: 2 } });
+    let n = 0;
+    d9.brain = async () => { n++; return editsJson(BOTS_ANCHOR, BOTS_ANCHOR + "\n<!-- partial " + n + " -->"); };
+    const ap9 = auto.createAutopilot(d9);
+    await ap9.tick({});
+    await ap9.tick({});
+    ok("an unfinished feature is never pushed", d9.calls.commit.length === 0);
+    ok("unfinished batch is parked with the raw reason", d9.store.state.missions[auto.MISSIONS[0].id].parked === true && /not complete after/.test(d9.store.state.missions[auto.MISSIONS[0].id].note || ""));
+
+    /* 7 — roadmap complete → the squad STOPS and says so */
     const d6 = mkDeps();
     const ap6 = auto.createAutopilot(d6);
     const st6 = await ap6.load();
     auto.MISSIONS.forEach(m => { st6.missions[m.id] = { done: true, attempts: 1 }; });
+    await ap6.persist(st6); /* the engine always resumes from the persisted state */
     await ap6.tick({});
     ok("finished roadmap pauses the squad", d6.store.state.paused === "roadmap complete", d6.store.state.paused);
     const r6 = await ap6.tick({});
     ok("a paused squad does no work", r6.skipped === "paused: roadmap complete", r6.skipped);
+
+    /* 8 — push-policy control + public heartbeat (extension lane) */
+    const d10 = mkDeps();
+    const ap10 = auto.createAutopilot(d10);
+    await ap10.tick({});
+    const pol = await ap10.setPublish("hold");
+    ok("the admin can switch the push policy to hold", pol.publish === "hold");
+    const beat = await ap10.beat();
+    ok("public heartbeat exposes counters only", beat.ok === true && beat.missionsTotal === auto.MISSIONS.length && beat.publishes === 1 && beat.report === undefined && beat.ships === undefined);
+    const snap10 = await ap10.snapshot();
+    ok("snapshot carries the policy + batch + queue for the panel", snap10.publish === "hold" && "batch" in snap10 && Array.isArray(snap10.queue) && Array.isArray(snap10.research));
   } catch (e) {
     ok("engine suite ran without throwing", false, e && (e.stack || e.message));
   } finally {
@@ -384,6 +438,55 @@ suite("Autopilot — panel + wiring sentinels (shipped files)", () => {
   ok("cron workflow exists", !!wf);
   ok("workflow pokes the tick endpoint with the squad key", wf.indexOf("/v1/squad/tick") >= 0 && wf.indexOf("x-squad-key") >= 0);
   ok("workflow warns clearly when the key is missing", /SQUAD_TICK_SECRET/.test(wf) && /::warning/.test(wf));
+});
+
+/* --- the squad's brief: goal, research lane, safety charter, push policy --- */
+suite("Autopilot — training brief + safety charter (shipped files)", () => {
+  ok("the goal brief is in the squad's training DB", /★ THE GOAL \(owner's brief\)/.test(src) && /Astra-class matlab/.test(src));
+  ok("research protocol is documented (search + read + cite)", /RESEARCH PROTOCOL — tumhare paas live internet hai/.test(src) && /cite karo \(title \+ url\)/.test(src));
+  ok("safety charter is explicit and hard", /SAFETY CHARTER \(hard line/.test(src) && /attack\/scan\/probe\/DoS\/break-in NAHI/.test(src) && /Phishing|phishing page, DRM/.test(src));
+  ok("push policy is documented for the bots", /PUSH POLICY \(owner ka rule\)/.test(src) && /ek feature = ek commit/.test(src));
+  ok("refusal path is part of the charter", /refuse karo, seedha kyun bolo, aur safe alternative do/.test(src));
+  ok("engine prompt carries the safety line", /SAFETY \(hard rules/.test(auto.AUTOPILOT_ENGINEER_PROMPT) && /no malware, no credential harvesting/i.test(auto.AUTOPILOT_ENGINEER_PROMPT));
+  ok("engine ships its own safety charter", auto.SAFETY_BRIEF.indexOf("never attack") >= 0 && auto.SAFETY_BRIEF.split("\n").length >= 7);
+  ok("research-first method is in the engine prompt", /RESEARCH block/.test(auto.AUTOPILOT_ENGINEER_PROMPT) && /INCREMENTALLY/.test(auto.AUTOPILOT_ENGINEER_PROMPT));
+});
+
+/* --- batch + publish controls, server-side --- */
+suite("Autopilot — batch publish controls (shipped files)", () => {
+  ok("panel shows what is being built (not pushed yet)", /id="autoBatch"/.test(src) && /NOT pushed yet/.test(src));
+  ok("panel shows the verified publish queue", /id="autoQueue"/.test(src) && /READY TO PUBLISH/.test(src));
+  ok("PUBLISH QUEUE + policy buttons shipped", /id="autoPublish"/.test(src) && /id="autoPolicy"/.test(src));
+  ok("Hinglish publish + policy commands routed to KRATOS", /autopilotPublish\(\)/.test(src) && /autopilotPolicy\(\)/.test(src) && /publish\|push\|commit\) \(it\|kar/.test(src));
+  let srv2 = "";
+  try { srv2 = fs.readFileSync(path.join(__dirname, "aura-backend", "server.js"), "utf8"); } catch (e) { srv2 = ""; }
+  ok("backend exposes publish + policy lanes", /app\.post\("\/v1\/squad\/publish"/.test(srv2) && /app\.post\("\/v1\/squad\/policy"/.test(srv2));
+  ok("public heartbeat lane for the extension exists + is public", /app\.get\("\/v1\/squad\/beat"/.test(srv2) && /req\.path === "\/v1\/squad\/beat"/.test(srv2));
+  ok("state is durable (Firestore first, repo file fallback)", /squadLoadState/.test(srv2) && /aura_squad/.test(srv2) && /squadSaveState/.test(srv2));
+  ok("research lane is wired into the engine", /async function squadResearch/.test(srv2) && /research: squadResearch/.test(srv2));
+});
+
+/* --- browser extension: watch layer, no secrets --- */
+suite("Autopilot — browser extension (MV3 watch)", () => {
+  let man = null, bg = "", pop = "";
+  try { man = JSON.parse(fs.readFileSync(path.join(__dirname, "extension", "manifest.json"), "utf8")); } catch (e) { man = null; }
+  try { bg = fs.readFileSync(path.join(__dirname, "extension", "background.js"), "utf8"); } catch (e) {}
+  try { pop = fs.readFileSync(path.join(__dirname, "extension", "popup.html"), "utf8"); } catch (e) {}
+  if (!man) { skipSuite("  [extension/manifest.json missing]"); return; }
+  ok("manifest is MV3 with the permissions it needs", man.manifest_version === 3 && ["alarms", "notifications", "storage"].every(p => man.permissions.includes(p)));
+  ok("it only talks to its own backend origin", Array.isArray(man.host_permissions) && man.host_permissions.every(h => h.indexOf("aura-backend-jomj.onrender.com") >= 0));
+  ok("background watches the public heartbeat (no admin lane)", bg.indexOf("/v1/squad/beat") >= 0 && bg.indexOf("/v1/squad/state") < 0 && bg.indexOf("/v1/squad/publish") < 0);
+  ok("badge + notifications are driven by real counters", /setBadgeText/.test(bg) && /missionsDone/.test(bg) && /notifications\.create/.test(bg) && /publish queue/i.test(bg));
+  ok("popup shows cycles, missions, publishes and the batch", /id="cycles"/.test(pop) && /id="missions"/.test(pop) && /id="publishes"/.test(pop) && /id="batch"/.test(pop));
+  ok("popup deep-links to the admin panel for control", /Open ADMIN squad/.test(pop));
+  let leak = "";
+  try {
+    for (const f of ["background.js", "popup.js", "popup.html", "manifest.json"]) {
+      const t = fs.readFileSync(path.join(__dirname, "extension", f), "utf8");
+      if (/(gsk_[A-Za-z0-9]{6,}|AI_KEY|FB_PRIVATE_KEY|MAKER_UIDS|Bearer\s+[A-Za-z0-9._-]{20,})/.test(t)) leak = f;
+    }
+  } catch (e) {}
+  ok("extension holds no secrets or keys", !leak, "leak in " + leak);
 });
 
 function finish() {
