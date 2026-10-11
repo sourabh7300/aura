@@ -403,6 +403,23 @@ function mkDeps(over) {
     ok("public heartbeat exposes counters only", beat.ok === true && beat.missionsTotal === auto.MISSIONS.length && beat.publishes === 1 && beat.report === undefined && beat.ships === undefined);
     const snap10 = await ap10.snapshot();
     ok("snapshot carries the policy + batch + queue for the panel", snap10.publish === "hold" && "batch" in snap10 && Array.isArray(snap10.queue) && Array.isArray(snap10.research));
+
+    /* 9 — SELF-HEAL: an ambiguous anchor used to burn a cycle and then park the
+       mission (the exact reason the automations looked dead). The refusal must go
+       BACK to the brain once, and the corrected edit must land. */
+    const d11 = mkDeps();
+    let tries = 0;
+    d11.brain = async () => {
+      tries++;
+      return tries === 1
+        ? editsJson(FILLER.slice(0, 60), "var pad_filler_line = 'x';")   /* matches 700 places */
+        : editsJson(BOTS_ANCHOR, HEAL_REPLACE);                            /* re-anchored, unique */
+    };
+    const ap11 = auto.createAutopilot(d11);
+    await ap11.tick({});
+    ok("a refused anchor triggers exactly ONE re-anchor call", tries === 2, "brain calls: " + tries);
+    ok("the corrected edit lands and the feature publishes", d11.calls.commit.length === 1 && /AURA_LANE_HEAL/.test(d11.calls.commit[0].content));
+    ok("the batch is left clean after self-healing", !d11.store.state.wip);
   } catch (e) {
     ok("engine suite ran without throwing", false, e && (e.stack || e.message));
   } finally {
@@ -499,7 +516,12 @@ suite("Deploy — backend mirror + build marker (real functions)", () => {
   ok("mirror set keeps the lockfile", files.indexOf("package-lock.json") >= 0);
   ok("mirror set never carries dotfiles or logs (.env stays home)", files.every(f => f.charAt(0) !== "." && !/\.log$/.test(f)));
   ok("mirror set leaves docs out", files.indexOf("README.md") < 0);
-  ok("the build marker is readable straight from the source", dep.localBuild() === "squad-v2", "got: " + dep.localBuild());
+  /* the marker must AGREE with the server's own default — that is what makes the
+     post-deploy check ("is my new build actually live?") meaningful */
+  const marker = dep.localBuild();
+  let srvBuild = "";
+  try { srvBuild = (fs.readFileSync(path.join(__dirname, "aura-backend", "server.js"), "utf8").match(/const BUILD = process\.env\.AURA_BUILD \|\| "([^"]+)"/) || [])[1] || ""; } catch (e) {}
+  ok("the build marker is readable straight from the source", /^squad-v\d+$/.test(marker) && marker === srvBuild, "marker: " + marker + " · server default: " + srvBuild);
 
   let srv3 = "", depSrc = "";
   try { srv3 = fs.readFileSync(path.join(__dirname, "aura-backend", "server.js"), "utf8"); } catch (e) {}
@@ -508,6 +530,48 @@ suite("Deploy — backend mirror + build marker (real functions)", () => {
   ok("deploy mirrors from a FRESH clone, not a stale local copy", depSrc.indexOf("git clone --depth 1") >= 0);
   ok("deploy verifies the backend build landed", depSrc.indexOf("j.build === build") >= 0 && depSrc.indexOf("Manual Deploy") >= 0);
   ok("deploy offers a safe dry run", depSrc.indexOf("--dry-run") >= 0);
+});
+
+/* --- the clock + the source lane: automation must never be one boot cycle --- */
+suite("Autonomy clock + source lane — the squad works with nobody watching", () => {
+  const lib = require("./aura-backend/autonomy.js");
+  let auto = "", ui = "", srv = "", wf = "";
+  try { auto = fs.readFileSync(path.join(__dirname, "aura-backend", "autonomy.js"), "utf8"); } catch (e) {}
+  try { srv = fs.readFileSync(path.join(__dirname, "aura-backend", "server.js"), "utf8"); } catch (e) {}
+  try { ui = fs.readFileSync(path.join(__dirname, "aura.html"), "utf8"); } catch (e) {}
+  try { wf = fs.readFileSync(path.join(__dirname, ".github", "workflows", "squad-autopilot.yml"), "utf8"); } catch (e) {}
+
+  /* functional: boot() must arm exactly ONE repeating timer, on the engine cadence */
+  const realSI = global.setInterval;
+  const armed = [];
+  global.setInterval = (fn, ms) => { armed.push({ fn: fn, ms: ms }); return { unref() {} }; };
+  let t = null;
+  try { t = lib.createAutopilot({ loadState: async () => null, saveState: async () => {}, probe: async () => ({}) }).boot(); }
+  finally { global.setInterval = realSI; }
+  ok("boot() arms a repeating timer (not a one-shot)", !!t && armed.length === 1, "timers armed: " + armed.length);
+  ok("the timer runs on the engine cadence, not a hardcoded interval", armed.length === 1 && armed[0].ms === Math.max(5, lib.DEFAULTS.tickMinutes) * 60000, armed.length ? ("got " + armed[0].ms + "ms") : "no timer");
+  ok("a cadence under 5 minutes refuses to arm (never a busy loop)", auto.indexOf("if (!mins || mins < 5) return null;") >= 0);
+  ok("that timer fires a REAL cycle, not a stub", /tick\(\{ trigger: "timer" \}\)/.test(auto));
+  ok("the server starts the clock on boot", srv.indexOf("const t = autopilot.boot();") >= 0 && srv.indexOf("squadClock.running = !!t") >= 0);
+  ok("a dead timer is visible from outside (/health)", srv.indexOf("clock: clock") >= 0 && srv.indexOf("squadClock.lastTick = Date.now()") >= 0);
+  ok("the cron verifies that clock instead of exiting quietly", wf.indexOf("clock is down") >= 0 && wf.indexOf("const c = s.clock") >= 0 && wf.indexOf("!c.running") >= 0);
+
+  /* the source lane: three fallbacks, and a dead lane is REPORTED, never silent */
+  ok("the source lane falls back github → live page → file", srv.indexOf("async function squadReadSource") >= 0 && srv.indexOf('lastSourceLane = "live page"') >= 0 && srv.indexOf('fs.readFileSync(p, "utf8")') >= 0);
+  ok("the engine reads through that lane", srv.indexOf("readSource: squadReadSource") >= 0 && srv.indexOf("sourceLane: () => lastSourceLane") >= 0);
+  ok("a dead source lane is reported with its reason", auto.indexOf("source lane unavailable") >= 0 && auto.indexOf('state.fails.push({ mission: "(source)"') >= 0);
+  ok("the squad brain still runs without the maker's admin lane", srv.indexOf("pickLaneKey(ADMIN_KEY || KEY_POOL[0], true)") >= 0);
+  ok("real sources are provable from /health (cached)", srv.indexOf("async function researchProbe") >= 0 && srv.indexOf("research: await researchProbe()") >= 0 && srv.indexOf("300_000") >= 0);
+  ok("the panel shows the live clock + source lane", ui.indexOf("clock CHALU") >= 0 && ui.indexOf("st.sourceLane") >= 0);
+
+  /* the brain lane: capacity, token diet, honest failure reason */
+  ok("the mission call reserves a thin budget, not 16k tokens", /d\.brain\(\[\{ role: "system", content: AUTOPILOT_ENGINEER_PROMPT \}[\s\S]{0,80}\], 4000\)/.test(auto));
+  ok("the prompt carries a diet, not the whole haystack", auto.indexOf("{ max: 3, cap: 2600 }") >= 0 && auto.indexOf("{ max: 1, cap: 1800 }") >= 0);
+  ok("a TPM refusal shrinks the reservation and retries the same model", srv.indexOf("tokens per minute") >= 0 && srv.indexOf("[want, Math.ceil(want / 2), Math.ceil(want / 4)]") >= 0);
+  ok("a rate limit cools the key for seconds, never a silent 24h death", srv.indexOf("Date.now() + 20_000") >= 0 && srv.indexOf("every brain lane is busy") >= 0);
+  ok("the real upstream reason is kept for /health", srv.indexOf("const brainLast = {") >= 0 && srv.indexOf("brain: brainLast") >= 0);
+  ok("that diagnostic can never leak a key", srv.indexOf("replace(/(gsk_|sk-)") >= 0);
+  ok("the engineer is told anchors must be unique", auto.indexOf("must appear EXACTLY ONCE in the whole file") >= 0);
 });
 
 function finish() {

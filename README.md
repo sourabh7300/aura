@@ -128,6 +128,24 @@ lessons) lives in Firestore, so a backend restart never loses work and the repo 
 ever receives **real feature commits** — no state noise. Without Firestore it falls
 back to `squad/autopilot-state.json` in the repo.
 
+### 🔌 Lanes that keep the automation alive (and honest when they die)
+
+An autonomous loop is only as good as its lanes — so every lane now has a fallback
+and a **visible** failure reason. `GET /health` reports all of them.
+
+| Lane | How it stays alive |
+|---|---|
+| ⏱ **Clock** | The backend arms a real repeating timer on boot (`SQUAD_TICK_MINUTES`, default 45) plus one immediate boot cycle, and the cron workflow only has to keep the service awake. `/health → squad.clock` shows `running`, `everyMinutes`, `ticks`, `lastTick` — a dead timer can no longer masquerade as an idle squad. |
+| 📄 **Source** | ARTHUR reads the file in three lanes: GitHub source of truth → the **live page** users are served → the file on disk. `/health → squad.sourceLane` names the lane that worked; if all three fail, the cycle reports the reason instead of doing nothing. |
+| 🧠 **Brain** | Admin Mistral lane → **every** key in the bank on the best code models (`SQUAD_MODELS`) → reserve brain. On a free tier a request that *reserves* more tokens than the per-minute budget is refused ("Request too large") — so the mission call asks for a thin budget and **shrinks and retries** instead of cooling the whole bank. `/health → brain` shows the last call: `{ok, via, model, status, note}` (redacted, no key material). |
+| 🔬 **Research** | Google News RSS → page read (jina) → Wikipedia, no keys. `/health → research` proves it with the live source count and a sample headline. |
+| 🧷 **Anchors** | A refused edit (ambiguous find-string) is handed **back to the brain once** with the refusal text, so the corrected edit lands instead of parking the mission after three identical failures. |
+
+The practical recipe: keep `AI_KEY_PRIMARY` fresh, replace any key that answers
+`401 Invalid API Key`, watch `/health` — if `brain.ok` is false, its `note` names the
+upstream reason (rate limit, too-large request, rejected key). That is why the squad
+now says *why* it did nothing instead of just doing nothing.
+
 **Training brief:** the squad runs on a written charter — the Astra-class GOAL, a
 RESEARCH protocol (search → read → cite, never guess), the engineering METHOD
 (incremental, anchored, complete code), a hard **SAFETY CHARTER** (only AURA's own
