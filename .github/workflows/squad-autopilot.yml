@@ -34,8 +34,17 @@ jobs:
           FORCE: ${{ inputs.force }}
         run: |
           if [ -z "$SQUAD_TICK_SECRET" ]; then
-            echo "::warning title=Autopilot key missing::Add SQUAD_TICK_SECRET to GitHub repo secrets AND set the same value in the Render dashboard env. Until then the autopilot only runs on the backend's own timer."
-            exit 0
+            echo "::notice title=Squad cron key not set::No SQUAD_TICK_SECRET — the backend's own clock drives the squad (every SQUAD_TICK_MINUTES, default 45). Verifying that clock is really alive instead of silently doing nothing."
+            code=$(curl -s -o /tmp/health.json -w '%{http_code}' -m 120 https://aura-backend-jomj.onrender.com/health)
+            echo "GET /health → $code"
+            head -c 600 /tmp/health.json; echo
+            node -e '
+              const j = require("/tmp/health.json");
+              const s = j.squad || {}; const c = s.clock || {};
+              if (!c.running) { console.log("::error title=Autopilot clock is down::the backend timer is not running — redeploy the backend, or set SQUAD_TICK_MINUTES (>=5)"); process.exit(1); }
+              console.log("clock alive — every", c.everyMinutes, "min | cycles today", (s.cyclesToday||0)+"/"+(s.maxCyclesPerDay||"?"), "| missions", (s.missionsDone||0)+"/"+(s.missionsTotal||0), "| source lane:", s.sourceLane||"?", "| research:", (j.research&&j.research.ok)?((j.research.sources||0)+" sources"):"down");
+            '
+            exit $?
           fi
           if [ "$FORCE" = "true" ]; then body='{"trigger":"cron","force":true}'; else body='{"trigger":"cron"}'; fi
           code=$(curl -s -o /tmp/tick.json -w '%{http_code}' -m 150 \
