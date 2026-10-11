@@ -597,6 +597,21 @@ suite("Autonomy clock + source lane — the squad works with nobody watching", (
   ok("an init failure keeps its real reason", srv.indexOf("fbDbErr = String(e.message") >= 0 && srv.indexOf('(fbDbErr ? " — " + fbDbErr : "")') >= 0);
 });
 
+/* --- Firestore rules: the security file, checked like code --- */
+suite("Firestore rules — least privilege, no self-granted role", () => {
+  let r = "";
+  try { r = fs.readFileSync(path.join(__dirname, "firestore.rules"), "utf8"); } catch (e) { r = ""; }
+  ok("firestore.rules is present", r.length > 0);
+  if (!r) return;
+  ok("only the two app collections are addressed", /aura_users\/\{uid\}/.test(r) && /aura_config\/\{doc\}/.test(r));
+  ok("everything else is closed", /match \/\{document=\*\*\} \{[\s\S]{0,120}?allow read, write: if false;/.test(r));
+  ok("the create rule never touches resource.data (undefined on create)", !/allow create:[\s\S]{0,160}?\bresource\.data\b/.test(r));
+  ok("create cannot introduce a role", /allow create: if isSelf\(uid\) && noNewRole\(\);/.test(r));
+  ok("update cannot change a role", /allow update:[\s\S]{0,260}?affectedKeys\(\)\.hasAny\(\['role'\]\)/.test(r));
+  ok("a client can never open the whole database", !/allow\s+read,\s*write:\s*if\s+true\s*;/.test(r));
+  ok("deletion stays with the backend", /allow delete: if false;/.test(r));
+});
+
 function finish() {
   console.log("\n────────────────────────────");
   console.log("pass " + pass + " · fail " + fail + " · skipped-suites " + skip);
