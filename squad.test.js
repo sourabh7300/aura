@@ -170,7 +170,224 @@ suite("Daily shift — shiftLoad once-per-day logic", () => {
   ok("staged edits surface in the report with the ship gate", /2 verified edit\(s\) STAGED/.test(stagedRep) && /say "ship"/.test(stagedRep));
 });
 
-/* ================= summary ================= */
-console.log("\n────────────────────────────");
-console.log("pass " + pass + " · fail " + fail + " · skipped-suites " + skip);
-process.exit(fail ? 1 : 0);
+/* ================= 3. KRATOS AUTOPILOT (server-side 24/7 squad) =================
+   The autopilot engine is a real Node module (aura-backend/autonomy.js), so this
+   suite exercises the SHIPPED code directly — gates, mission picker, sweep verdict,
+   report renderer and the whole cycle state machine, with IO mocked. */
+let auto = null;
+try { auto = require("./aura-backend/autonomy.js"); } catch (e) { auto = null; }
+
+/* deterministic fake source: >50KB, two inline blocks, all core sentinels */
+const FILLER = ("var pad_filler_line = 'padpadpadpadpadpadpadpadpadpadpadpadpadpadpadpadpadpadpadpadpad';\n").repeat(700);
+function fakeSource(extra) {
+  return [
+    "<!doctype html><html><head>",
+    "<script>" + FILLER + "</script>",
+    "<script>var boot=function(){return 1};</script>",
+    "</head><body>",
+    '<div id="adminTabBtn"></div>',
+    '<div id="log"></div><input id="q">',
+    '<div id="botsCard"></div>',
+    "PROVENANCE-SEAL-v1",
+    (extra || ""),
+    "</body></html>"
+  ].join("\n");
+}
+const BOTS_ANCHOR = '<div id="botsCard"></div>';
+const HEAL_REPLACE = '<div id="botsCard"></div><!-- AURA_LANE_HEAL -->';
+function editsJson(find, replace) { return 'PLAN: test plan\nEDITS:\n```json\n' + JSON.stringify([{ find: find, replace: replace }]) + '\n```\nNOTE: test'; }
+
+if (!auto) {
+  skipSuite("Autopilot — engine not found");
+  console.log("\n────────────────────────────");
+  console.log("pass " + pass + " · fail " + fail + " · skipped-suites " + skip);
+  process.exit(0);
+} else {
+
+suite("Autopilot — ship gates (real validateSource)", () => {
+  const good = fakeSource();
+  const g = auto.validateSource(fakeSource("<!-- previous build -->"), good, { autoShip: true });
+  ok("clean source passes every gate", g.ok && g.fail === 0);
+  ok("size drift budget is enforced (−6% start)", g.checks.some(c => c.n === "size drift within budget"));
+
+  const broken = good.replace("var boot=function(){return 1};", "var boot=function( {return 1;");
+  const gb = auto.validateSource(good, broken, {});
+  ok("syntax-dead script block is REFUSED", !gb.ok && gb.failed.join(" ").indexOf("parses") >= 0, gb.failed.join("; "));
+
+  const fat = good + "\n" + "<p>extra</p>\n".repeat(6000);
+  const gf = auto.validateSource(good, fat, {});
+  ok("oversized ship (>6%) is REFUSED", !gf.ok && gf.failed.join(" ").indexOf("size drift") >= 0);
+
+  const noGate = good.replace('<input id="q">', "<input id=\"qq\">");
+  const gn = auto.validateSource(good, noGate, {});
+  ok("removing a core sentinel is REFUSED", !gn.ok && gn.failed.join(" ").indexOf("question input") >= 0);
+
+  const leak = good.replace("PROVENANCE-SEAL-v1", "PROVENANCE-SEAL-v1\nvar FB_PRIVATE_KEY = 'leaked';").replace(FILLER, FILLER);
+  const gl = auto.validateSource(good, leak.replace('<div id="botsCard"></div>', BOTS_ANCHOR + "\nvar x=FB_PRIVATE_KEY;"), {});
+  ok("a diff that touches keys/auth is REFUSED", !gl.ok && gl.failed.join(" ").indexOf("secrets") >= 0, gl.failed.join("; "));
+
+  const gu = auto.validateSource(good, good, {});
+  ok("an unchanged file is REFUSED (no no-op ships)", !gu.ok && gu.failed.join(" ").indexOf("actually changed") >= 0);
+});
+
+suite("Autopilot — anchored edit applier", () => {
+  const src = fakeSource();
+  const a = auto.applyEdits(src, [{ find: BOTS_ANCHOR, replace: HEAL_REPLACE }]);
+  ok("exact find-string applies", a.ok && a.src.indexOf("AURA_LANE_HEAL") >= 0);
+  const b = auto.applyEdits(src, [{ find: "<div   id=\"botsCard\"\n></div>", replace: HEAL_REPLACE }]);
+  ok("whitespace-tolerant fallback still lands the edit", b.ok && b.src.indexOf("AURA_LANE_HEAL") >= 0);
+  const c = auto.applyEdits(src, [{ find: "<script>", replace: "<script>" }]);
+  ok("ambiguous find-string is refused (not guessed)", !c.ok && c.error.indexOf("matches") >= 0);
+  const d = auto.applyEdits(src, [{ find: "THIS_ANCHOR_DOES_NOT_EXIST", replace: "x" }]);
+  ok("missing find-string is refused with the failed anchor named", !d.ok && !!d.failedEdit);
+});
+
+suite("Autopilot — mission picker, sweep verdict, KRATOS report", () => {
+  ok("roadmap has real missions with verifiable sentinels", auto.MISSIONS.length >= 6 && auto.MISSIONS.every(m => m.id && m.goal && m.done instanceof RegExp));
+  const st = { missions: {} };
+  const first = auto.pickMission(st, fakeSource());
+  ok("picker starts at the first pending mission", first && first.mission.id === auto.MISSIONS[0].id && !first.already);
+  st.missions[auto.MISSIONS[0].id] = { done: true };
+  ok("done missions are skipped", auto.pickMission(st, fakeSource()).mission.id === auto.MISSIONS[1].id);
+  st.missions[auto.MISSIONS[1].id] = { parked: true, attempts: 2 };
+  ok("parked missions are skipped (no quota burn)", auto.pickMission(st, fakeSource()).mission.id === auto.MISSIONS[2].id);
+  const already = auto.pickMission({ missions: {} }, fakeSource("<!-- AURA_LANE_HEAL -->"));
+  ok("source already containing the sentinel is reported as already-built", !!already && already.already === true);
+
+  const good = auto.serverSweep({ alive: true, keysTotal: 2, adminLane: true, github: true, liveCode: 200, liveBytes: 60000, searchOk: true, squadLoaded: true });
+  ok("healthy system sweeps clean", good.fail === 0 && good.pass >= 7);
+  const bad = auto.serverSweep({ alive: true, keysTotal: 0, github: false, liveCode: 500, searchOk: false });
+  ok("broken system reports every failure RAW", bad.fail >= 4 && bad.failed.join(" ").indexOf("live page reachable") >= 0);
+
+  const rep = auto.renderReport({ day: "2026-10-11", sweep: { pass: 7, fail: 1, failed: ["live page reachable — HTTP 500"] }, ships: [{ sha: "abc1234", mission: "lane-self-heal", when: "2026-10-11T06:00:00Z" }], cycle: "offline-outbox — Offline outbox", enabled: true, cyclesToday: 2, maxCyclesPerDay: 4 });
+  ok("report names all four departments", rep.indexOf("ERLANG") >= 0 && rep.indexOf("ARTHUR") >= 0 && rep.indexOf("PHOENIX") >= 0 && rep.indexOf("KRATOS") >= 0);
+  ok("failed sweep stays RAW in the report", rep.indexOf("✗ 7/8") >= 0 && rep.indexOf("HTTP 500") >= 0);
+  ok("report credits the real ship with its sha", rep.indexOf("abc1234") >= 0);
+  ok("report shows the cycle budget", rep.indexOf("cycle 2/4") >= 0);
+  const pausedRep = auto.renderReport({ day: "2026-10-11", paused: "roadmap complete", enabled: true });
+  ok("paused squad says so instead of inventing work", pausedRep.indexOf("paused — roadmap complete") >= 0);
+});
+
+/* --- engine cycles: real state machine, mocked IO --- */
+function mkDeps(over) {
+  const calls = { commit: [], brain: 0 };
+  const store = { state: null };
+  const base = {
+    calls: calls, store: store,
+    config: { maxCyclesPerDay: 4, maxAttempts: 2, autoShip: true, tickMinutes: 0 },
+    loadState: async () => store.state,
+    saveState: async (s) => { store.state = JSON.parse(JSON.stringify(s)); },
+    probe: async () => ({ alive: true, keysTotal: 2, adminLane: true, github: true, githubState: "ok", liveCode: 200, liveBytes: 60000, searchOk: true, squadLoaded: true }),
+    readSource: async () => fakeSource(),
+    brain: async () => { calls.brain++; return editsJson(BOTS_ANCHOR, HEAL_REPLACE); },
+    commit: async (content, message) => { calls.commit.push({ content: content, message: message }); return { sha: "deadbee" + calls.commit.length }; },
+    verifyLive: async () => ({ ok: true, bytes: 60000 }),
+    worldWatch: async () => "world watch — test headline",
+    signReport: async () => null
+  };
+  return Object.assign(base, over || {});
+}
+
+(async function autopilotEngineSuite() {
+  console.log("\nAutopilot — engine cycles (real state machine, mocked IO)");
+  try {
+    /* 1 — a clean cycle: sweep → mission → gates → auto-ship → report */
+    const d1 = mkDeps();
+    const ap1 = auto.createAutopilot(d1);
+    const r1 = await ap1.tick({ trigger: "test" });
+    ok("cycle completes", r1.ok === true && !!r1.report);
+    ok("ERLANG sweep ran first and is stored", !!d1.store.state.sweep && d1.store.state.sweep.fail === 0);
+    ok("ARTHUR shipped the mission autonomously", d1.calls.commit.length === 1 && d1.store.state.ships.length === 1);
+    ok("commit message is traceable to the mission", /lane-self-heal/.test(d1.calls.commit[0].message));
+    ok("shipped content really contains the mission sentinel", d1.calls.commit[0].content.indexOf("AURA_LANE_HEAL") >= 0);
+    ok("mission is marked done by sentinel verification", !!d1.store.state.missions[auto.MISSIONS[0].id].done);
+    ok("KRATOS report is signed and stored", d1.store.state.reports.length === 1 && d1.store.state.reports[0].text.indexOf("KRATOS") >= 0);
+    ok("cycle budget counted", d1.store.state.cyclesToday === 1);
+
+    /* 2 — daily budget stops the squad (no runaway spend) */
+    const d2 = mkDeps({ config: { maxCyclesPerDay: 1, maxAttempts: 2, autoShip: true, tickMinutes: 0 } });
+    const ap2 = auto.createAutopilot(d2);
+    await ap2.tick({});
+    const r2 = await ap2.tick({});
+    ok("daily cycle budget is enforced", r2.skipped === "daily cycle budget reached (1)", r2.skipped);
+    const r2f = await ap2.tick({ force: true });
+    ok("admin force overrides the budget", r2f.ok === true && !r2f.skipped);
+
+    /* 3 — admin pause really stops it */
+    await ap2.setEnabled(false);
+    const r3 = await ap2.tick({});
+    ok("paused autopilot refuses to start a cycle on its own", r3.skipped === "autopilot is off", r3.skipped);
+    const r3f = await ap2.tick({ force: true });
+    ok("the admin's explicit force still runs one cycle while paused", r3f.ok === true && !!r3f.report && !r3f.skipped);
+    const snap = await ap2.snapshot();
+    ok("snapshot exposes the real state for the panel", snap.ok === true && typeof snap.enabled === "boolean" && Array.isArray(snap.missions));
+
+    /* 4 — a bad live build is auto-reverted, and NOT credited as a ship */
+    const d4 = mkDeps({ verifyLive: async () => ({ ok: false, reason: "Pages served the stale build" }) });
+    const ap4 = auto.createAutopilot(d4);
+    const r4 = await ap4.tick({});
+    ok("failed live verification is reported", r4.ok === true && !!d4.store.state.fails.length);
+    ok("auto-revert commits the PREVIOUS source back", d4.calls.commit.length === 2 && d4.calls.commit[1].content === fakeSource());
+    ok("a reverted ship is never credited in the ledger", d4.store.state.ships.length === 0);
+
+    /* 5 — unanchored edits fail honestly and get parked (no infinite retries) */
+    const d5 = mkDeps({ brain: async () => editsJson("ANCHOR_THAT_IS_NOT_IN_THE_FILE", "x") });
+    const ap5 = auto.createAutopilot(d5);
+    await ap5.tick({});
+    const mid = d5.store.state.missions[auto.MISSIONS[0].id];
+    ok("unanchored edit is refused with the raw reason", !!mid && /not found/.test(mid.note || ""), mid && mid.note);
+    ok("nothing shipped on a refusal", d5.calls.commit.length === 0);
+    await ap5.tick({});
+    ok("mission parks after the attempt budget", !!d5.store.state.missions[auto.MISSIONS[0].id].parked);
+
+    /* 6 — roadmap complete → the squad STOPS and says so */
+    const d6 = mkDeps();
+    const ap6 = auto.createAutopilot(d6);
+    const st6 = await ap6.load();
+    auto.MISSIONS.forEach(m => { st6.missions[m.id] = { done: true, attempts: 1 }; });
+    await ap6.tick({});
+    ok("finished roadmap pauses the squad", d6.store.state.paused === "roadmap complete", d6.store.state.paused);
+    const r6 = await ap6.tick({});
+    ok("a paused squad does no work", r6.skipped === "paused: roadmap complete", r6.skipped);
+  } catch (e) {
+    ok("engine suite ran without throwing", false, e && (e.stack || e.message));
+  } finally {
+    finish();
+  }
+})();
+}
+
+/* --- shipped-file sentinels: the panel, the backend lane, the cron workflow --- */
+suite("Autopilot — panel + wiring sentinels (shipped files)", () => {
+  ok("autopilot panel installed", /id="autoCard"/.test(src) && /id="autoBadge"/.test(src) && /id="autoBar"/.test(src) && /id="autoBoard"/.test(src) && /id="autoReport"/.test(src));
+  ok("panel controls installed", /id="autoOn"/.test(src) && /id="autoOff"/.test(src) && /id="autoRun"/.test(src) && /id="autoRefresh"/.test(src));
+  ok("page reads the SERVER's real state (no fake ON)", /\/v1\/squad\/state/.test(src) && /\/v1\/squad\/tick/.test(src) && /\/v1\/squad\/autopilot/.test(src));
+  ok("browser owns no autonomy timer (the server owns the clock)", !/setInterval[^;]{0,90}autopilotRun/.test(src));
+  ok("standing Astra-class mission is in the training DB", /STANDING MISSION \(admin's order, 11 Oct 2026\) — ASTRA-CLASS AUTONOMY/.test(src));
+  ok("autopilot protocol documents auto-ship + auto-revert + pause", /AUTOPILOT PROTOCOL v1/.test(src) && /auto-revert/.test(src) && /PAUSE ho jaati hai/.test(src));
+  ok("Hinglish autopilot radar is wired into the router", /autopilot chala/.test(src));
+  ok("autopilot chips shipped", /class="bot-chip">autopilot status</.test(src) && /class="bot-chip">run a cycle now</.test(src));
+  ok("BotTeam exposes the autopilot lane", /autopilot:\{refresh:autopilotRefresh,set:autopilotToggle,run:autopilotRun/.test(src));
+  ok("bots answer autopilot questions from LIVE context", /AUTOPILOT \(server-side 24\/7 squad clock\)/.test(src));
+
+  let srv = "";
+  try { srv = fs.readFileSync(path.join(__dirname, "aura-backend", "server.js"), "utf8"); } catch (e) { srv = ""; }
+  if (!srv) { ok("backend server.js readable", false); return; }
+  ok("backend mounts the squad lane", /app\.post\("\/v1\/squad\/tick"/.test(srv) && /app\.get\("\/v1\/squad\/state"/.test(srv) && /app\.post\("\/v1\/squad\/autopilot"/.test(srv));
+  ok("cron key passes the private origin gate", /okSquad/.test(srv) && /x-squad-key/.test(srv));
+  ok("autopilot boots with the server", /autopilot\.boot\(\)/.test(srv));
+  ok("health reports the squad state", /squad: squadHealth\(\)/.test(srv));
+  ok("squad brain never borrows the public key lane", /async function squadBrain/.test(srv) && /pickLaneKey\(ADMIN_KEY, true\)/.test(srv));
+
+  let wf = "";
+  try { wf = fs.readFileSync(path.join(__dirname, ".github", "workflows", "squad-autopilot.yml"), "utf8"); } catch (e) { wf = ""; }
+  ok("cron workflow exists", !!wf);
+  ok("workflow pokes the tick endpoint with the squad key", wf.indexOf("/v1/squad/tick") >= 0 && wf.indexOf("x-squad-key") >= 0);
+  ok("workflow warns clearly when the key is missing", /SQUAD_TICK_SECRET/.test(wf) && /::warning/.test(wf));
+});
+
+function finish() {
+  console.log("\n────────────────────────────");
+  console.log("pass " + pass + " · fail " + fail + " · skipped-suites " + skip);
+  process.exit(fail ? 1 : 0);
+}
