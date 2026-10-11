@@ -489,6 +489,27 @@ suite("Autopilot — browser extension (MV3 watch)", () => {
   ok("extension holds no secrets or keys", !leak, "leak in " + leak);
 });
 
+/* --- deploy: the silent "the old build is still live" failure mode --- */
+suite("Deploy — backend mirror + build marker (real functions)", () => {
+  let dep = null;
+  try { dep = require("./deploy.js"); } catch (e) { dep = null; }
+  if (!dep || typeof dep.backendFiles !== "function") { skipSuite("  [deploy.js not loadable as a module]"); return; }
+  const files = dep.backendFiles();
+  ok("mirror set covers every backend source file", files.indexOf("server.js") >= 0 && files.indexOf("autonomy.js") >= 0 && files.indexOf("package.json") >= 0);
+  ok("mirror set keeps the lockfile", files.indexOf("package-lock.json") >= 0);
+  ok("mirror set never carries dotfiles or logs (.env stays home)", files.every(f => f.charAt(0) !== "." && !/\.log$/.test(f)));
+  ok("mirror set leaves docs out", files.indexOf("README.md") < 0);
+  ok("the build marker is readable straight from the source", dep.localBuild() === "squad-v2", "got: " + dep.localBuild());
+
+  let srv3 = "", depSrc = "";
+  try { srv3 = fs.readFileSync(path.join(__dirname, "aura-backend", "server.js"), "utf8"); } catch (e) {}
+  try { depSrc = fs.readFileSync(path.join(__dirname, "deploy.js"), "utf8"); } catch (e) {}
+  ok("server reports BUILD + start time in /health", srv3.indexOf("const BUILD = process.env.AURA_BUILD") >= 0 && srv3.indexOf("build: BUILD, started:") >= 0);
+  ok("deploy mirrors from a FRESH clone, not a stale local copy", depSrc.indexOf("git clone --depth 1") >= 0);
+  ok("deploy verifies the backend build landed", depSrc.indexOf("j.build === build") >= 0 && depSrc.indexOf("Manual Deploy") >= 0);
+  ok("deploy offers a safe dry run", depSrc.indexOf("--dry-run") >= 0);
+});
+
 function finish() {
   console.log("\n────────────────────────────");
   console.log("pass " + pass + " · fail " + fail + " · skipped-suites " + skip);
