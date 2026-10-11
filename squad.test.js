@@ -420,6 +420,19 @@ function mkDeps(over) {
     ok("a refused anchor triggers exactly ONE re-anchor call", tries === 2, "brain calls: " + tries);
     ok("the corrected edit lands and the feature publishes", d11.calls.commit.length === 1 && /AURA_LANE_HEAL/.test(d11.calls.commit[0].content));
     ok("the batch is left clean after self-healing", !d11.store.state.wip);
+
+    /* 10 — a host setting must beat a stored state. The saved state used to pin
+       maxCyclesPerDay, so SQUAD_CYCLES_PER_DAY on the host silently did nothing. */
+    const d12 = mkDeps();
+    const ap12 = auto.createAutopilot(d12);
+    await ap12.tick({});                                    /* persists the config as state */
+    d12.store.state.maxCyclesPerDay = 99;                   /* simulate a stale pinned value */
+    const ap12b = auto.createAutopilot(d12);
+    const snap12 = await ap12b.snapshot();
+    ok("engine config beats a stale stored budget", snap12.maxCyclesPerDay === 4, "got " + snap12.maxCyclesPerDay);
+    d12.store.state.publish = "hold";
+    const snap12b = await auto.createAutopilot(d12).snapshot();
+    ok("the admin's own push policy still survives a reload", snap12b.publish === "hold");
   } catch (e) {
     ok("engine suite ran without throwing", false, e && (e.stack || e.message));
   } finally {
