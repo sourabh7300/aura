@@ -1,0 +1,62 @@
+name: KRATOS autopilot — keep the squad working
+
+# The squad's real clock lives in the backend, but a free-tier service can restart
+# or sleep. This workflow pokes the autopilot so a cycle still runs on schedule even
+# when nobody has AURA open. Cycles are budgeted inside the engine (default 4/day),
+# so extra pokes are cheap no-ops that still return the current report.
+
+on:
+  schedule:
+    - cron: "17 */3 * * *"   # every 3 hours, off the hour to dodge cron congestion
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Force a cycle now (ignores the daily budget)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+concurrency:
+  group: kratos-autopilot
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wake the backend (free tier sleeps)
+        run: curl -s -o /dev/null -m 90 https://aura-backend-jomj.onrender.com/health || true
+
+      - name: Ask the squad for a work cycle
+        env:
+          SQUAD_TICK_SECRET: ${{ secrets.SQUAD_TICK_SECRET }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          if [ -z "$SQUAD_TICK_SECRET" ]; then
+            echo "::warning title=Autopilot key missing::Add SQUAD_TICK_SECRET to GitHub repo secrets AND set the same value in the Render dashboard env. Until then the autopilot only runs on the backend's own timer."
+            exit 0
+          fi
+          if [ "$FORCE" = "true" ]; then body='{"trigger":"cron","force":true}'; else body='{"trigger":"cron"}'; fi
+          code=$(curl -s -o /tmp/tick.json -w '%{http_code}' -m 150 \
+            -X POST https://aura-backend-jomj.onrender.com/v1/squad/tick \
+            -H "Content-Type: application/json" \
+            -H "x-squad-key: $SQUAD_TICK_SECRET" \
+            -d "$body")
+          echo "POST /v1/squad/tick → $code"
+          head -c 1200 /tmp/tick.json; echo
+          if [ "$code" = "200" ]; then
+            node -e '
+              const j=require("/tmp/tick.json");
+              const s=j.state||{};
+              console.log("autopilot:", s.enabled?"ON":"off", "| cycles today", s.cyclesToday+"/"+s.maxCyclesPerDay, "| missions", (s.progress?s.progress.done+" / "+s.progress.total:"?"));
+              if(j.skipped) console.log("skipped:", j.skipped);
+            ' || true
+            exit 0
+          fi
+          if [ "$code" = "000" ]; then
+            echo "::warning title=Cycle still running::no response inside the curl budget — the engine keeps working and files its report on its own. Read it in ADMIN → KRATOS SQUAD → AUTOPILOT, or GET /v1/squad/report."
+            exit 0
+          fi
+          echo "::error title=Squad cycle failed::backend answered HTTP $code"
+          exit 1
