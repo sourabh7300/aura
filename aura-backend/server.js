@@ -997,11 +997,15 @@ const SQUAD_MODELS = (process.env.SQUAD_MODELS || "openai/gpt-oss-120b,openai/gp
   }
 
   /* 2b — NVIDIA NIM lane (maker's NIM key, env NVIDIA_NIM_KEY). OpenAI-compatible
-     endpoint, bearer key — same request shape as Groq. Nemotron-3 Super gets tried
-     first (agentic/coding strength), then the 49B v1.5 fallback. Ordered AFTER the
-     Groq bank (free keys first, the maker's paid NIM when the bank is dry). */
+     endpoint, bearer key — same request shape as Groq. Ladder: ULTRA first (550B,
+     SWE-Bench Verified 71.9 — NVIDIA's own strongest), then Super 120B, then the
+     fast Lightning 30B so a busy Ultra silently falls rather than stalling. */
   const NIM_KEY = process.env.NVIDIA_NIM_KEY || "";
-  const NIM_MODELS = ["nvidia/nemotron-3-super-120b-a12b", "nvidia/llama-3.3-nemotron-super-49b-v1.5"];
+  const NIM_MODELS = [
+    "nvidia/nemotron-3-ultra-550b-a55b",
+    "nvidia/nemotron-3-super-120b-a12b",
+    "nvidia/nemotron-3.5-lightning-30b-a3b"
+  ];
   if (NIM_KEY) {
     for (const model of NIM_MODELS) {
       for (const cap of ladder) {
@@ -1010,7 +1014,7 @@ const SQUAD_MODELS = (process.env.SQUAD_MODELS || "openai/gpt-oss-120b,openai/gp
             method: "POST",
             headers: { "Authorization": "Bearer " + NIM_KEY, "Content-Type": "application/json" },
             body: JSON.stringify({ model: model, messages: messages, max_tokens: cap, temperature: 0.25 }),
-            signal: AbortSignal.timeout(180_000)
+            signal: AbortSignal.timeout(240_000)
           });
           if (r.status === 429) {
             const d = await r.json().catch(() => ({}));
@@ -1020,6 +1024,7 @@ const SQUAD_MODELS = (process.env.SQUAD_MODELS || "openai/gpt-oss-120b,openai/gp
             break;
           }
           if (r.status === 401 || r.status === 403) { notes.push("nim " + model + ": key rejected"); break; }
+          if (r.status === 404 || r.status === 400) { notes.push("nim " + model + ": model unavailable"); break; }
           if (!r.ok) { notes.push("nim " + model + ": HTTP " + r.status); break; }
           const d = await r.json();
           const t = d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content;
@@ -1031,10 +1036,11 @@ const SQUAD_MODELS = (process.env.SQUAD_MODELS || "openai/gpt-oss-120b,openai/gp
   }
 
   /* 2c — NVIDIA NIM coding lane for the SQUAD too (ARTHUR builds real code): the
-     same NEMOTRON key covers mission edits when the Groq bank is dry. */
+     same key covers mission edits with the STRONGEST Nemotron ladder — Ultra 550B
+     (SWE-Bench Verified 71.9) → Super 120B → Lightning 30B (fast agent workhorse). */
   const SQUAD_NIM_KEY = process.env.NVIDIA_NIM_KEY || "";
   if (SQUAD_NIM_KEY) {
-    for (const model of ["nvidia/nemotron-3-super-120b-a12b", "nvidia/llama-3.3-nemotron-super-49b-v1.5"]) {
+    for (const model of ["nvidia/nemotron-3-ultra-550b-a55b", "nvidia/nemotron-3-super-120b-a12b", "nvidia/nemotron-3.5-lightning-30b-a3b"]) {
       for (const cap of ladder) {
         try {
           const r = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
@@ -1535,7 +1541,7 @@ app.post("/v1/chat/completions", async (req, res) => {
        fallback in the bank), then the Mistral reserve. */
     const NIM_KEY = process.env.NVIDIA_NIM_KEY || "";
     if (NIM_KEY) {
-      for (const model of ["nvidia/nemotron-3-super-120b-a12b", "nvidia/llama-3.3-nemotron-super-49b-v1.5"]) {
+      for (const model of ["nvidia/nemotron-3-ultra-550b-a55b", "nvidia/nemotron-3-super-120b-a12b", "nvidia/nemotron-3.5-lightning-30b-a3b"]) {
         try {
           const r = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
             method: "POST",
