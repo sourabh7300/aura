@@ -6628,6 +6628,27 @@ window.AuraTasks=(function(){
   return {all:add?all:null,add:add,route:route,render:render,done:done,drop:drop,clearDone:clearDone};
 })();
 /* due-task reminders — she speaks up when timed work comes due */
+/* AURA_FAIL_EXPLAINER */
+let AuraFailures = [];
+function addFailure(failure) {
+  AuraFailures.push(failure);
+  if (AuraFailures.length > 5) AuraFailures.shift();
+}
+function renderFailures() {
+  if (AuraFailures.length === 0) return "No recent failures to explain.";
+  let html = "<div class='failures-panel'>";
+  AuraFailures.forEach((failure, index) => {
+    html += `<div class='failure-item'>
+      <h3>Failure #${index + 1}</h3>
+      <p><strong>Error:</strong> ${failure.error}</p>
+      <p><strong>Explanation:</strong> ${failure.explanation}</p>
+      <p><strong>Next Action:</strong> ${failure.nextAction}</p>
+    </div>`;
+  });
+  html += "</div>";
+  return html;
+}
+
 setInterval(function(){
   try{
     const L=JSON.parse(localStorage.getItem("aura_tasks_v1")||"[]");let ch=false;const now=Date.now();
