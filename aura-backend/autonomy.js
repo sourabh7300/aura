@@ -120,6 +120,8 @@ const DEFAULTS = {
   maxWipCycles: parseInt(process.env.SQUAD_MAX_WIP_CYCLES || "4", 10),
   /* failed cycles a mission gets before it is parked (no quota burn) */
   maxAttempts: parseInt(process.env.SQUAD_MISSION_ATTEMPTS || "3", 10),
+  /* a batch that refuses to complete is parked for the DAY, not for life
+     (see the daily second-chance reset in tick) */
   /* max size drift a single publish may introduce */
   maxGrowth: parseFloat(process.env.SQUAD_MAX_GROWTH || "0.08"),
   /* the squad refuses to touch auth/keys/secrets — enforced on the diff */
@@ -407,7 +409,21 @@ function createAutopilot(deps) {
     /* always start from the persisted state — a restart must not lose in-flight work */
     const state = await load(true);
     const day = todayStamp();
-    if (state.day !== day) { state.day = day; state.cyclesToday = 0; }
+    if (state.day !== day) {
+      state.day = day; state.cyclesToday = 0;
+      /* DAILY SECOND CHANCE — a parked mission is parked for TODAY only.
+         The owner's standing order: the squad keeps working its own task list,
+         fail ho jaye to aaj band karo, kal phir try karo. Without this reset a
+         parked mission was parked FOREVER (three bad cycles killed it for life)
+         and the roadmap quietly shrank day by day. Attempts reset on a new day;
+         DONE missions never regress. */
+      let woken = 0;
+      for (const id of Object.keys(state.missions || {})) {
+        const m = state.missions[id];
+        if (m.parked && !m.done) { m.parked = false; m.attempts = 0; woken++; }
+      }
+      log(state, "kratos", woken ? ("new day — " + woken + " parked mission(s) get a fresh attempt budget (daily second chance)") : "new day — cycles reset");
+    }
     try {
       if (!state.enabled && !o.force) return { ok: true, skipped: "autopilot is off" };
       if (!o.force && state.paused) return { ok: true, skipped: "paused: " + state.paused };
