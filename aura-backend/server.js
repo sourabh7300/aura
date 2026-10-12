@@ -1030,6 +1030,36 @@ const SQUAD_MODELS = (process.env.SQUAD_MODELS || "openai/gpt-oss-120b,openai/gp
     }
   }
 
+  /* 2c — NVIDIA NIM coding lane for the SQUAD too (ARTHUR builds real code): the
+     same NEMOTRON key covers mission edits when the Groq bank is dry. */
+  const SQUAD_NIM_KEY = process.env.NVIDIA_NIM_KEY || "";
+  if (SQUAD_NIM_KEY) {
+    for (const model of ["nvidia/nemotron-3-super-120b-a12b", "nvidia/llama-3.3-nemotron-super-49b-v1.5"]) {
+      for (const cap of ladder) {
+        try {
+          const r = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+            method: "POST",
+            headers: { "Authorization": "Bearer " + SQUAD_NIM_KEY, "Content-Type": "application/json" },
+            body: JSON.stringify({ model: model, messages: messages, max_tokens: cap, temperature: 0.25 }),
+            signal: AbortSignal.timeout(180_000)
+          });
+          if (r.status === 429) {
+            const d2 = await r.json().catch(() => ({}));
+            const m2 = (d2.error && d2.error.message) || "rate limited";
+            notes.push("nim-squad " + model + ": " + String(m2).slice(0, 80));
+            if (/too large|tokens per minute|\bTPM\b|context.length/i.test(m2)) continue;
+            break;
+          }
+          if (!r.ok) { notes.push("nim-squad " + model + ": HTTP " + r.status); break; }
+          const d2 = await r.json();
+          const t2 = d2.choices && d2.choices[0] && d2.choices[0].message && d2.choices[0].message.content;
+          if (t2 && t2.trim()) { mark(true, "nvidia-nim-squad", model, 200, "cap " + cap); return t2.trim(); }
+          notes.push("nim-squad " + model + ": empty completion at cap " + cap);
+        } catch (e) { notes.push("nim-squad " + model + ": " + String(e.message || e).slice(0, 60)); break; }
+      }
+    }
+  }
+
   /* 3 — the reserve brain, then an honest failure that names the real reason */
   const rt = await reserveCall(messages, Math.min(want, 2000), 0.25, null);
   if (rt) { mark(true, "mistral-reserve", RESERVE_MODEL, 200, ""); return rt; }
@@ -1500,7 +1530,28 @@ app.post("/v1/chat/completions", async (req, res) => {
     } catch (e) { /* network hiccup → try next model */ }
   }
   if (sawLimit) {
-    /* the key bank is drained — try the reserve brain before giving up */
+    /* the key bank is drained — the maker's NIM Nemotron covers the CODE lane first
+       (SWE-Bench: Nemotron-3-Super 60.47 vs gpt-oss-120b 41.9 — the strongest coding
+       fallback in the bank), then the Mistral reserve. */
+    const NIM_KEY = process.env.NVIDIA_NIM_KEY || "";
+    if (NIM_KEY) {
+      for (const model of ["nvidia/nemotron-3-super-120b-a12b", "nvidia/llama-3.3-nemotron-super-49b-v1.5"]) {
+        try {
+          const r = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+            method: "POST",
+            headers: { "Authorization": "Bearer " + NIM_KEY, "Content-Type": "application/json" },
+            body: JSON.stringify({ model, messages, max_tokens: Math.min(body.max_tokens || 1400, 4000), temperature: body.temperature != null ? body.temperature : 0.6 }),
+            signal: AbortSignal.timeout(120_000)
+          });
+          if (r.status === 429) continue;
+          if (!r.ok) continue;
+          const d = await r.json();
+          const t = d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content;
+          if (t && t.trim()) return res.json({ choices: [{ message: { content: t.trim() } }], model: model + " (nvidia-nim)" });
+        } catch (e) { /* next NIM model */ }
+      }
+    }
+    /* then the reserve brain before giving up */
     const mt = await reserveCall(messages, Math.min(body.max_tokens || 1400, 4000), body.temperature, req);
     if (mt) return res.json({ choices: [{ message: { content: mt } }], model: RESERVE_MODEL + " (reserve)" });
     /* nothing left — AURA turns this into a friendly notice */
