@@ -1,0 +1,58 @@
+// ============================================================
+//  PASTE ME: Firestore Security Rules for project aura-live-81185
+//  ------------------------------------------------------------
+//  1. console.firebase.google.com  -> project aura-live-81185
+//  2. Build -> Firestore Database  (Realtime Database NAHI)
+//  3. Top me tabs: Data | Rules   -> RULES tab kholo
+//  4. Editor me Ctrl+A -> Delete  ->  is file ka poora content
+//     (ya sirf neeche wala part) paste karo
+//  5. Neeche-RIGHT me PUBLISH button -> click
+//  Confirm: "Rules published" toast aaye.
+//  Ye file safe hai paste karne ke liye -- // comments bhi rules
+//  support karta hai, kuch bigadega nahi.
+// ============================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function role() {
+      return request.auth.token.role
+          || get(/databases/$(database)/documents/aura_users/$(request.auth.uid)).data.role;
+    }
+
+    function isStaff() {
+      return signedIn() && (role() in ['maker', 'ceo']);
+    }
+
+    function noNewRole() {
+      return !('role' in request.resource.data) || request.resource.data.role == null;
+    }
+
+    match /aura_users/{uid} {
+      allow get, list: if isSelf(uid) || isStaff();
+      allow create: if isSelf(uid) && noNewRole();
+      allow update: if isSelf(uid)
+                    && request.resource.data.role == resource.data.role
+                    && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']);
+      allow delete: if false;
+    }
+
+    match /aura_config/{doc} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
