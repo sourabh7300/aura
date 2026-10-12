@@ -947,8 +947,7 @@ async function ghPutFile(content, message, file) {
    ladder, a cooldown only when the KEY is really at fault, and the real upstream
    reason kept in `brainLast` for /health (never the key itself). */
 const brainLast = { at: 0, ok: null, via: "", model: "", status: 0, note: "" };
-const SQUAD_MODELS = (process.env.SQUAD_MODELS || "openai/gpt-oss-120b,openai/gpt-oss-20b").split(",").map(s => s.trim()).filter(Boolean);
-async function squadBrain(messages, maxTok) {
+const SQUAD_MODELS = (process.env.SQUAD_MODELS || "openai/gpt-oss-120b,openai/gpt-oss-20b").split(",").map(s => s.trim()).filter(Boolean);async function squadBrain(messages, maxTok) {
   const want = Math.max(600, Math.min(maxTok || 3000, 8000));
   const ladder = [...new Set([want, Math.ceil(want / 2), Math.ceil(want / 4)])].filter(n => n >= 400);
   const notes = [];
@@ -994,6 +993,40 @@ async function squadBrain(messages, maxTok) {
         }
         notes.push(model + ": empty completion at cap " + cap);
       } catch (e) { notes.push(model + ": " + String(e.message || e).slice(0, 60)); break; }
+    }
+  }
+
+  /* 2b — NVIDIA NIM lane (maker's NIM key, env NVIDIA_NIM_KEY). OpenAI-compatible
+     endpoint, bearer key — same request shape as Groq. Nemotron-3 Super gets tried
+     first (agentic/coding strength), then the 49B v1.5 fallback. Ordered AFTER the
+     Groq bank (free keys first, the maker's paid NIM when the bank is dry). */
+  const NIM_KEY = process.env.NVIDIA_NIM_KEY || "";
+  const NIM_MODELS = ["nvidia/nemotron-3-super-120b-a12b", "nvidia/llama-3.3-nemotron-super-49b-v1.5"];
+  if (NIM_KEY) {
+    for (const model of NIM_MODELS) {
+      for (const cap of ladder) {
+        try {
+          const r = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+            method: "POST",
+            headers: { "Authorization": "Bearer " + NIM_KEY, "Content-Type": "application/json" },
+            body: JSON.stringify({ model: model, messages: messages, max_tokens: cap, temperature: 0.25 }),
+            signal: AbortSignal.timeout(180_000)
+          });
+          if (r.status === 429) {
+            const d = await r.json().catch(() => ({}));
+            const msg = (d.error && d.error.message) || "rate limited";
+            notes.push("nim " + model + ": " + String(msg).slice(0, 80));
+            if (/too large|tokens per minute|\bTPM\b|context.length/i.test(msg)) continue;
+            break;
+          }
+          if (r.status === 401 || r.status === 403) { notes.push("nim " + model + ": key rejected"); break; }
+          if (!r.ok) { notes.push("nim " + model + ": HTTP " + r.status); break; }
+          const d = await r.json();
+          const t = d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content;
+          if (t && t.trim()) { mark(true, "nvidia-nim", model, 200, "cap " + cap); return t.trim(); }
+          notes.push("nim " + model + ": empty completion at cap " + cap);
+        } catch (e) { notes.push("nim " + model + ": " + String(e.message || e).slice(0, 60)); break; }
+      }
     }
   }
 
