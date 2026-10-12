@@ -382,6 +382,29 @@ function mkDeps(over) {
     ok("an unfinished feature is never pushed", d9.calls.commit.length === 0);
     ok("unfinished batch is parked with the raw reason", d9.store.state.missions[auto.MISSIONS[0].id].parked === true && /not complete after/.test(d9.store.state.missions[auto.MISSIONS[0].id].note || ""));
 
+    /* 6d — OWNER'S STANDING ORDER: a gate-refused stored batch is SELF-HEALED once,
+       not thrown away and re-built into the same refusal (the old behaviour burned
+       the day's cycles on the same failure twice, then parked the mission). */
+    const d13 = mkDeps({ config: { maxCyclesPerDay: 4, maxAttempts: 3, autoShip: true, tickMinutes: 0, publish: "hold" } });
+    let brainCalls = 0;
+    d13.brain = async (msgs) => {
+      brainCalls++;
+      const p = JSON.stringify(msgs);
+      if (/Publish-gate failures/.test(p)) {
+        /* the repair call: re-anchor the broken opener by replacing the whole
+           malformed line with a syntactically valid one that keeps the sentinel */
+        return editsJson("var boot = function() { return {1};", "var boot = function() { return 1; }; // AURA_LANE_HEAL");
+      }
+      return editsJson(BOTS_ANCHOR, BOTS_ANCHOR + "\n<script>var boot = function() { return {1};</script>\n<!-- AURA_LANE_HEAL -->");
+    };
+    const ap13 = auto.createAutopilot(d13);
+    await ap13.tick({});
+    ok("syn-broken batch is refused at the gates, then self-healed once (not thrown away)", brainCalls >= 2, "brain calls=" + brainCalls);
+    ok("the self-healed batch lands in the publish queue, not the trash", d13.store.state.queue.length === 1 && d13.store.state.wip === null, "queue=" + d13.store.state.queue.length);
+    const pub13 = await ap13.publishQueued();
+    ok("the repaired feature publishes cleanly on the admin's push", pub13.published === 1 && pub13.refused.length === 0, JSON.stringify(pub13.refused || []));
+    ok("the repaired batch parses as real JS (sentinel survived the repair)", d13.calls.commit.length === 1 && d13.calls.commit[0].content.indexOf("AURA_LANE_HEAL") >= 0);
+
     /* 7 — roadmap complete → the squad STOPS and says so */
     const d6 = mkDeps();
     const ap6 = auto.createAutopilot(d6);
