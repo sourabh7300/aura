@@ -953,13 +953,48 @@ const SQUAD_MODELS = (process.env.SQUAD_MODELS || "openai/gpt-oss-120b,openai/gp
   const notes = [];
   const mark = (ok, via, model, status, note) => Object.assign(brainLast, { at: Date.now(), ok: !!ok, via: via || "", model: model || "", status: status || 0, note: String(note || "").replace(/(gsk_|sk-)[A-Za-z0-9_-]{6,}/g, "[redacted]").slice(0, 220) });
 
-  /* 1 — the maker's reserved Mistral admin lane */
+  /* 1 — the maker's reserved Mistral admin lane (kept as the instant warm lane) */
   try {
     const adm = await laneCall("admin", ADMIN_KEY, MISTRAL_ADMIN_MODELS, messages, want, 0.25, null);
     if (adm) { mark(true, "mistral-admin", "", 200, ""); return adm; }
   } catch (e) {}
 
-  /* 2 — the key bank, best model first, shrinking the reservation on a TPM refusal */
+  /* 1b — OWNER'S STANDING ORDER (12 Oct 2026): the bots work on NVIDIA NEMOTRON
+     FIRST — the maker bought that key for them, it is their primary brain. Groq
+     is the bots' BACKUP (it stays first for user chat, where its speed wins).
+     Ladder: Ultra 550B → Super 120B → Lightning 30B, so a busy Ultra falls across
+     the whole NIM family before a single Groq key is even touched. */
+  const NIM_KEY_FIRST = process.env.NVIDIA_NIM_KEY || "";
+  if (NIM_KEY_FIRST) {
+    for (const model of ["nvidia/nemotron-3-ultra-550b-a55b", "nvidia/nemotron-3-super-120b-a12b", "nvidia/nemotron-3.5-lightning-30b-a3b"]) {
+      for (const cap of ladder) {
+        try {
+          const r = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+            method: "POST",
+            headers: { "Authorization": "Bearer " + NIM_KEY_FIRST, "Content-Type": "application/json" },
+            body: JSON.stringify({ model: model, messages: messages, max_tokens: cap, temperature: 0.25 }),
+            signal: AbortSignal.timeout(240_000)
+          });
+          if (r.status === 429) {
+            const d = await r.json().catch(() => ({}));
+            const msg = (d.error && d.error.message) || "rate limited";
+            notes.push("nim " + model + ": " + String(msg).slice(0, 80));
+            if (/too large|tokens per minute|\bTPM\b|context.length/i.test(msg)) continue;
+            break; /* key-level limit — next NIM model */
+          }
+          if (r.status === 401 || r.status === 403) { notes.push("nim " + model + ": key rejected"); break; }
+          if (r.status === 404 || r.status === 400) { notes.push("nim " + model + ": model unavailable"); break; }
+          if (!r.ok) { notes.push("nim " + model + ": HTTP " + r.status); break; }
+          const d = await r.json();
+          const t = d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content;
+          if (t && t.trim()) { mark(true, "nvidia-nim-first", model, 200, "cap " + cap); return t.trim(); }
+          notes.push("nim " + model + ": empty completion at cap " + cap);
+        } catch (e) { notes.push("nim " + model + ": " + String(e.message || e).slice(0, 60)); break; }
+      }
+    }
+  }
+
+  /* 2 — the Groq key bank — now the BOTS' BACKUP (user chat keeps it first) */
   const models = [...new Set(SQUAD_MODELS.concat(MODELS))];
   for (const model of models) {
     const key = pickLaneKey(ADMIN_KEY || KEY_POOL[0], true);
