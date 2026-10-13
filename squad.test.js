@@ -108,7 +108,10 @@ suite("Daily shift — sentinels installed", () => {
   ok("shiftBoot auto-fires once admin verified", /function shiftBoot\(\)/.test(src) && /AuraAuth\.refreshRole\(\)\.then/.test(src));
   ok("shift persisted under its own key", /const SHIFT_KEY="aura_bot_shift_v1"/.test(src));
   ok("shift tag wired into the squad UI", /id="botShiftTag"/.test(src));
-  ok("'morning shift' chip shipped", /class="bot-chip">morning shift</.test(src));
+  /* OWNER'S SIMPLICITY ORDER (13 Oct 2026): chips replaced by ⚡ AUTO WORK — it still runs the cycle+
+     autopilot; 'morning shift' stays available by voice (typed command still reaches the router) */
+  ok("'morning shift' command still routed (voice, via typed order)", /run \(the \)?\(daily\|morrow\|shift\)/.test(src) || /morning shift/.test(src));
+  ok("two-button squad UI: ⚡ AUTO WORK + 🚀 PUSH shipped", /id="btnAutoWork"/.test(src) && /id="btnPushAll"/.test(src));
   ok("protocol documents the shift", /DAILY SHIFT PROTOCOL/.test(src));
   ok("once-per-day guard (force overrides)", /existing&&!existing\.running&&!force/.test(src));
   /* the shift call chain: sweep → arthurWork on failures → world+chats → KRATOS signs */
@@ -473,7 +476,7 @@ suite("Autopilot — panel + wiring sentinels (shipped files)", () => {
   ok("standing Astra-class mission is in the training DB", /STANDING MISSION \(admin's order, 11 Oct 2026\) — ASTRA-CLASS AUTONOMY/.test(src));
   ok("autopilot protocol documents auto-ship + auto-revert + pause", /AUTOPILOT PROTOCOL v1/.test(src) && /auto-revert/.test(src) && /PAUSE ho jaati hai/.test(src));
   ok("Hinglish autopilot radar is wired into the router", /autopilot chala/.test(src));
-  ok("autopilot chips shipped", /class="bot-chip">autopilot status</.test(src) && /class="bot-chip">run a cycle now</.test(src));
+  ok("autopilot commandable: ⚡ AUTO WORK button (one tap = enable + cycle)", /id="btnAutoWork"/.test(src) && /id="autoRun"/.test(src));
   ok("BotTeam exposes the autopilot lane", /autopilot:\{refresh:autopilotRefresh,set:autopilotToggle,run:autopilotRun/.test(src));
   ok("bots answer autopilot questions from LIVE context", /AUTOPILOT \(server-side 24\/7 squad clock\)/.test(src));
 
