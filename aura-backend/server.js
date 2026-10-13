@@ -1228,6 +1228,20 @@ app.get("/v1/squad/state", async (req, res) => {
   try { res.json(Object.assign(await autopilot.snapshot(), { clock: Object.assign({}, squadClock), sourceLane: lastSourceLane })); }
   catch (e) { res.status(502).json({ error: e.message || String(e) }); }
 });
+/* BOTS' BRAIN SOURCE (owner's order, 13 Oct 2026) */
+app.post("/v1/squad/brain", async (req, res) => {
+  if (!(await squadAuth(req, res))) return;
+  const b = req.body || {};
+  const messages = Array.isArray(b.messages) ? b.messages.filter(m => m && typeof m.content === "string") : null;
+  if (!messages || !messages.length) return res.status(400).json({ error: "messages required" });
+  try {
+    const out = await squadBrain(messages, Math.min(parseInt(b.max_tokens, 10) || 3000, 8000));
+    res.json({ choices: [{ message: { content: out } }], via: brainLast.via, model: brainLast.model });
+  } catch (e) {
+    res.status(503).json({ ok: false, error: e.message || String(e), note: (brainLast && brainLast.note) || "" });
+  }
+});
+
 app.get("/v1/squad/report", async (req, res) => {
   if (!(await squadAuth(req, res))) return;
   try {
