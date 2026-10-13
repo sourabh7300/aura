@@ -61,6 +61,23 @@ suite("CURRENCY_Q + currencyMetaReply precision pair", () => {
   ok("date meta: 'what year are we in' answered", typeof currencyMetaReply("what year are we in") === "string");
 });
 
+/* ================= 1b. ALWAYS-FRESH WEB LANE (stale-knowledge bug, 13 Oct 2026) =================
+   Regression: the thinking brain used to pull live web context only when a keyword regex
+   (wantsFresh) matched — "nvidia ke bare me batao" missed it and the model answered from its
+   frozen training cutoff ("Claude 4 is latest"). Now EVERY thinkAnswer call pulls live context. */
+suite("always-fresh web lane", () => {
+  ok("thinkAnswer pulls live web context unconditionally (no wantsFresh gate)",
+     !/let freshBlock="";[\s\S]{0,80}if\(wantsFresh\(q\)\)\{const wb=await webContext/.test(src));
+  ok("thinkAnswer always calls webContext",
+     /let freshBlock="";[\s\S]{0,900}const wb=await webContext\(q\)/.test(src));
+  ok("gemini fallback path also unconditional",
+     !/const fresh=wantsFresh\(q\);const web=fresh\?await webContext/.test(src));
+  ok("backend /v1/websearch strips Hinglish filler ('ke bare me batao')",
+     /ke\|ki\)\\s\+baare\?\\s\*me/.test(srv) || /baare\?\\s\*me/.test(srv));
+  ok("backend /v1/websearch strips 'mujhe'",
+     /mujhe\|humein/.test(srv));
+});
+
 /* ================= 2. Wake-word stripper (shipped) ================= */
 suite("WAKE_STRIP wake-word stripper", () => {
   const i = src.indexOf("const cmd=c.replace(");

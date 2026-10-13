@@ -5039,7 +5039,7 @@ async function geminiCall(q,deep){
   if(aiProvider()==="openrouter"){
     return await openrouterCall([{role:"system",content:sys+replyStyle()},{role:"user",content:q+convoCtx()}],deep?2600:900);
   }
-  const _now=new Date();const dateLine="CURRENT DATE & TIME: "+_now.toLocaleDateString(undefined,{weekday:"long",year:"numeric",month:"long",day:"numeric"});const fresh=wantsFresh(q);const web=fresh?await webContext(q):null;const webBlock=web?"LIVE WEB RESULTS (gathered seconds ago — REAL and CURRENT; ground every time-sensitive fact in them; live results WIN over your memory of past events):\n"+web:"";
+  const _now=new Date();const dateLine="CURRENT DATE & TIME: "+_now.toLocaleDateString(undefined,{weekday:"long",year:"numeric",month:"long",day:"numeric"});const web=await webContext(q);const webBlock=web?"LIVE WEB RESULTS (gathered seconds ago — REAL and CURRENT; ground every time-sensitive fact in them; live results WIN over your memory of past events):\n"+web:"";
   const r=await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key="+encodeURIComponent(geminiKey().trim()),{
     method:"POST",headers:{"Content-Type":"application/json"},signal:AbortSignal.timeout(12000),
     body:JSON.stringify({contents:[{role:"user",parts:[{text:sys+"\n\n"+webBlock+(webBlock?"\n\n":"")+dateLine+"\n\n"+q+convoCtx()}]}]})});
@@ -6540,7 +6540,12 @@ async function thinkAnswer(q,deep,hi){
   slog(skipEv?"cortex skipped wiki scrape — "+lane+" lane thinks from the model + tools":(evs.length?"evidence from "+evs.length+' source'+(evs.length>1?"s":"")+" — reasoning…":"no evidence yet — reasoning from my own knowledge…"),true);
   let promptCore=buildThinkPrompt(q,term,evs,deep,hi)+((memBlock&&typeof buildThinkPrompt==="function")?"\n\nLONG-TERM MEMORY (things the user told you or you learned in past sessions — use if relevant):\n"+memBlock:"");
   let freshBlock="";
-  try{if(wantsFresh(q)){const wb=await webContext(q);if(wb)freshBlock="\n\nLIVE WEB RESULTS (gathered seconds ago — REAL and CURRENT; ground every time-sensitive fact in them; when they conflict with your memory of past events, dates or records, the live results WIN. Never invent dates, scores, prices or winners):\n"+wb+"\n"}}catch(e){}
+  /* OWNER FIX 13 Oct 2026 (stale-knowledge bug): the old if(wantsFresh(q)) keyword gate let
+     current-topic questions like "nvidia ke bare me batao" slip past the live-web lane, so the
+     brain answered from its frozen training cutoff ("Claude 4 is latest"). EVERY knowledge
+     answer now pulls live web context first — webContext fails open (null on error), so an
+     offline backend costs nothing. wantsFresh() stays for the plain-chat rescue lane. */
+  try{const wb=await webContext(q);if(wb)freshBlock="\n\nLIVE WEB RESULTS (gathered seconds ago — REAL and CURRENT; ground every time-sensitive fact in them; when they conflict with your memory of past events, dates or records, the live results WIN. Never invent dates, scores, prices or winners):\n"+wb+"\n"}catch(e){}
   const prompt=promptCore+freshBlock+dailyBriefBlock();
   if(aiProvider()==="groq"){
     try{
@@ -6745,7 +6750,7 @@ async function aiReply(q){
     /* rescue rung: geminiCall short-circuits to groqCall (backend first) — a single
        transient backend/model blip used to dead-end here and dump raw Wikipedia as the
        final answer. Retry the backend ONCE before giving up on the brain. */
-    if(geminiKey()||backendUrl()){try{let t;try{t=await geminiCall(q,deep)}catch(e1){if(!e1.outOfTokens&&aiProvider()==="groq"&&!keyPool().length&&backendUrl()){await new Promise(r=>setTimeout(r,1200));t=await backendCall([{role:"system",content:replyStyle()},{role:"user",content:q+convoCtx()+(wantsFresh(q)?(await webContext(q)||""):"")}],deep?2600:900)}else throw e1}t=String(t).replace(/\s*\[\d+\]/g,"");/* no evidence gathered → strip any hallucinated citation markers */return{t,eng:aiProvider()==="groq"?"groq gpt-oss-120b":"gemini 2.0 flash"};}catch(e){slog("ai uplink failed — trying live web");}}
+    if(geminiKey()||backendUrl()){try{let t;try{t=await geminiCall(q,deep)}catch(e1){if(!e1.outOfTokens&&aiProvider()==="groq"&&!keyPool().length&&backendUrl()){await new Promise(r=>setTimeout(r,1200));t=await backendCall([{role:"system",content:replyStyle()},{role:"user",content:q+convoCtx()+((await webContext(q))||"")}],deep?2600:900)}else throw e1}t=String(t).replace(/\s*\[\d+\]/g,"");/* no evidence gathered → strip any hallucinated citation markers */return{t,eng:aiProvider()==="groq"?"groq gpt-oss-120b":"gemini 2.0 flash"};}catch(e){slog("ai uplink failed — trying live web");}}
     const w=deep?await webResearch(q):await wikiAnswer(q,deep);
     if(w)return w;
     const d2=await ddgAnswer(q);if(d2)return d2;
