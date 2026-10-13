@@ -1658,7 +1658,15 @@ function toolCalc(expr) {
    whenever a question is time-sensitive, so answers stay current-day, never frozen
    at the model's training cutoff. */
 app.post("/v1/websearch", async (req, res) => {
-  const q = String((req.body || {}).question || "").trim().slice(0, 300);
+  let q = String((req.body || {}).question || "").trim().slice(0, 300);
+  /* OWNER FIX 13 Oct 2026: Hinglish chat phrasing ("nvidia ke bare me batao", "mujhe aura ke
+     bare me jankari chahiye") used to be fed to the news/wikipedia lanes verbatim — the filler
+     words drowned the real topic and the lanes came back empty, so the brain fell back on its
+     frozen training cutoff. Strip the conversational wrapper, keep the searchable core. */
+  q = q.replace(/(?:mujhe|humein|hum|please|plz|sir|bhai|yaar)\s+/gi, " ")
+       .replace(/\b(?:ke|ki)\s+baare?\s*me(?:in)?|\bke\s+bare\s*me(?:in)?\b/gi, " ")
+       .replace(/\b(?:batao|bataiye|bata|batana|batao na|jankari|jaankari|chahiye|do|dijiye|kya hai|kya hai aaj|kaun|kaun hai|kaise|kyu|kyun|hai)\b/gi, " ")
+       .replace(/\s+/g, " ").trim();
   if (!q || q.length < 4 || /^(hi+|hello+|hey+|yo|ok(ay)?|thanks?|thank you|namaste|good\s*(morning|evening|night|afternoon))[!. ]*$/i.test(q)) {
     return res.json({ results: [] }); /* greetings don't deserve a web crawl */
   }
