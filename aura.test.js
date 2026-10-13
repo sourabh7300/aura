@@ -61,6 +61,19 @@ suite("CURRENCY_Q + currencyMetaReply precision pair", () => {
   ok("date meta: 'what year are we in' answered", typeof currencyMetaReply("what year are we in") === "string");
 });
 
+/* ================= 0. SCRIPT-BLOCK PARITY (13 Oct 2026 regression) =================
+   A missing ) inside aura.html's main <script> block silently killed the whole app
+   (settings rendered raw, no brains): regex-extracted engines still "passed" because
+   they compile in isolation. Every script block must parse as a whole. */
+suite("aura.html script blocks parse (whole-app gate)", () => {
+  const blocks = [...src.matchAll(/<script>([\s\S]*?)<\/script>/g)];
+  ok("page has script blocks", blocks.length >= 2);
+  blocks.forEach((m, i) => {
+    try { new Function(m[1]); ok("script block #" + (i + 1) + " parses", true); }
+    catch (e) { ok("script block #" + (i + 1) + " parses — " + e.message, false); }
+  });
+});
+
 /* ================= 1b. ALWAYS-FRESH WEB LANE (stale-knowledge bug, 13 Oct 2026) =================
    Regression: the thinking brain used to pull live web context only when a keyword regex
    (wantsFresh) matched — "nvidia ke bare me batao" missed it and the model answered from its
