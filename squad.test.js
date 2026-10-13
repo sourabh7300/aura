@@ -408,16 +408,18 @@ function mkDeps(over) {
     ok("the repaired feature publishes cleanly on the admin's push", pub13.published === 1 && pub13.refused.length === 0, JSON.stringify(pub13.refused || []));
     ok("the repaired batch parses as real JS (sentinel survived the repair)", d13.calls.commit.length === 1 && d13.calls.commit[0].content.indexOf("AURA_LANE_HEAL") >= 0);
 
-    /* 7 — roadmap complete → the squad STOPS and says so */
+    /* 7 — OWNER'S ORDER 13 Oct 2026: "kaam karte rehne chahiye" — a finished roadmap
+       NEVER parks the squad idle. The engine stays armed (paused flag cleared) and the
+       next tick still runs an honest cycle instead of skipping with "paused". */
     const d6 = mkDeps();
     const ap6 = auto.createAutopilot(d6);
     const st6 = await ap6.load();
     auto.MISSIONS.forEach(m => { st6.missions[m.id] = { done: true, attempts: 1 }; });
     await ap6.persist(st6); /* the engine always resumes from the persisted state */
     await ap6.tick({});
-    ok("finished roadmap pauses the squad", d6.store.state.paused === "roadmap complete", d6.store.state.paused);
+    ok("finished roadmap does NOT pause the squad (stays armed)", d6.store.state.paused !== "roadmap complete", d6.store.state.paused);
     const r6 = await ap6.tick({});
-    ok("a paused squad does no work", r6.skipped === "paused: roadmap complete", r6.skipped);
+    ok("an armed squad still runs cycles after the roadmap", !r6.skipped || !/paused/.test(r6.skipped || ""), r6 && r6.skipped);
 
     /* 8 — push-policy control + public heartbeat (extension lane) */
     const d10 = mkDeps();
