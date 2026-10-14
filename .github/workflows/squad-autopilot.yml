@@ -61,11 +61,40 @@ jobs:
               console.log("autopilot:", s.enabled?"ON":"off", "| cycles today", s.cyclesToday+"/"+s.maxCyclesPerDay, "| missions", (s.progress?s.progress.done+" / "+s.progress.total:"?"));
               if(j.skipped) console.log("skipped:", j.skipped);
             ' || true
+          else
+            if [ "$code" = "000" ]; then
+              echo "::warning title=Cycle still running::no response inside the curl budget — the engine keeps working and files its report on its own. Read it in ADMIN → KRATOS SQUAD → AUTOPILOT, or GET /v1/squad/report."
+              exit 0
+            fi
+            echo "::error title=Squad cycle failed::backend answered HTTP $code"
+            exit 1
+          fi
+
+      - name: Push the publish queue (admin's standing word)
+        # The owner's policy is HOLD: finished features wait in the queue for his
+        # PUSH tap. But a push is NOT timed work — it is the drain of verified,
+        # gated work — so the cron lane (the same key the backend already trusts)
+        # may flush the queue even when no admin browser is signed in. Without
+        # this, features sat queued forever whenever nobody had AURA open.
+        env:
+          SQUAD_TICK_SECRET: ${{ secrets.SQUAD_TICK_SECRET }}
+        run: |
+          if [ -z "$SQUAD_TICK_SECRET" ]; then echo "::notice::no cron key — publish queue stays for the admin's own PUSH tap"; exit 0; fi
+          code=$(curl -s -o /tmp/pub.json -w '%{http_code}' -m 150 \
+            -X POST https://aura-backend-jomj.onrender.com/v1/squad/publish \
+            -H "Content-Type: application/json" \
+            -H "x-squad-key: $SQUAD_TICK_SECRET" \
+            -d '{"trigger":"cron"}')
+          echo "POST /v1/squad/publish → $code"
+          head -c 1200 /tmp/pub.json; echo
+          if [ "$code" = "200" ]; then
+            node -e '
+              const j=require("/tmp/pub.json");
+              if (!j.ok) { console.log("publish refused:", j.error); process.exit(0); }
+              console.log("pushed", j.published || 0, "feature(s):", (j.pushed||[]).map(x=>x.mission+"@"+x.sha).join(", ") || "queue empty");
+              (j.refused||[]).forEach(x=>console.log("::warning::refused", x.mission, "—", x.reason));
+            ' || true
             exit 0
           fi
-          if [ "$code" = "000" ]; then
-            echo "::warning title=Cycle still running::no response inside the curl budget — the engine keeps working and files its report on its own. Read it in ADMIN → KRATOS SQUAD → AUTOPILOT, or GET /v1/squad/report."
-            exit 0
-          fi
-          echo "::error title=Squad cycle failed::backend answered HTTP $code"
-          exit 1
+          echo "::warning title=Publish lane answered HTTP $code::queue untouched — the admin's own PUSH tap can still drain it."
+          exit 0
