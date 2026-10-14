@@ -461,6 +461,65 @@ function mkDeps(over) {
     d12.store.state.publish = "hold";
     const snap12b = await auto.createAutopilot(d12).snapshot();
     ok("the admin's own push policy still survives a reload", snap12b.publish === "hold");
+
+    /* 11 — ROADMAP AGENT (owner's order 14 Oct 2026: "AI agents banao… jo barabar
+       kaam karte rahe aur AURA ko next level banate rahe"). The meta-agent reviews
+       the engine's own reality and proposes the NEXT missions when the static
+       roadmap runs thin — every proposal passes the gate before touching state. */
+    const PROPOSAL = JSON.stringify([
+      { id: "chat-backup-export", title: "Chat backup export", goal: "One tap exports the whole squad chat log as a timestamped backup file.", keywords: ["aura_bot_v2", "chats", "export"] },
+      { id: "UPPER_BAD_ID", title: "bad id mission", goal: "this entry must be dropped by the validator gate", keywords: ["x", "y"] }
+    ]);
+    const d14 = mkDeps();
+    d14.brain = async (msgs) => {
+      const p = JSON.stringify(msgs || []);
+      if (p.indexOf("ROADMAP AGENT") >= 0) return PROPOSAL;                 /* meta prompt */
+      return editsJson(BOTS_ANCHOR, BOTS_ANCHOR + "\n<!-- AURA_GEN_CHAT_BACKUP_EXPORT -->"); /* building the generated mission */
+    };
+    const ap14 = auto.createAutopilot(d14);
+    const st14 = await ap14.load();
+    auto.MISSIONS.forEach(m => { st14.missions[m.id] = { done: true, attempts: 1 }; });
+    await ap14.persist(st14);
+    await ap14.tick({});                                   /* pending = 0 → agent fires */
+    ok("roadmap agent proposes when the static roadmap runs thin", (d14.store.state.generated || []).length === 1, JSON.stringify(d14.store.state.generated));
+    ok("bad agent proposals are gated out (id validation)", !(d14.store.state.generated || []).some(g => g.id === "UPPER_BAD_ID"));
+    const snap14 = await ap14.snapshot();
+    ok("generated missions join the panel roadmap", snap14.progress.total === auto.MISSIONS.length + 1 && snap14.generated === 1, JSON.stringify(snap14.progress));
+    await ap14.tick({});                                   /* next cycle builds it */
+    ok("the next cycle builds the agent-generated mission", d14.calls.commit.length === 1 && /AURA_GEN_CHAT_BACKUP_EXPORT/.test(d14.calls.commit[0].content), JSON.stringify(d14.calls.commit.map(c => c.message)));
+    ok("the agent-generated mission verifies done", (d14.store.state.missions["chat-backup-export"] || {}).done === true);
+    const beat14 = await ap14.beat();
+    ok("heartbeat counts the generated mission + reports the lane", beat14.missionsTotal === auto.MISSIONS.length + 1 && beat14.generated === 1, JSON.stringify(beat14));
+    const rep14 = auto.renderReport(d14.store.state);
+    ok("KRATOS report carries the SELF-ROADMAP line", /SELF-ROADMAP/.test(rep14) && /chat-backup-export/.test(rep14));
+
+    /* gate: a healthy static roadmap must cost ZERO roadmap-agent AI calls */
+    const d15 = mkDeps();
+    let roadCalls = 0;
+    d15.brain = async (msgs) => {
+      const p = JSON.stringify(msgs || []);
+      if (p.indexOf("ROADMAP AGENT") >= 0) roadCalls++;
+      return editsJson(BOTS_ANCHOR, HEAL_REPLACE);
+    };
+    const ap15 = auto.createAutopilot(d15);
+    await ap15.tick({});
+    ok("roadmap agent stays silent while the static roadmap is healthy", roadCalls === 0 && (d15.store.state.generated || []).length === 0, "roadmap-agent calls=" + roadCalls);
+
+    /* validator units — the brain proposes, the gate decides */
+    const pg1 = auto.parseGenerated("```json\n" + PROPOSAL + "\n```", { generated: [] });
+    ok("parseGenerated accepts fenced JSON, keeps only valid missions", pg1.missions.length === 1 && pg1.missions[0].id === "chat-backup-export" && pg1.dropped.length === 1, JSON.stringify(pg1));
+    const pg2 = auto.parseGenerated("i am not json at all", { generated: [] });
+    ok("parseGenerated refuses unparseable output without throwing", pg2.missions.length === 0 && pg2.dropped.length === 1, JSON.stringify(pg2));
+    const pg3 = auto.parseGenerated([{ id: "lane-self-heal", title: "dup mission", goal: "duplicate of a static mission id", keywords: ["a", "b"] }], { generated: [] });
+    ok("parseGenerated refuses duplicate ids", pg3.missions.length === 0 && /duplicate/.test(pg3.dropped[0] || ""), JSON.stringify(pg3));
+    const pg4 = auto.parseGenerated([{ id: "thin-kw", title: "thin keywords mission", goal: "a mission whose keywords are far too thin to be useful", keywords: ["only-one"] }], { generated: [] });
+    ok("parseGenerated refuses missions with too-thin keywords", pg4.missions.length === 0, JSON.stringify(pg4));
+    const tm = auto.toMission({ id: "chat-backup-export", title: "t", goal: "g g g g g", keywords: ["a", "b"] });
+    ok("generated missions carry a verifiable sentinel regex", tm.done instanceof RegExp && tm.done.test("<!-- AURA_GEN_CHAT_BACKUP_EXPORT -->"), String(tm.done));
+    const genFixtures = [{ id: "chat-backup-export", title: "t", goal: "g g g g g", keywords: ["a", "b"] }];
+    ok("allMissions appends generated behind the static roadmap", auto.allMissions({ generated: genFixtures }).length === auto.MISSIONS.length + 1);
+    ok("allMissions without generated === the static roadmap", auto.allMissions({}) === auto.MISSIONS);
+    ok("findMission resolves generated missions for the publish lane", auto.findMission({ generated: genFixtures }, "chat-backup-export") !== null && auto.findMission({ generated: genFixtures }, "no-such-mission") === null);
   } catch (e) {
     ok("engine suite ran without throwing", false, e && (e.stack || e.message));
   } finally {
