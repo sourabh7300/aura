@@ -3597,6 +3597,18 @@ function renderMD(t){
   return s;
 }
 /* ---------------- vision (qwen3.8-27b accepts images) ---------------- */
+/* AURA_LANE_HEAL — retry helper with exponential backoff + honest lane state */
+async function withRetry(fn, lane, max=3, base=800){
+  setSt(lane, "retrying");
+  for(let attempt=1;;attempt++){
+    try{return await fn()}
+    catch(e){
+      if(attempt>=max){setSt(lane, "failed"); throw e}
+      setSt(lane, `retry ${attempt}/${max-1}`);
+      await new Promise(r=>setTimeout(r, base*Math.pow(2,attempt-1)));
+    }
+  }
+}
 async function visionDescribe(dataURL,q){
   /* shrink big photos before sending — smaller payload = faster, works on every network */
   /* small JPEGs go up as-is — recompressing a clean canvas frame through imgConvert
@@ -3604,7 +3616,7 @@ async function visionDescribe(dataURL,q){
   try{const isJpeg=/^data:image\/jpeg;base64,/.test(dataURL);if(!isJpeg&&dataURLBytes(dataURL)>420000)dataURL=await imgConvert(dataURL,"image/jpeg",.82)}catch(e){}
   const messages=[{role:"user",content:[{type:"text",text:(q||"Describe this image in detail: what is shown, any text visible, colors, mood, and anything notable. Plain text.")+" Answer in the persona of "+PERSONAS[persona()].name+"."},{type:"image_url",image_url:{url:dataURL}}]}];
   /* route through the full brain chain: owner backend → local key bank → fallbacks */
-  return await groqCall(messages,900,"meta-llama/llama-4-scout-17b-16e-instruct");
+  return await withRetry(()=>groqCall(messages,900,"meta-llama/llama-4-scout-17b-16e-instruct"), "vision");
 }
 /* ---------------- news briefing ---------------- */
 async function newsBrief(){
