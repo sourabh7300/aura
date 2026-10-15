@@ -388,6 +388,21 @@ function mkDeps(over) {
     const pub = await ap8.publishQueued();
     ok("the admin's publish pushes the queue", pub.published === 1 && d8.calls.commit.length === 1 && d8.store.state.queue.length === 0);
     ok("published-on-word is credited with the mission", !!d8.store.state.missions[auto.MISSIONS[0].id].done);
+    /* 6b-hygiene (owner order 15 Oct 2026): jo entry kabhi land nahi kar sakti
+       wo "waiting" nahi — ghost hai. Dead entries drop, retryable pe fail budget. */
+    d8.store.state.queue.push({ at: 9901, mission: "no-such-mission", edits: [{ find: "a", replace: "b" }] });
+    d8.store.state.queue.push({ at: 9902, mission: auto.MISSIONS[0].id, edits: [{ find: "THIS_ANCHOR_DOES_NOT_EXIST", replace: "x" }] });
+    const pubg = await ap8.publishQueued();
+    ok("queue hygiene — unknown + stale-dead entries are dropped, not kept as ghosts", pubg.published === 0 && d8.store.state.queue.length === 0 && pubg.refused.length === 2, JSON.stringify(d8.store.state.queue));
+    const dQ = mkDeps({ config: { maxCyclesPerDay: 4, maxAttempts: 3, autoShip: true, tickMinutes: 0, publish: "hold" }, commit: async () => { throw new Error("github down (test)"); } });
+    const apQ = auto.createAutopilot(dQ);
+    await apQ.tick({}); /* built + verified → queued (publish: hold) */
+    const p1 = await apQ.publishQueued();
+    ok("fail budget — refusal 1 keeps the entry (retryable, stays queued)", dQ.store.state.queue.length === 1 && (dQ.store.state.queue[0].fails || 0) === 1, JSON.stringify((p1.refused || []).map(x => x.reason)) + (p1.note || ""));
+    const p2 = await apQ.publishQueued();
+    ok("fail budget — refusal 2 still keeps the entry", dQ.store.state.queue.length === 1 && (dQ.store.state.queue[0].fails || 0) === 2, JSON.stringify((p2.refused || []).map(x => x.reason)));
+    const p3 = await apQ.publishQueued();
+    ok("fail budget — the 3rd refusal spends the budget and drops it honestly", dQ.store.state.queue.length === 0 && p3.published === 0, JSON.stringify((p3.refused || []).map(x => x.reason)));
 
     /* 6c — a batch that never completes is parked honestly, never pushed */
     const d9 = mkDeps({ config: { maxCyclesPerDay: 4, maxAttempts: 3, autoShip: true, tickMinutes: 0, maxWipCycles: 2 } });
