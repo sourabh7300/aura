@@ -254,6 +254,20 @@ suite("Autopilot — mission picker, sweep verdict, KRATOS report", () => {
   ok("done missions are skipped", auto.pickMission(st, fakeSource()).mission.id === auto.MISSIONS[1].id);
   st.missions[auto.MISSIONS[1].id] = { parked: true, attempts: 2 };
   ok("parked missions are skipped (no quota burn)", auto.pickMission(st, fakeSource()).mission.id === auto.MISSIONS[2].id);
+  /* IMPORTANCE PICKER (owner order 15 Oct 2026): jo bhi task milne pe sare
+     P0 pehle — array order me pehle hone se zaroori nahi */
+  const st2 = { missions: {} };
+  auto.MISSIONS.slice(0, 3).forEach(m => { st2.missions[m.id] = { done: true }; });
+  const imp1 = auto.pickMission(st2, null);
+  ok("IMPORTANCE PICK — a later P0 (boot-budget) outranks earlier P1 missions", imp1 && imp1.mission.id === "boot-budget" && imp1.mission.prio === 0, "picked=" + (imp1 && imp1.mission.id));
+  const pg5 = auto.parseGenerated([{ id: "serious-one", title: "Serious user mission", goal: "a real feature that users notice and that protects their trust", keywords: ["kw-one", "kw-two"], prio: 0, imp: "wrong answers destroy trust" }], { generated: [] });
+  ok("agent proposals carry importance + priority (gate stores prio/imp)", pg5.missions.length === 1 && pg5.missions[0].prio === 0 && pg5.missions[0].imp === "wrong answers destroy trust", JSON.stringify(pg5));
+  ok("generated missions default to P1 when no prio is given", auto.toMission({ id: "def-prio", title: "Title here", goal: "Goal text here", keywords: [] }).prio === 1);
+  ok("pendingByImportance sorts P0 first and keeps array order on ties", (() => {
+    const ids = auto.pendingByImportance({ missions: {} }).map(m => m.id);
+    const p0s = auto.MISSIONS.filter(m => m.prio === 0).map(m => m.id);
+    return ids.slice(0, p0s.length).join(",") === p0s.join(",");
+  })());
   const already = auto.pickMission({ missions: {} }, fakeSource("<!-- AURA_LANE_HEAL -->"));
   ok("source already containing the sentinel is reported as already-built", !!already && already.already === true);
 
