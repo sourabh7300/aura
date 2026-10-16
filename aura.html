@@ -3514,8 +3514,11 @@ slog("aura kernel v4.0 · cortex v2 loaded");slog("particle core: 560 nodes",tru
     });
     chips.appendChild(c);
   }
-  if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",init);}
-  else{init();}
+  const bootStart = performance.now();
+  function bootEnd(){ const bootEnd = performance.now(); pushSys(`boot ${bootEnd-bootStart}ms`); }
+  if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",function(){init(); bootEnd();});}
+  else{init(); bootEnd();}
+/* AURA_BOOT_BUDGET */
 })();
 
 /* ---------------- conversation ---------------- */
