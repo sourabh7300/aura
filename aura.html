@@ -10600,6 +10600,7 @@ document.addEventListener("DOMContentLoaded",function(){
       }
     }catch(e){}
     if(!S.pins||typeof S.pins!=="object")S.pins={};
+    if(!S.follow||typeof S.follow!=="object")S.follow={}; /* fresh-visit boot fix: bubbleEl reads S.follow[S.who] — without this guard the whole chat pane crashed for a first-time visitor (TypeError 'kratos' → blank chat, dead buttons) */
     /* migrate v1 squad state (auto-loop world) so nothing is lost */
     try{
       const v1=JSON.parse(localStorage.getItem("aura_bots_v1")||"null");
