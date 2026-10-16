@@ -22,3 +22,11 @@ services:
         value: "https://sourabh7300.github.io"
       - key: SECRET
         sync: false          # optional private gate key — owner tools present it as X-AURA-Key
+      # OWNER ORDER 16 Oct 2026: "nonstop kaam — ChatGPT-Astra-class jab tak".
+      # Phase-3 ChatGPT-parity roadmap ON, 30 cycle/din, 20-min tick.
+      - key: SQUAD_NONSTOP
+        value: "1"
+      - key: SQUAD_CYCLES_PER_DAY
+        value: "30"
+      - key: SQUAD_TICK_MINUTES
+        value: "20"
