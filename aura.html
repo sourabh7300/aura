@@ -3624,6 +3624,29 @@ async function visionDescribe(dataURL,q){
   return await withRetry(()=>groqCall(messages,900,"meta-llama/llama-4-scout-17b-16e-instruct"), "vision");
 }
 /* ---------------- news briefing ---------------- */
+
+/* AURA_INTENT_ROUTER */
+async function routeIntent(input) {
+  const codeKeywords = ['code', 'program', 'function', 'algorithm', 'syntax', 'debug', 'compile', 'execute'];
+  const visionKeywords = ['image', 'photo', 'picture', 'describe', 'analyze', 'vision'];
+  const newsKeywords = ['news', 'briefing', 'headlines', 'update', 'latest'];
+
+  if (codeKeywords.some(keyword => input.toLowerCase().includes(keyword))) {
+    addMsg('Routing to Code Forge lane.');
+    return 'code';
+  } else if (visionKeywords.some(keyword => input.toLowerCase().includes(keyword))) {
+    addMsg('Routing to Vision lane.');
+    return 'vision';
+  } else if (newsKeywords.some(keyword => input.toLowerCase().includes(keyword))) {
+    addMsg('Routing to News Briefing lane.');
+    return 'news';
+  } else {
+    addMsg('No specific lane detected. Using default lane.');
+    return 'default';
+  }
+}
+
+/* ---------------- news briefing ---------------- */
 async function newsBrief(){
   try{
     const r=await fetch("https://r.jina.ai/https://news.google.com/rss?hl=en-IN&gl=IN&ceid=IN:en",{signal:AbortSignal.timeout(15000)});
