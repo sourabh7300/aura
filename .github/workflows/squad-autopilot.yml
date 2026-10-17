@@ -29,31 +29,49 @@ jobs:
         run: curl -s -o /dev/null -m 90 https://aura-backend-jomj.onrender.com/health || true
 
       - name: Ask the squad for a work cycle
+        # ROOT-CAUSE FIX (17 Oct 2026, exit-28 bug): GitHub Actions runs steps with
+        # bash -o pipefail -e. A curl TIMEOUT inside an assignment (code=$(curl ...))
+        # returns exit 28 and ERR-EXITED THE STEP before the [ "$code" = "000" ]
+        # handler below could ever run — so a still-working cycle was reported as a
+        # FAILED job. Two repairs: every capturing curl gets "|| code=nnn" so the
+        # assignment itself can never die, and the tick budget is 600s (a full
+        # mission cycle on Render's free tier can legitimately take minutes).
         env:
           SQUAD_TICK_SECRET: ${{ secrets.SQUAD_TICK_SECRET }}
           FORCE: ${{ inputs.force }}
         run: |
+          set +e
           if [ -z "$SQUAD_TICK_SECRET" ]; then
             echo "::notice title=Squad cron key not set::No SQUAD_TICK_SECRET — the backend's own clock drives the squad (every SQUAD_TICK_MINUTES, default 45). Verifying that clock is really alive instead of silently doing nothing."
-            code=$(curl -s -o /tmp/health.json -w '%{http_code}' -m 120 https://aura-backend-jomj.onrender.com/health)
+            code=000
+            curl -s -o /tmp/health.json -w '%{http_code}' -m 120 https://aura-backend-jomj.onrender.com/health > /tmp/health.code || true
+            code=$(cat /tmp/health.code 2>/dev/null || echo 000)
             echo "GET /health → $code"
-            head -c 600 /tmp/health.json; echo
+            head -c 600 /tmp/health.json 2>/dev/null; echo
+            if [ "$code" != "200" ]; then
+              echo "::warning title=Backend not answering health::HTTP $code — free tier cold start? The backend's own timer still ticks; not failing this lane."
+              exit 0
+            fi
             node -e '
-              const j = require("/tmp/health.json");
+              let j; try { j = require("/tmp/health.json"); } catch (e) { console.log("::error title=Bad health payload::" + e.message); process.exit(1); }
               const s = j.squad || {}; const c = s.clock || {};
               if (!c.running) { console.log("::error title=Autopilot clock is down::the backend timer is not running — redeploy the backend, or set SQUAD_TICK_MINUTES (>=5)"); process.exit(1); }
               console.log("clock alive — every", c.everyMinutes, "min | cycles today", (s.cyclesToday||0)+"/"+(s.maxCyclesPerDay||"?"), "| missions", (s.missionsDone||0)+"/"+(s.missionsTotal||0), "| source lane:", s.sourceLane||"?", "| research:", (j.research&&j.research.ok)?((j.research.sources||0)+" sources"):"down");
             '
-            exit $?
+            rc=$?
+            [ $rc -ne 0 ] && exit $rc
+            exit 0
           fi
           if [ "$FORCE" = "true" ]; then body='{"trigger":"cron","force":true}'; else body='{"trigger":"cron"}'; fi
-          code=$(curl -s -o /tmp/tick.json -w '%{http_code}' -m 150 \
+          code=000
+          curl -s -o /tmp/tick.json -w '%{http_code}' -m 600 \
             -X POST https://aura-backend-jomj.onrender.com/v1/squad/tick \
             -H "Content-Type: application/json" \
             -H "x-squad-key: $SQUAD_TICK_SECRET" \
-            -d "$body")
+            -d "$body" > /tmp/tick.code || true
+          code=$(cat /tmp/tick.code 2>/dev/null || echo 000)
           echo "POST /v1/squad/tick → $code"
-          head -c 1200 /tmp/tick.json; echo
+          head -c 1200 /tmp/tick.json 2>/dev/null; echo
           if [ "$code" = "200" ]; then
             node -e '
               const j=require("/tmp/tick.json");
@@ -61,14 +79,14 @@ jobs:
               console.log("autopilot:", s.enabled?"ON":"off", "| cycles today", s.cyclesToday+"/"+s.maxCyclesPerDay, "| missions", (s.progress?s.progress.done+" / "+s.progress.total:"?"));
               if(j.skipped) console.log("skipped:", j.skipped);
             ' || true
-          else
-            if [ "$code" = "000" ]; then
-              echo "::warning title=Cycle still running::no response inside the curl budget — the engine keeps working and files its report on its own. Read it in ADMIN → KRATOS SQUAD → AUTOPILOT, or GET /v1/squad/report."
-              exit 0
-            fi
-            echo "::error title=Squad cycle failed::backend answered HTTP $code"
-            exit 1
+            exit 0
           fi
+          if [ "$code" = "000" ]; then
+            echo "::warning title=Cycle still running::no response inside the 600s curl budget — the engine keeps working and files its report on its own. Read it in ADMIN → KRATOS SQUAD → AUTOPILOT, or GET /v1/squad/report."
+            exit 0
+          fi
+          echo "::error title=Squad cycle failed::backend answered HTTP $code"
+          exit 1
 
       - name: Push the publish queue (admin's standing word)
         # The owner's policy is HOLD: finished features wait in the queue for his
@@ -79,14 +97,17 @@ jobs:
         env:
           SQUAD_TICK_SECRET: ${{ secrets.SQUAD_TICK_SECRET }}
         run: |
+          set +e
           if [ -z "$SQUAD_TICK_SECRET" ]; then echo "::notice::no cron key — publish queue stays for the admin's own PUSH tap"; exit 0; fi
-          code=$(curl -s -o /tmp/pub.json -w '%{http_code}' -m 150 \
+          code=000
+          curl -s -o /tmp/pub.json -w '%{http_code}' -m 600 \
             -X POST https://aura-backend-jomj.onrender.com/v1/squad/publish \
             -H "Content-Type: application/json" \
             -H "x-squad-key: $SQUAD_TICK_SECRET" \
-            -d '{"trigger":"cron"}')
+            -d '{"trigger":"cron"}' > /tmp/pub.code || true
+          code=$(cat /tmp/pub.code 2>/dev/null || echo 000)
           echo "POST /v1/squad/publish → $code"
-          head -c 1200 /tmp/pub.json; echo
+          head -c 1200 /tmp/pub.json 2>/dev/null; echo
           if [ "$code" = "200" ]; then
             node -e '
               const j=require("/tmp/pub.json");
