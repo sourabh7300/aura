@@ -5194,6 +5194,28 @@ function renderCitations(parsed){
   return html;
 }
 
+/* AURA_FOLLOWUP_MEM — in-session follow-up resolver */
+function getLastExchange(){
+  const h=hist.load("convo")||[];
+  let lastUser="", lastAsst="";
+  for(let i=h.length-1;i>=0;i--){
+    if(h[i].role==="assistant"&&!lastAsst) lastAsst=String(h[i].content||"");
+    else if(h[i].role==="user"&&!lastUser){ lastUser=String(h[i].content||""); break; }
+  }
+  return {q:lastUser, a:lastAsst};
+}
+const FOLLOW_UP=/^(aur\s+batao|tell me more|more|elaborate|expand|continue|go on|why\b|how\b|what about|and\s+(him|her|it|that)|what else|details?|explain|summarize|shorter|in hindi|translate|when was\s+(he|she|it)|who is\s+(he|she)|how old|uski|uska|iski|iska|price|cost|rate)\b/i;
+function resolveFollowUp(q){
+  const ex=getLastExchange();
+  if(!ex.q||!FOLLOW_UP.test(q.trim())) return q;
+  const PRON=/\b(he|she|it|his|her|him|its|their|they|that|this|those|uski|uska|iski|iska)\b/i;
+  if(PRON.test(q)){
+    const topic=ex.q.replace(/^(what|who|where|when|why|how)\s+(is|was|are|were|does|do|did)\s+/i,"").replace(/\?+$/,"");
+    return q.replace(PRON,topic);
+  }
+  return ex.q+" — follow-up: "+q;
+}
+
 async function geminiCall(q,deep){
   const name=memGet().name;
   const P=PERSONAS[persona()];
