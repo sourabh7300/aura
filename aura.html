@@ -3702,6 +3702,31 @@ async function routeIntent(input) {
   }
 }
 
+/* AURA_ANSWER_SCORE — cheap self-critique: returns {score:0-1, flags:string[]} */
+function scoreAnswer(text) {
+  if (!text || typeof text !== 'string') return {score: 0, flags:['empty']};
+  const t = text.trim();
+  let score = 0.5; // base
+  const flags = [];
+  // citations / sources
+  if (/\[\d+\]/.test(t) || /https?:\/\//.test(t)) { score += 0.15; }
+  else { flags.push('no-citations'); score -= 0.1; }
+  // hedging language
+  const hedges = /\b(maybe|perhaps|likely|probably|seems|appears|might|could be|I think|I believe)\b/i;
+  if (hedges.test(t)) { score -= 0.1; flags.push('hedging'); }
+  // specificity: numbers, dates, proper nouns
+  if (/\b\d{1,3}(?:,\d{3})*(?:\.\d+)?\b/.test(t)) score += 0.05;
+  if (/\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{1,2},? \d{4}\b/i.test(t)) score += 0.05;
+  if (/\b[A-Z][a-z]+ [A-Z][a-z]+\b/.test(t)) score += 0.05; // Name Name
+  // length proxy
+  if (t.length < 120) { score -= 0.1; flags.push('short'); }
+  else if (t.length > 800) { score += 0.05; }
+  // clamp
+  score = Math.max(0, Math.min(1, score));
+  if (score < 0.45) flags.push('low-confidence');
+  return {score: +score.toFixed(2), flags};
+}
+
 /* ---------------- news briefing ---------------- */
 async function newsBrief(){
   try{
