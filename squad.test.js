@@ -487,9 +487,16 @@ function mkDeps(over) {
     const ap12b = auto.createAutopilot(d12);
     const snap12 = await ap12b.snapshot();
     ok("engine config beats a stale stored budget", snap12.maxCyclesPerDay === 4, "got " + snap12.maxCyclesPerDay);
-    d12.store.state.publish = "hold";
+    d12.store.state.publish = "hold";                       /* the legacy 12 Oct default */
     const snap12b = await auto.createAutopilot(d12).snapshot();
-    ok("the admin's own push policy still survives a reload", snap12b.publish === "hold");
+    /* HOLD RETIRED (owner order 20 Oct 2026: "HOLD hatao, AUTO WORK pe auto-push ho"):
+       a stored hold WITHOUT the migration marker becomes batch on the first reload —
+       the finished feature sits queued no more. */
+    ok("a stored legacy HOLD migrates to BATCH on reload (owner order 20 Oct 2026)", snap12b.publish === "batch", "got " + snap12b.publish);
+    const ap12c = auto.createAutopilot(d12);
+    await ap12c.setPublish("hold");
+    const snap12c = await auto.createAutopilot(d12).snapshot();
+    ok("the admin's own push policy still survives a reload", snap12c.publish === "hold");
 
     /* 11 — ROADMAP AGENT (owner's order 14 Oct 2026: "AI agents banao… jo barabar
        kaam karte rahe aur AURA ko next level banate rahe"). The meta-agent reviews
