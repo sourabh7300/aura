@@ -301,6 +301,39 @@ function ok(cond, name, extra) {
   const good = run(env, "AuraAuth.verifyOtp(String(" + JSON.stringify(r.code) + "))");
   ok(good === true, 'correct code verifies'); }
 
+/* 13b. stale legacy admin token auto-clean (owner's order 21 Oct 2026) */
+{ const s = makeStore();
+  s.set('aura_admin_token', 'verified_admin_sourabh_singh');
+  s.set('aura_admin_remember', '1');
+  s.set('aura_current_user_id', 'u_owner');
+  const env = makeEnv(s); // no firebase in sandbox → no wait, no cloud session
+  let r = null;
+  try { r = run(env, "AuraAuth.cleanStaleAdminToken()"); }
+  catch (e) { r = { __threw: String(e) }; }
+  ok(r && r !== null && !r.__threw, 'cleanStaleAdminToken runs without throw', { err: r && r.__threw });
+  ok(s.getItem('aura_admin_token') === null,
+     'stale legacy token auto-cleaned at boot (no live cloud session)');
+  ok(s.getItem('aura_admin_remember') === null,
+     'stale remember flag auto-cleaned with the token'); }
+
+/* 13c. a REAL cloud session is never touched by the boot sweep */
+{ const s = makeStore();
+  s.set('aura_admin_token', 'verified_admin_sourabh_singh');
+  s.set('aura_admin_remember', '1');
+  s.set('aura_fb_live', JSON.stringify({ uid: 'owner_uid_real', email: 'aashoksingh577@gmail.com', tok: 'real-bearer' }));
+  const env = makeEnv(s);
+  let r = null;
+  try { r = run(env, "AuraAuth.cleanStaleAdminToken()"); } catch (e) { r = { __threw: String(e) }; }
+  ok(r === false, 'cleanStaleAdminToken returns false when a real cloud session exists', { r });
+  ok(s.getItem('aura_admin_token') === 'verified_admin_sourabh_singh',
+     'live owner session keeps its admin token (no wrongful clean)'); }
+
+/* 13d. boot sweep is wired into the page load (not a test-only helper) */
+ok(/setTimeout\(function\(\)\{ try\{ AuraAuth\.cleanStaleAdminToken\(\); \}catch\(e\)\{\} \}, 5000\)/.test(html),
+   'boot sweep call present in aura.html page load (+5 s restore window)');
+ok(/cleanStaleAdminToken: cleanStaleAdminToken,/.test(src),
+   'cleanStaleAdminToken is exported on AuraAuth');
+
 /* 14. phantom isGuard() call is gone */
 ok(!/\bisGuard\s*\(/.test(src), 'no phantom isGuard() call in AuraAuth');
 
