@@ -391,9 +391,17 @@ function mkDeps(over) {
     /* 6b-hygiene (owner order 15 Oct 2026): jo entry kabhi land nahi kar sakti
        wo "waiting" nahi — ghost hai. Dead entries drop, retryable pe fail budget. */
     d8.store.state.queue.push({ at: 9901, mission: "no-such-mission", edits: [{ find: "a", replace: "b" }] });
-    d8.store.state.queue.push({ at: 9902, mission: auto.MISSIONS[0].id, edits: [{ find: "THIS_ANCHOR_DOES_NOT_EXIST", replace: "x" }] });
+    /* a NOT-yet-shipped mission whose edits gone stale (the dead-entry path)
+       MISSIONS[0] is shipped by this point, so the dup guard would eat it first — use one that isn't */
+    d8.store.state.queue.push({ at: 9902, mission: auto.MISSIONS[1].id, edits: [{ find: "THIS_ANCHOR_DOES_NOT_EXIST", replace: "x" }] });
     const pubg = await ap8.publishQueued();
     ok("queue hygiene — unknown + stale-dead entries are dropped, not kept as ghosts", pubg.published === 0 && d8.store.state.queue.length === 0 && pubg.refused.length === 2, JSON.stringify(d8.store.state.queue));
+    /* duplicate-ship guard (the quick-actions bug, 21 Oct 2026): an entry for a mission
+       that ALREADY has a ship record drops with no second commit and no refusal counted */
+    d8.store.state.queue.push({ at: 9903, mission: auto.MISSIONS[0].id, edits: [{ find: "<!-- step one --><!-- AURA_LANE_HEAL -->", replace: "x" }] });
+    const pubd = await ap8.publishQueued();
+    ok("duplicate-ship guard — an already-shipped mission's queue entry drops without a second commit", pubd.published === 0 && d8.calls.commit.length === 1 && d8.store.state.queue.length === 0 && !(pubd.refused || []).some(r => r.mission === auto.MISSIONS[0].id), JSON.stringify({ ships: d8.store.state.ships.length, commit: d8.calls.commit.length }));
+    ok("ships never lists the same mission twice", d8.store.state.ships.filter(s => s.mission === "lane-self-heal").length === 1, JSON.stringify(d8.store.state.ships.map(s => s.mission)));
     const dQ = mkDeps({ config: { maxCyclesPerDay: 4, maxAttempts: 3, autoShip: true, tickMinutes: 0, publish: "hold" }, commit: async () => { throw new Error("github down (test)"); } });
     const apQ = auto.createAutopilot(dQ);
     await apQ.tick({}); /* built + verified → queued (publish: hold) */
