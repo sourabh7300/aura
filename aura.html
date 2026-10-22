@@ -20,6 +20,29 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<script>
+  (function(){
+    try{
+      var u = null;
+      try{ u = JSON.parse(localStorage.getItem('aura_fb_live') || 'null'); }catch(e){}
+      var theme = null;
+      if(u && u.uid){
+        try{
+          var users = JSON.parse(localStorage.getItem('aura_users_registry') || '[]');
+          var me = users.find(function(x){ return x.id === u.uid; });
+          if(me && me.theme){ theme = me.theme; }
+        }catch(e){}
+      }
+      if(!theme){ theme = localStorage.getItem('aura_theme') || 'default'; }
+      document.documentElement.setAttribute('data-theme', theme);
+      if(theme !== 'default'){
+        var style = document.createElement('style');
+        style.textContent = ':root[data-theme="'+theme+'"]{--bg:#05070E;--cy:#5CE1FF;--cy2:#7CEBFF;--dim:#5E6B92;--ice:#E8ECF8;--panel:rgba(255,255,255,0.04);--line:rgba(92,225,255,.18);--line2:rgba(92,225,255,.08);--amber:#FFB84D;--red:#f87171;--ok:#34d399;--err:#f87171;}'; // AURA_THEME_SYNC
+        document.head.appendChild(style);
+      }
+    }catch(e){ console.warn('[AURA_THEME_SYNC] pre-paint apply failed:', e); }
+  })();
+</script>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='52' font-size='52'%3E🤖%3C/text%3E%3C/svg%3E">
 <link rel="manifest" href="manifest.webmanifest">
 <!-- share card — rich preview on WhatsApp, Telegram, Google, iMessage -->
