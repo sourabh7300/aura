@@ -5626,47 +5626,6 @@ const hist={
   add(role,content){try{const d=JSON.parse(localStorage.getItem(HIST_KEY)||"{}");const h=d.convo||[];h.push({role,content:String(content).slice(0,600)});while(h.length>120)h.shift();d.convo=h;localStorage.setItem(HIST_KEY,JSON.stringify(d))}catch(e){}},
   clear(){try{localStorage.removeItem(HIST_KEY)}catch(e){}}
 };
-
-/* ---------------- CHAT SEARCH (AURA_CHAT_SEARCH) ---------------- */
-const chatSearch={
-  index: [],
-  build(){
-    this.index=[];
-    /* aura_history_v1 convo entries */
-    const convo=hist.load("convo")||[];
-    convo.forEach((turn,i)=>{if(turn.content&&turn.content.trim()){
-      this.index.push({type:"convo", idx:i, role:turn.role, text:String(turn.content), date:turn.ts||Date.now()});
-    }});
-    /* saved sessions */
-    try{const sess=sessions.all()||[]; sess.forEach((s,si)=>{if(s.turns){s.turns.forEach((t,ti)=>{if(t.content&&t.content.trim()){
-      this.index.push({type:"session", sessionIdx:si, turnIdx:ti, role:t.role, text:String(t.content), date:s.updated||Date.now(), sessionTitle:s.title});
-    }})}})}catch(e){}
-  },
-  filter(q){
-    if(!q||!q.trim()) return {hits:this.index, total:this.index.length, query:""};
-    const nq=q.toLowerCase();
-    const hits=this.index.filter(x=>x.text.toLowerCase().includes(nq));
-    return {hits, total:this.index.length, query:q};
-  },
-  snippet(text,q,max=80){
-    if(!q) return text.slice(0,max);
-    const i=text.toLowerCase().indexOf(q.toLowerCase());
-    if(i<0) return text.slice(0,max);
-    const start=Math.max(0,i-20);
-    return text.slice(start,start+max);
-  },
-  highlight(text,q){
-    if(!q) return esc(text);
-    const re=new RegExp("("+q.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+")","gi");
-    return esc(text).replace(re,"<mark>$1</mark>");
-  },
-  currentHit: -1,
-  navigate(dir){
-    if(!this.lastResults||!this.lastResults.hits.length) return;
-    this.currentHit=(this.currentHit+dir+this.lastResults.hits.length)%this.lastResults.hits.length;
-    return this.lastResults.hits[this.currentHit];
-  }
-};
 /* restore conversation history across reloads */
 try{(function(){const saved=hist.load("convo");if(saved&&saved.length){CONVO.push(...saved.slice(-CONVO_MAX));const lt=hist.load("lastTopic");if(lt)lastTopic=lt;setTimeout(()=>{try{pushSys("chat history restored — "+CONVO.length+" turns · topic: "+(lastTopic||"none"))}catch(e){}},1200)}})()}catch(e){}
 /* ---- chat sessions: ChatGPT-style conversation list (save/switch/rename/delete) ---- */
