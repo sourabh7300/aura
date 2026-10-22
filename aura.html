@@ -271,6 +271,17 @@ body:not([data-tab="system"]) #telemetry,body:not([data-tab="system"]) #syslog,b
 #memSide .memrow button:hover{color:#f87171;border-color:#f87171}
 /* ZEUS VISUAL IDENTITY — tactical gold deck when the ZEUS persona drives */
 body.persona-zeus{--cy:#f5c542;--cy2:#c99a2e;--ice:#ffe9b8}
+/* AURA_CHAT_SEARCH — chat search UI */
+#chatSearchRow{display:flex;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line2);background:var(--panel);backdrop-filter:blur(8px)}
+#chatSearchInput{flex:1;background:var(--bg);border:1px solid var(--line2);color:var(--txt);font-family:var(--mono);font-size:11px;padding:6px 10px;border-radius:6px;outline:none}
+#chatSearchInput:focus{border-color:var(--cy2);box-shadow:0 0 0 2px rgba(34,211,238,.15)}
+#chatSearchCount{font-family:var(--mono);font-size:10px;color:var(--dim);padding:0 6px;white-space:nowrap;align-self:center}
+.chatSearchHit{cursor:pointer;padding:6px 10px;border-bottom:1px solid rgba(255,255,255,.03);transition:background .15s}
+.chatSearchHit:hover{background:rgba(34,211,238,.08)}
+.chatSearchHit .hitMeta{font-family:var(--mono);font-size:9px;color:var(--dim);margin-bottom:2px}
+.chatSearchHit .hitText{font-size:11px;color:var(--txt);line-height:1.4}
+.chatSearchHit .hitText mark{background:var(--cy2);color:#001;color:#001;padding:0 2px;border-radius:2px}
+.chatSearchEmpty{padding:12px 10px;color:var(--dim);font-size:11px;text-align:center}
 body.persona-zeus .hud b{color:var(--cy2)}
 body.persona-zeus::after{content:"";position:fixed;inset:0;pointer-events:none;background:linear-gradient(0deg,rgba(245,197,66,.045),transparent 28%);z-index:2;animation:zeusPulse 4s ease-in-out infinite}
 @keyframes zeusPulse{0%,100%{opacity:.55}50%{opacity:1}}
@@ -5697,7 +5708,8 @@ const hist={
 };
 /* restore conversation history across reloads */
 try{(function(){const saved=hist.load("convo");if(saved&&saved.length){CONVO.push(...saved.slice(-CONVO_MAX));const lt=hist.load("lastTopic");if(lt)lastTopic=lt;setTimeout(()=>{try{pushSys("chat history restored — "+CONVO.length+" turns · topic: "+(lastTopic||"none"))}catch(e){}},1200)}})()}catch(e){}
-/* ---- chat sessions: ChatGPT-style conversation list (save/switch/rename/delete) ---- */
+/* ---- chat sessions: ChatGPT-style conversation list (save/switch/rename/delete) ----
+*/
 const sessions={
   all(){try{return JSON.parse(localStorage.getItem(AuraAuth.getSessionsKey())||"[]")}catch(e){return[]}},
   write(list){try{localStorage.setItem(AuraAuth.getSessionsKey(),JSON.stringify(list))}catch(e){}},
