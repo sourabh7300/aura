@@ -22,6 +22,27 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='52' font-size='52'%3E🤖%3C/text%3E%3C/svg%3E">
 <link rel="manifest" href="manifest.webmanifest">
+<!-- AURA_THEME_SYNC: early theme apply (runs before first paint) -->
+<script>
+  (function(){
+    try{
+      var theme = null;
+      var fb = null;
+      try{ fb = JSON.parse(localStorage.getItem('aura_fb_live') || 'null'); }catch(e){}
+      if(fb && fb.uid){
+        try{
+          var users = JSON.parse(localStorage.getItem('aura_users_registry') || '[]');
+          var me = users.find(function(u){ return u.id === fb.uid; });
+          if(me && me.theme){ theme = me.theme; }
+        }catch(e){}
+      }
+      if(!theme){ theme = localStorage.getItem('aura_theme') || 'default'; }
+      document.documentElement.setAttribute('data-theme', theme);
+      var meta = document.querySelector('meta[name=theme-color]');
+      if(meta) meta.setAttribute('content', theme === 'default' ? '#05070E' : '#0B1020');
+    }catch(e){}
+  })();
+</script>
 <!-- share card — rich preview on WhatsApp, Telegram, Google, iMessage -->
 <meta name="description" content="AURA — a voice you can talk to, a mind that codes, a memory that stays. Holographic AI assistant.">
 <meta property="og:title" content="AURA — Holographic AI Assistant">
