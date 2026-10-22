@@ -5780,9 +5780,47 @@ const hist={
 };
 /* restore conversation history across reloads */
 try{(function(){const saved=hist.load("convo");if(saved&&saved.length){CONVO.push(...saved.slice(-CONVO_MAX));const lt=hist.load("lastTopic");if(lt)lastTopic=lt;setTimeout(()=>{try{pushSys("chat history restored — "+CONVO.length+" turns · topic: "+(lastTopic||"none"))}catch(e){}},1200)}})()}catch(e){}
-/* ---- chat sessions: ChatGPT-style conversation list (save/switch/rename/delete) ---- */
+/* ---- chat sessions: ChatGPT-style conversation list (save/switch/rename/delete) ----
+ */
 const sessions={
-  all(){try{return JSON.parse(localStorage.getItem(AuraAuth.getSessionsKey())||"[]")}catch(e){return[]}},
+  all(){try{return JSON.parse(localStorage.getItem(AuraAuth.getSessionsKey())||"[]")
+/* AURA_CHAT_SEARCH: chat search engine (filters aura_history_v1 convo + sessions) */
+const chatSearch={
+  query:"",
+  hits:[],
+  idx:-1,
+  allEntries(){ // combine hist.convo + sessions into searchable entries
+    const convo=hist.load("convo")||[];
+    const sess=sessions.all();
+    const entries=[];
+    convo.forEach((m,i)=>{if(m.content&&m.content.trim())entries.push({type:"convo",idx:i,role:m.role,text:m.content,ts:m.ts||Date.now()})});
+    sess.forEach((s,si)=>{if(s.messages)s.messages.forEach((m,mi)=>{if(m.content&&m.content.trim())entries.push({type:"session",sessionIdx:si,msgIdx:mi,role:m.role,text:m.content,ts:m.ts||s.updated||Date.now(),sessionTitle:s.title||("Session "+(si+1))})})});
+    return entries;
+  },
+  filter(q){
+    this.query=q.trim().toLowerCase();
+    this.hits=[];
+    this.idx=-1;
+    if(!this.query)return this.hits;
+    const entries=this.allEntries();
+    entries.forEach((e,ei)=>{if(e.text.toLowerCase().includes(this.query))this.hits.push({entry:e,entryIdx:ei})});
+    return this.hits;
+  },
+  getCount(){return {hits:this.hits.length,total:this.allEntries().length}},
+  next(){if(!this.hits.length)return null;this.idx=(this.idx+1)%this.hits.length;return this.hits[this.idx]},
+  prev(){if(!this.hits.length)return null;this.idx=(this.idx-1+this.hits.length)%this.hits.length;return this.hits[this.idx]},
+  highlight(text){if(!this.query)return text;const re=new RegExp(this.query.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"),"gi");return text.replace(re,m=>"<mark style=background:var(--cy);color:#000;padding:0 2px;border-radius:2px>"+m+"</mark>")},
+  openHit(hit){
+    const e=hit.entry;
+    if(e.type==="convo"){ /* scroll to message in current chat */
+      const msgs=$$("#conv .msg");
+      if(msgs[e.entryIdx]){msgs[e.entryIdx].scrollIntoView({behavior:"smooth",block:"center"});msgs[e.entryIdx].style.outline="2px solid var(--cy)";setTimeout(()=>msgs[e.entryIdx].style.outline="",1500)}
+    }else{ /* switch to session and scroll */
+      sessions.switch(e.sessionIdx);
+      setTimeout(()=>{const msgs=$$("#conv .msg");if(msgs[e.msgIdx]){msgs[e.msgIdx].scrollIntoView({behavior:"smooth",block:"center"});msgs[e.msgIdx].style.outline="2px solid var(--cy)";setTimeout(()=>msgs[e.msgIdx].style.outline="",1500)}},200);
+    }
+  }
+};}catch(e){return[]}},
   write(list){try{localStorage.setItem(AuraAuth.getSessionsKey(),JSON.stringify(list))}catch(e){}},
   currentId(){try{return localStorage.getItem(AuraAuth.getSessionIdKey())||""}catch(e){return""}},
   setCurrent(id){try{localStorage.setItem(AuraAuth.getSessionIdKey(),id)}catch(e){}},
