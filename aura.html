@@ -4301,9 +4301,7 @@ window.AuraMem=(function(){
   const SUMMARY_KEY="aura_facts_summary_v1";
   const MAX_FACTS=140;
   const COMPACT_THRESHOLD=120;
-  function all(){try{const arr=JSON.parse(localStorage.getItem(KEY)||"[]");return arr.sort((a,b)=>{const ap=a.pinned?1:0;const bp=b.pinned?1:0;if(ap!==bp)return bp-ap;const at=a.pinned? (a.pinnedAt||a.ts||0) : (a.ts||0);const bt=b.pinned? (b.pinnedAt||b.ts||0) : (b.ts||0);return bt-at})}catch(e){return[]}}
-/* AURA_MEM_PIN */
-
+  function all(){try{return JSON.parse(localStorage.getItem(KEY)||"[]")}catch(e){return[]}}
   function summaries(){try{return JSON.parse(localStorage.getItem(SUMMARY_KEY)||"[]")}catch(e){return[]}}
   function saveSummaries(s){try{localStorage.setItem(SUMMARY_KEY,JSON.stringify(s.slice(-20)))}catch(e){}}
   function compact(oldFacts){
