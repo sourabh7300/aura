@@ -4306,11 +4306,8 @@ window.AuraMem=(function(){
   function saveSummaries(s){try{localStorage.setItem(SUMMARY_KEY,JSON.stringify(s.slice(-20)))}catch(e){}}
   function compact(oldFacts){
     if(!oldFacts.length) return;
-    const pinned=oldFacts.filter(f=>f.pinned);
-    const unpinned=oldFacts.filter(f=>!f.pinned);
-    if(!unpinned.length) return;
     const grouped={};
-    unpinned.forEach(f=>{const d=new Date(f.ts).toISOString().slice(0,7);(grouped[d]=grouped[d]||[]).push(f.text)});
+    oldFacts.forEach(f=>{const d=new Date(f.ts).toISOString().slice(0,7);(grouped[d]=grouped[d]||[]).push(f.text)});
     const summary=Object.entries(grouped).map(([month,texts])=>({
       month:month,
       count:texts.length,
@@ -4319,8 +4316,7 @@ window.AuraMem=(function(){
     }));
     const existing=summaries();
     saveSummaries([...existing,...summary]);
-    return pinned;
-  } /* AURA_MEM_PIN */
+  }
   function save(a){
     if(a.length>COMPACT_THRESHOLD){
       const toCompact=a.slice(0,a.length-MAX_FACTS);
