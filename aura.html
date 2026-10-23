@@ -26,8 +26,13 @@
 <script>
   (function(){
     // AURA_GEN_CHAT_SEARCH_PARSE_FIX — safe JSON parse with context, used by chat-search & all consumers
+    // AURA_GEN_CHAT_SEARCH_FIX — hardened parser prevents chat-search crashes on malformed responses
     window.safeJSONParse = function(str, fallback, ctx){
-      try{ return JSON.parse(str); }
+      if (str === undefined || str === null) { pushSys('[JSON parse' + (ctx ? ' ' + ctx : '') + '] null/undefined input'); return fallback; }
+      if (typeof str !== 'string') { pushSys('[JSON parse' + (ctx ? ' ' + ctx : '') + '] non-string input: ' + typeof str); return fallback; }
+      var trimmed = str.trim();
+      if (!trimmed) { pushSys('[JSON parse' + (ctx ? ' ' + ctx : '') + '] empty string'); return fallback; }
+      try { return JSON.parse(trimmed); }
       catch(e){ pushSys('[JSON parse' + (ctx ? ' ' + ctx : '') + '] ' + e.message); return fallback; }
     };
     try{
