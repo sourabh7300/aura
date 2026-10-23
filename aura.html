@@ -265,6 +265,15 @@ body.theme-classical .src-card .srch{color:#a08662}
 #tabbar button:hover{border-color:var(--line);color:var(--cy2)}
 #tabbar button.on{color:var(--cy2);border-color:var(--line);background:rgba(34,211,238,.14)}
 body:not([data-tab="system"]) #telemetry,body:not([data-tab="system"]) #syslog,body:not([data-tab="system"]) #memPanel{display:none}
+/* CHAT SEARCH ROW */
+#chatSearchRow{display:flex;gap:8px;margin-bottom:10px;padding:8px 10px;background:var(--panel);border:1px solid var(--line2);border-radius:8px;font-family:var(--mono);font-size:11px}
+#chatSearchInput{flex:1;background:var(--bg);border:1px solid var(--line);color:var(--fg);padding:6px 10px;border-radius:6px;outline:none}
+#chatSearchInput:focus{border-color:var(--cy2);box-shadow:0 0 0 2px rgba(34,211,238,.15)}
+#chatSearchCount{color:var(--dim);white-space:nowrap;align-self:center;font-size:10px}
+#chatSearchNext{background:none;border:1px solid var(--line2);color:var(--dim);border-radius:5px;padding:4px 8px;cursor:pointer;font-family:var(--mono);font-size:10px}
+#chatSearchNext:hover{color:var(--cy2);border-color:var(--cy2)}
+/* AURA_CHAT_SEARCH */
+
 #memPanel{position:fixed;left:22px;bottom:286px;width:225px;max-height:44vh;overflow:auto;z-index:9}
 #memSide .memrow{display:flex;gap:6px;align-items:flex-start;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.05)}
 #memSide .memrow .mtx{flex:1;font-family:var(--mono);font-size:9.5px;color:#7fb3c4;line-height:1.5;word-break:break-word}
