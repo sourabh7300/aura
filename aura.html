@@ -8041,6 +8041,11 @@ async function askCore(text0){
       if(fx&&String(fx).trim()&&!REFUSE_SHAPE.test(String(fx)))t=cleanAnswer(fx);
     }catch(e){}
   }
+  /* FINAL LANGUAGE GUARD — sab brains ek hi jagah converge karte hain, to owner ka
+     language-mirror order yahan enforce hota hai: Hinglish sawaal pe Devanagari ya
+     pure-English jawab aaya to yahin Hinglish rewrite ho jaata hai (extra call sirf
+     mismatch ke waqt, clean case me zero cost). */
+  t=await answerLangGuard(text,t);
   lastAnswer=t;lastSrc=src||"";window.__lastQ=text;
   try{const __u=JSON.parse(localStorage.getItem("aura_usage")||"{\"answers\":0}");__u.answers=(__u.answers||0)+1;localStorage.setItem("aura_usage",JSON.stringify(__u))}catch(e){}
   convoAdd("user",text);convoAdd("assistant",t);try{sessions.sync()}catch(e){}
