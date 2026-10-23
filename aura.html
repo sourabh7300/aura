@@ -5780,68 +5780,7 @@ const hist={
 };
 /* restore conversation history across reloads */
 try{(function(){const saved=hist.load("convo");if(saved&&saved.length){CONVO.push(...saved.slice(-CONVO_MAX));const lt=hist.load("lastTopic");if(lt)lastTopic=lt;setTimeout(()=>{try{pushSys("chat history restored — "+CONVO.length+" turns · topic: "+(lastTopic||"none"))}catch(e){}},1200)}})()}catch(e){}
-/* ---- chat search (AURA_CHAT_SEARCH) ----
-const chatSearch = {
-  query: "",
-  hits: [],
-  idx: -1,
-  allTexts() {
-    const out = [];
-    // history convo entries
-    const hist = JSON.parse(localStorage.getItem(HIST_KEY) || "{}");
-    (hist.convo || []).forEach((m, i) => {
-      if (m.content && m.content.trim()) {
-        out.push({src: "history", idx: i, role: m.role, text: String(m.content), ts: m.ts || Date.now()});
-      }
-    });
-    // saved sessions
-    try {
-      const sessKey = AuraAuth.getSessionsKey();
-      const sessions = JSON.parse(localStorage.getItem(sessKey) || "[]");
-      sessions.forEach((s, si) => {
-        (s.messages || []).forEach((m, mi) => {
-          if (m.content && m.content.trim()) {
-            out.push({src: "session", sessionId: s.id, sessionTitle: s.title, msgIdx: mi, role: m.role, text: String(m.content), ts: m.ts || s.updated || Date.now()});
-          }
-        });
-      });
-    } catch (e) {}
-    return out;
-  },
-  filter(q) {
-    this.query = q.trim().toLowerCase();
-    this.hits = [];
-    this.idx = -1;
-    if (!this.query) return this.hits;
-    const all = this.allTexts();
-    all.forEach(h => {
-      if (h.text.toLowerCase().includes(this.query)) {
-        const snippet = h.text.slice(0, 80).replace(/\n/g, " ");
-        const date = new Date(h.ts).toLocaleString();
-        this.hits.push({...h, snippet, date});
-      }
-    });
-    return this.hits;
-  },
-  countText() {
-    if (!this.query) return "";
-    const total = this.allTexts().length;
-    return this.hits.length + " of " + total + " hits";
-  },
-  next() {
-    if (!this.hits.length) return null;
-    this.idx = (this.idx + 1) % this.hits.length;
-    return this.hits[this.idx];
-  },
-  prev() {
-    if (!this.hits.length) return null;
-    this.idx = (this.idx - 1 + this.hits.length) % this.hits.length;
-    return this.hits[this.idx];
-  },
-  clear() { this.query = ""; this.hits = []; this.idx = -1; }
-};
-/* ---- chat sessions: ChatGPT-style conversation list (save/switch/rename/delete) ----
- */
+/* ---- chat sessions: ChatGPT-style conversation list (save/switch/rename/delete) ---- */
 const sessions={
   all(){try{return JSON.parse(localStorage.getItem(AuraAuth.getSessionsKey())||"[]")}catch(e){return[]}},
   write(list){try{localStorage.setItem(AuraAuth.getSessionsKey(),JSON.stringify(list))}catch(e){}},
