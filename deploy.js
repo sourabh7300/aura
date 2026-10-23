@@ -100,7 +100,12 @@ if (require.main !== module) {
   /* ---- 3. verify both live pages byte-exact ---- */
   if (DRY) { console.log("\n[dry-run] stopping before the live verifications."); return; }
   step("3/4 · verifying live pages (Pages builds take ~1 min)");
-  const localMd5 = md5(auraSrc);
+  /* CRLF-PROOF CHECK (23 Oct 2026): git's autocrlf rewrites the working copy's line
+     endings on rebase/checkout while Pages serves LF — raw md5 then NEVER matched and
+     the verify step kept crying "not updated" over a build that WAS live. Compare the
+     same build, not the same bytes-on-disk: normalize both sides to LF first. */
+  const contentMd5 = src => md5(Buffer.from(String(src).replace(/\r\n/g, "\n"), "utf8"));
+  const localMd5 = contentMd5(auraSrc);
   const check = async (name, url) => {
     for (let i = 0; i < 10; i++) {
       await new Promise(r => setTimeout(r, 15000));
@@ -108,7 +113,7 @@ if (require.main !== module) {
         const r = await fetch(url + "?nocache=" + Date.now(), { cache: "no-store" });
         if (r.ok) {
           const buf = Buffer.from(await r.arrayBuffer());
-          if (md5(buf) === localMd5) return console.log("✅ " + name + " → live, byte-identical to build " + hash + " (" + short(buf) + ")");
+          if (contentMd5(buf) === localMd5) return console.log("✅ " + name + " → live, content-identical to build " + hash + " (" + short(buf) + ")");
         }
       } catch (e) {}
       console.log("   " + name + ": waiting for Pages… (" + (i + 1) + "/10)");
