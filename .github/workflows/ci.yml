@@ -25,6 +25,7 @@ jobs:
           node aura.test.js
           node user-profile.test.js
           node voice-regress.test.js
+          node voice-mode.test.js
           node syntax-check.js
       - name: Live demo must answer HTTP 200
         run: |

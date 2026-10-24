@@ -17,7 +17,7 @@ hand-rolled 3D particle core, voice I/O, and a multi-brain cloud architecture.
 
 - 🤖 **Agent mode** — plans, searches the live web, reads sources, self-corrects, answers with citations
 - 🧠 **Thinking brain** — evidence-gathering + reasoning with numbered sources on every fact
-- 🎙 **Neural voice & hands-free conversation** — continuous listening, barge-in interrupt
+- 🎙 **Live voice mode (ChatGPT-style)** — one tap on **🎙 VOICE MODE** and you just talk: continuous listening, the answer comes in the language you spoke (Hindi / Hinglish / English), speak over her to interrupt, and the ear reopens itself after every stream timeout
 - 🖼 **Vision & imagination** — answers questions about photos and generates images from a description
 - 📚 **Document RAG** — uploads your PDFs and answers with file + page citations
 - 🧵 **Long-term memory** — remembers facts about you across sessions
