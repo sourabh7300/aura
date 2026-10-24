@@ -170,7 +170,21 @@ function sheSaid(text, ageMs) { sandbox.lastSpoken = text; sandbox.lastSpokeAt =
   ok(asked[asked.length - 1] === 'aur silver ka rate batao', 'a turn spoken while she thinks is still taken', asked[asked.length - 1]);
   sandbox.busy = false;
 
-  /* ---- 9. switching the mode off really closes the microphone ---- */
+  /* ---- 9. a dead mic or dead speech service must never loop forever ---- */
+  live.start();
+  const earDead = FakeSR.all[FakeSR.all.length - 1];
+  earDead.onerror({ error: 'audio-capture' });
+  ok(live.isOn() === false, 'a missing microphone switches the mode off instead of looping');
+  live.start();
+  const earFlaky = FakeSR.all[FakeSR.all.length - 1];
+  earFlaky.onerror({ error: 'network' });
+  earFlaky.onerror({ error: 'network' });
+  ok(live.isOn() === true, 'a speech-service hiccup is retried');
+  earFlaky.onerror({ error: 'network' });
+  ok(live.isOn() === false, 'three service failures in a row turn the mode off');
+
+  /* ---- 10. switching the mode off really closes the microphone ---- */
+  live.start();
   const lastEar = FakeSR.all[FakeSR.all.length - 1];
   live.stop();
   await sleep(20);
