@@ -74,6 +74,13 @@ if (require.main !== module) {
   try {
     runQ("git clone --depth 1 " + PORTFOLIO_REPO + " " + JSON.stringify(tmp));
     fs.writeFileSync(path.join(tmp, "aura.html"), auraSrc);
+    /* /aura/ is the advertised standalone URL. The aura repo has its own Pages, but a
+       project Pages site can go dark on its own (settings/plan/build) while the root
+       user site keeps serving — so the same build is mirrored here too and the URL
+       can never 404 again. /aura/ lands on index.html, which IS the app. */
+    fs.mkdirSync(path.join(tmp, "aura"), { recursive: true });
+    fs.writeFileSync(path.join(tmp, "aura", "aura.html"), auraSrc);
+    fs.writeFileSync(path.join(tmp, "aura", "index.html"), auraSrc);
     fs.mkdirSync(path.join(tmp, "aura-backend"), { recursive: true });
     const copied = [];
     for (const f of backendFiles()) {
@@ -85,7 +92,7 @@ if (require.main !== module) {
       if (/\.js$/.test(f) && !backendFiles().includes(f)) { fs.unlinkSync(path.join(tmp, "aura-backend", f)); copied.push("-" + f); }
     }
     console.log("mirrored backend: " + copied.join(", "));
-    run("git add aura.html aura-backend", tmp);
+    run("git add aura.html aura aura-backend", tmp);
     if (DRY) { console.log("[dry-run] staged in " + tmp + " — inspect with: git -C \"" + tmp + "\" status --short"); console.log("[dry-run] would: commit + push origin HEAD:main (portfolio)"); }
     else {
       try {
