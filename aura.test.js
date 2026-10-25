@@ -74,6 +74,36 @@ suite("aura.html script blocks parse (whole-app gate)", () => {
   });
 });
 
+/* ================= 1a. IDENTITY QUESTIONS NEVER HIJACKED BY THE '?' GATE =================
+   Regression (owner report): a trailing question mark forced knowledge=true for every
+   question, so "what can you do?" and "who are you?" skipped the local core and came back
+   as a Wikipedia extract. PERSONAL_Q now keeps self/capability questions on the persona lane. */
+suite("PERSONAL_Q · identity questions stay out of the research lane", () => {
+  const m = src.match(/const PERSONAL_Q=(\/[\s\S]*?\/i);/);
+  if (!m) return ok("PERSONAL_Q is defined", false);
+  const P = eval("(" + m[1] + ")");
+  ["what can you do?", "What can you do", "who are you?", "what are your features?",
+   "what is your name?", "who built you?", "who made you", "are you real?", "are you human",
+   "are you an AI?", "tell me about yourself", "introduce yourself", "how do you work?",
+   "Hey, who are you?"].forEach(q => ok("personal: " + q, P.test(q)));
+  ["what is quantum computing?", "who is the prime minister of India?", "why is the sky blue?",
+   "what is the capital of France?"].forEach(q => ok("NOT personal: " + q, !P.test(q)));
+  ok("? gate skips personal questions", /!personal\.test\(q\)&&!PERSONAL_Q\.test\(q\)/.test(src));
+});
+
+suite("KB_OVER · identity answers are local, complete and owner-grounded", () => {
+  const m = src.match(/function KB_OVER\(k\)\{[\s\S]*?\n\}/);
+  if (!m) return ok("KB_OVER is defined", false);
+  const KB = eval("(function(){var persona=function(){return 'aura'};var PERSONAS={jarvis:{who:'ZEUS'}};" + m[0] + ";return KB_OVER})()");
+  const cap = KB("what can you do");
+  ok("capabilities answered locally", typeof cap === "string" && cap.length > 80);
+  ok("capabilities name real features", /research|voice|Hindi/i.test(cap));
+  ok("name question", /AURA/.test(KB("what is your name") || ""));
+  ok("builder question credits Sourabh", /Sourabh Singh/.test(KB("who built you") || ""));
+  ok("real/human question answered", /human/i.test(KB("are you real") || ""));
+  ok("unknown key returns null", KB("what is the capital of france") === null);
+});
+
 /* ================= 1b. ALWAYS-FRESH WEB LANE (stale-knowledge bug, 13 Oct 2026) =================
    Regression: the thinking brain used to pull live web context only when a keyword regex
    (wantsFresh) matched — "nvidia ke bare me batao" missed it and the model answered from its
