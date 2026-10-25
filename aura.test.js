@@ -104,6 +104,18 @@ suite("KB_OVER · identity answers are local, complete and owner-grounded", () =
   ok("unknown key returns null", KB("what is the capital of france") === null);
 });
 
+/* ================= 1c. CORS COVERS THE METHODS THE APP REALLY USES =================
+   Regression (live console): PUT /v1/userdata preflight failed with
+   "Method PUT is not allowed by Access-Control-Allow-Methods", so cloud sync of chats,
+   notes and settings silently died on the deployed site. */
+suite("backend CORS · PUT/DELETE allowed for cloud sync", () => {
+  const m = srv.match(/Access-Control-Allow-Methods[^\n]*/g) || [];
+  ok("both CORS blocks set the header", m.length >= 2);
+  ok("covers PUT", m.every(x => /PUT/.test(x)));
+  ok("covers DELETE", m.every(x => /DELETE/.test(x)));
+  ok("still allows GET/POST/OPTIONS", m.every(x => /GET/.test(x) && /POST/.test(x) && /OPTIONS/.test(x)));
+});
+
 /* ================= 1b. ALWAYS-FRESH WEB LANE (stale-knowledge bug, 13 Oct 2026) =================
    Regression: the thinking brain used to pull live web context only when a keyword regex
    (wantsFresh) matched — "nvidia ke bare me batao" missed it and the model answered from its
