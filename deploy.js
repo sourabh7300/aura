@@ -74,10 +74,10 @@ if (require.main !== module) {
   try {
     runQ("git clone --depth 1 " + PORTFOLIO_REPO + " " + JSON.stringify(tmp));
     fs.writeFileSync(path.join(tmp, "aura.html"), auraSrc);
-    /* /aura/ is the advertised standalone URL. The aura repo has its own Pages, but a
-       project Pages site can go dark on its own (settings/plan/build) while the root
-       user site keeps serving — so the same build is mirrored here too and the URL
-       can never 404 again. /aura/ lands on index.html, which IS the app. */
+    /* /aura/ is the advertised standalone URL. This source repo is private, so it has
+       no Pages site of its own: everything the public sees is served from THIS repo.
+       /aura/ lands on index.html, which IS the app — and /aura/aura.html is kept
+       byte-identical so both advertised paths stay in sync. */
     fs.mkdirSync(path.join(tmp, "aura"), { recursive: true });
     fs.writeFileSync(path.join(tmp, "aura", "aura.html"), auraSrc);
     fs.writeFileSync(path.join(tmp, "aura", "index.html"), auraSrc);
