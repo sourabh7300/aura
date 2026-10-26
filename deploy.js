@@ -81,6 +81,13 @@ if (require.main !== module) {
     fs.mkdirSync(path.join(tmp, "aura"), { recursive: true });
     fs.writeFileSync(path.join(tmp, "aura", "aura.html"), auraSrc);
     fs.writeFileSync(path.join(tmp, "aura", "index.html"), auraSrc);
+    /* the page registers sw.js and links manifest.webmanifest RELATIVELY, so both
+       have to exist next to it — without them offline mode silently 404s. */
+    for (const f of ["sw.js", "manifest.webmanifest"]) {
+      const src = path.join(ROOT, f);
+      if (fs.existsSync(src)) fs.copyFileSync(src, path.join(tmp, "aura", f));
+      else console.log("⚠️  missing " + f + " — the mirrored /aura/ will 404 it");
+    }
     fs.mkdirSync(path.join(tmp, "aura-backend"), { recursive: true });
     const copied = [];
     for (const f of backendFiles()) {
