@@ -3627,8 +3627,6 @@ window.setPerfMode=function(m){
   slog(m==="saver"?"⚡ battery saver ON — 30fps, lighter core, no blur":"⚡ performance mode restored — full core at "+FPS_GOAL()+"fps");
   $("tPts")&&document.body.getAttribute("data-tab")==="system"&&($("tPts").textContent=N+" / "+NMAX);
 };
-/* AURA_GEN_MEMORY_COMPACTION_OPTIMIZE */
-
 requestAnimationFrame(frame);
 
 /* ---------------- audio blips ---------------- */
