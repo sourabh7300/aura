@@ -3619,6 +3619,81 @@ function frame(now){
   drawScan(now/1000);
   if(mode==="thinking"&&modeT>40&&!window.__researching&&!window.__thinking){setMode("idle");pushSys("uplink timeout — answering locally");}
 }
+
+/* AURA_GEN_MEMORY_COMPACTION_OPTIMIZE — tiered compaction for large knowledge bases */
+const MEM_COMPACTION = {
+  tiers: [
+    {name:"quantize",   threshold: 50*1024*1024,  ratio:0.25, fn:vec=>quantizeVec(vec,4)},
+    {name:"attention",  threshold: 200*1024*1024, ratio:0.10, fn:vec=>attentionPrune(vec,0.15)},
+    {name:"context",    threshold: 500*1024*1024, ratio:0.05, fn:vec=>contextWindow(vec,4096)}
+  ],
+  stats: {runs:0, bytesIn:0, bytesOut:0, lastMs:0},
+  schedule: null,
+  
+  init(){
+    if(this.schedule) return;
+    this.schedule = setInterval(()=>this.run(), 5*60*1000);
+    slog("🧠 memory-compaction scheduler started (5min interval)");
+  },
+  
+  async run(){
+    const kb = window.__knowledgeBase || [];
+    if(!kb.length) return;
+    const t0 = performance.now();
+    let totalIn = 0, totalOut = 0;
+    for(const entry of kb){
+      if(!entry.vector) continue;
+      totalIn += entry.vector.byteLength || JSON.stringify(entry.vector).length;
+      for(const tier of this.tiers){
+        if(totalIn > tier.threshold){
+          entry.vector = tier.fn(entry.vector);
+          break;
+        }
+      }
+      totalOut += entry.vector.byteLength || JSON.stringify(entry.vector).length;
+    }
+    this.stats.runs++; this.stats.bytesIn += totalIn; this.stats.bytesOut += totalOut;
+    this.stats.lastMs = performance.now() - t0;
+    const pct = totalIn ? Math.round((1-totalOut/totalIn)*100) : 0;
+    pushSys(`🧠 compaction run #${this.stats.runs}: ${(totalIn/1024/1024).toFixed(1)}→${(totalOut/1024/1024).toFixed(1)} MB (${pct}% saved, ${this.stats.lastMs.toFixed(1)}ms)`);
+    this.updateSysTab();
+  },
+  
+  updateSysTab(){
+    const el = $("memCompactionStats");
+    if(el){
+      el.textContent = `runs:${this.stats.runs}  in:${(this.stats.bytesIn/1024/1024).toFixed(1)}MB  out:${(this.stats.bytesOut/1024/1024).toFixed(1)}MB  last:${this.stats.lastMs.toFixed(1)}ms`;
+    }
+  }
+};
+
+function quantizeVec(vec, bits=4){
+  const arr = vec instanceof Float32Array ? vec : new Float32Array(vec);
+  const min = Math.min(...arr), max = Math.max(...arr);
+  const scale = (max-min)/(Math.pow(2,bits)-1) || 1;
+  const q = new Uint8Array(arr.length);
+  for(let i=0;i<arr.length;i++) q[i] = Math.round((arr[i]-min)/scale);
+  return {q, min, max, scale, bits, _origLen:arr.length};
+}
+
+function attentionPrune(vec, keepRatio=0.15){
+  const arr = vec instanceof Float32Array ? vec : new Float32Array(vec);
+  const idx = [...arr.keys()].sort((a,b)=>Math.abs(arr[b])-Math.abs(arr[a]));
+  const keep = Math.max(1, Math.floor(arr.length*keepRatio));
+  const pruned = new Float32Array(keep);
+  for(let i=0;i<keep;i++) pruned[i] = arr[idx[i]];
+  return {pruned, indices:idx.slice(0,keep), _origLen:arr.length};
+}
+
+function contextWindow(vec, maxTokens=4096){
+  const arr = vec instanceof Float32Array ? vec : new Float32Array(vec);
+  if(arr.length <= maxTokens) return arr;
+  const stride = Math.ceil(arr.length/maxTokens);
+  const win = new Float32Array(maxTokens);
+  for(let i=0,j=0;i<arr.length && j<maxTokens;i+=stride,j++) win[j]=arr[i];
+  return {window:win, stride, _origLen:arr.length};
+}
+
 /* PERF: battery saver voice command — drops fps to 30, particles to 100, kills blur */
 window.setPerfMode=function(m){
   window.__perfMode=m;document.body.classList.toggle("perf-saver",m==="saver");
