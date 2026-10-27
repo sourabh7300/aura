@@ -3596,6 +3596,51 @@ function drawFog(){
 let last=performance.now(),fpsN=0,fpsT=0,fpsVal=0,bootT0=performance.now();
 /* PERF governor: 60fps desktop · 30fps phones/saver/filtered-hue · zero work on hidden tabs */
 const FPS_GOAL=()=>(window.__perfMode==="saver"||__LOWEND||__battLow||window.__hueHeavy)?30:60;
+
+/* AURA_GEN_MEMORY_COMPACTION_OPTIMIZE — memory compaction for large knowledge bases */
+const MEM_COMPACTION = (() => {
+  let lastCompact = 0;
+  const INTERVAL_MS = 30000; // 30s between compaction checks
+  const PRESSURE_THRESHOLD = 0.85; // 85% heap usage triggers compaction
+  
+  function getHeapUsage() {
+    if (!performance.memory) return 0;
+    return performance.memory.usedJSHeapSize / performance.memory.jsHeapSizeLimit;
+  }
+  
+  function compact() {
+    const now = performance.now();
+    if (now - lastCompact < INTERVAL_MS && getHeapUsage() < PRESSURE_THRESHOLD) return;
+    lastCompact = now;
+    
+    // 1. Clear expired cache entries (weak-ref friendly)
+    if (window.__knowledgeCache) {
+      const cutoff = now - 3600000; // 1hr TTL
+      for (const [k, v] of window.__knowledgeCache.entries()) {
+        if (v.ts < cutoff) window.__knowledgeCache.delete(k);
+      }
+    }
+    
+    // 2. Trim oversized arrays in message history
+    if (window.__msgHistory && window.__msgHistory.length > 500) {
+      window.__msgHistory = window.__msgHistory.slice(-400);
+    }
+    
+    // 3. Release detached DOM refs in hologram pools
+    if (window.__hologramPools) {
+      for (const pool of Object.values(window.__hologramPools)) {
+        if (pool.length > 200) pool.length = 200;
+      }
+    }
+    
+    // 4. Hint GC via globalThis.gc if exposed (devtools)
+    if (typeof globalThis.gc === 'function') globalThis.gc();
+    
+    slog(`🧹 memory compaction: heap ${Math.round(getHeapUsage()*100)}% → trimmed caches/history/pools`);
+  }
+  
+  return { compact, getHeapUsage };
+})();
 function frame(now){
   requestAnimationFrame(frame);
   if(document.hidden){last=now;return} /* background tab — no GPU, no battery */
