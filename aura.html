@@ -3601,6 +3601,33 @@ function drawFog(){
 }
 
 /* ---------------- render loop ---------------- */
+/* AURA_GEN_MEMORY_COMPACTION_OPTIMIZE */
+function compactMemory(knowledgeBase) {
+  // Analyze the knowledge base and identify redundant data
+  const redundantData = identifyRedundantData(knowledgeBase);
+  // Remove redundant data from the knowledge base
+  const compactedKnowledgeBase = removeRedundantData(knowledgeBase, redundantData);
+  return compactedKnowledgeBase;
+}
+
+function identifyRedundantData(knowledgeBase) {
+  // Implement logic to identify redundant data
+  // This could involve checking for duplicate entries, outdated information, or less important data
+  // For simplicity, we'll assume that any data with a timestamp older than a certain threshold is redundant
+  const threshold = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // 30 days ago
+  const redundantData = [];
+  for (const entry of knowledgeBase) {
+    if (new Date(entry.timestamp) < threshold) {
+      redundantData.push(entry);
+    }
+  }
+  return redundantData;
+}
+
+function removeRedundantData(knowledgeBase, redundantData) {
+  // Implement logic to remove redundant data from the knowledge base
+  return knowledgeBase.filter(entry => !redundantData.includes(entry));
+}
 let last=performance.now(),fpsN=0,fpsT=0,fpsVal=0,bootT0=performance.now();
 /* PERF governor: 60fps desktop · 30fps phones/saver/filtered-hue · zero work on hidden tabs */
 const FPS_GOAL=()=>(window.__perfMode==="saver"||__LOWEND||__battLow||window.__hueHeavy)?30:60;
