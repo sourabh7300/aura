@@ -3621,6 +3621,38 @@ window.setPerfMode=function(m){
   slog(m==="saver"?"⚡ battery saver ON — 30fps, lighter core, no blur":"⚡ performance mode restored — full core at "+FPS_GOAL()+"fps");
   $("tPts")&&document.body.getAttribute("data-tab")==="system"&&($("tPts").textContent=N+" / "+NMAX);
 };
+
+/* AURA_GEN_MEMORY_COMPACTION_OPTIMIZE — incremental, tiered, quantized compaction for large KBs */
+const MEM_COMPACT = {
+  tiers: { hot: [], warm: [], cold: [] },
+  maxHot: 5000, maxWarm: 20000,
+  quantize: v => new Float32Array(v.map(x => Math.round(x * 255) / 255)),
+  dequantize: v => Array.from(v, x => x),
+  score: (entry, now) => (entry.hits || 1) * Math.exp(-(now - (entry.ts || now)) / 864e5),
+  promote: (entry, from, to) => { MEM_COMPACT.tiers[from] = MEM_COMPACT.tiers[from].filter(e => e !== entry); MEM_COMPACT.tiers[to].push(entry); },
+  compact: () => {
+    const now = Date.now();
+    [...MEM_COMPACT.tiers.hot, ...MEM_COMPACT.tiers.warm, ...MEM_COMPACT.tiers.cold]
+      .sort((a,b) => MEM_COMPACT.score(b,now) - MEM_COMPACT.score(a,now))
+      .forEach((e,i) => {
+        if (i < MEM_COMPACT.maxHot) MEM_COMPACT.promote(e, e.tier, 'hot');
+        else if (i < MEM_COMPACT.maxHot + MEM_COMPACT.maxWarm) MEM_COMPACT.promote(e, e.tier, 'warm');
+        else MEM_COMPACT.promote(e, e.tier, 'cold');
+      });
+    MEM_COMPACT.tiers.cold.forEach(e => { e.vec = MEM_COMPACT.quantize(e.vec); e.quantized = true; });
+    slog(`🧠 memory compaction: hot=${MEM_COMPACT.tiers.hot.length} warm=${MEM_COMPACT.tiers.warm.length} cold=${MEM_COMPACT.tiers.cold.length}`);
+  },
+  schedule: () => { if (!window.__compactTimer) window.__compactTimer = setInterval(MEM_COMPACT.compact, 300000); },
+  add: (entry) => { entry.tier = 'hot'; entry.ts = Date.now(); entry.hits = 1; MEM_COMPACT.tiers.hot.push(entry); if (MEM_COMPACT.tiers.hot.length > MEM_COMPACT.maxHot) MEM_COMPACT.compact(); },
+  get: (id) => {
+    for (const t of ['hot','warm','cold']) {
+      const idx = MEM_COMPACT.tiers[t].findIndex(e => e.id === id);
+      if (idx !== -1) { const e = MEM_COMPACT.tiers[t][idx]; e.hits++; e.ts = Date.now(); return e.quantized ? MEM_COMPACT.dequantize(e.vec) : e.vec; }
+    }
+    return null;
+  }
+};
+MEM_COMPACT.schedule();
 requestAnimationFrame(frame);
 
 /* ---------------- audio blips ---------------- */
