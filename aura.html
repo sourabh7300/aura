@@ -3621,6 +3621,53 @@ window.setPerfMode=function(m){
   slog(m==="saver"?"⚡ battery saver ON — 30fps, lighter core, no blur":"⚡ performance mode restored — full core at "+FPS_GOAL()+"fps");
   $("tPts")&&document.body.getAttribute("data-tab")==="system"&&($("tPts").textContent=N+" / "+NMAX);
 };
+
+/* AURA_GEN_MEMORY_COMPACTION_OPTIMIZE — attention-based memory compaction for large knowledge bases */
+const MEM_COMPACT = {
+  maxEntries: 50000,
+  compressThreshold: 0.75,
+  quantizationBits: 4,
+  attentionWindow: 2048,
+  store: new Map(),
+  accessLog: [],
+  
+  add(key, vector, meta={}) {
+    if(this.store.size >= this.maxEntries) this.compact();
+    this.store.set(key, {v: vector, m: meta, t: Date.now(), a: 1});
+    this.accessLog.push(key);
+    if(this.accessLog.length > this.attentionWindow) this.accessLog.shift();
+  },
+  
+  get(key) {
+    const e = this.store.get(key);
+    if(e) { e.a++; e.t = Date.now(); return e.v; }
+  },
+  
+  compact() {
+    const now = Date.now();
+    const scores = [...this.store.entries()].map(([k,e]) => [
+      k,
+      e.a * Math.exp(-(now - e.t) / 864e5) * (this.accessLog.includes(k) ? 1.5 : 0.3)
+    ]);
+    scores.sort((a,b) => b[1] - a[1]);
+    const keep = new Set(scores.slice(0, Math.floor(this.maxEntries * this.compressThreshold)).map(s => s[0]));
+    for(const [k] of this.store) if(!keep.has(k)) this.store.delete(k);
+    if(window.__quantize) this.quantize();
+    pushSys(`🧠 memory compacted: ${this.store.size} entries retained`);
+  },
+  
+  quantize() {
+    const scale = (1 << this.quantizationBits) - 1;
+    for(const [,e] of this.store) {
+      if(Array.isArray(e.v)) e.v = e.v.map(x => Math.round(clamp(x, -1, 1) * scale) / scale);
+    }
+  },
+  
+  export() { return [...this.store.entries()].map(([k,e]) => [k, e.v, e.m]); },
+  
+  import(data) { this.store.clear(); data.forEach(([k,v,m]) => this.store.set(k, {v, m, t: Date.now(), a: 1})); }
+};
+window.MEM_COMPACT = MEM_COMPACT;
 requestAnimationFrame(frame);
 
 /* ---------------- audio blips ---------------- */
