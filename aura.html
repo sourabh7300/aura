@@ -3627,6 +3627,228 @@ window.setPerfMode=function(m){
   slog(m==="saver"?"⚡ battery saver ON — 30fps, lighter core, no blur":"⚡ performance mode restored — full core at "+FPS_GOAL()+"fps");
   $("tPts")&&document.body.getAttribute("data-tab")==="system"&&($("tPts").textContent=N+" / "+NMAX);
 };
+
+/* AURA_GEN_MEMORY_COMPACTION_OPTIMIZE — MemoryCompactor: incremental, compressed, streaming for large KBs */
+class MemoryCompactor {
+  constructor(opts={}) {
+    this.chunkSize = opts.chunkSize || 64*1024;        // 64KB chunks
+    this.maxChunks = opts.maxChunks || 1024;           // 64MB default cap
+    this.compressThreshold = opts.compressThreshold || 1024; // compress >1KB
+    this.workBudget = opts.workBudget || 4;            // ms per frame
+    this.chunks = new Map();                           // id -> {data, meta, dirty}
+    this.index = new Map();                            // key -> chunkId
+    this.freeList = [];                                // recycled chunk ids
+    this.nextId = 1;
+    this.stats = {reads:0, writes:0, compactions:0, bytesSaved:0, timeSpent:0};
+    this._worker = null;
+    this._pending = [];
+  }
+  
+  // Fast path: small values stored inline, large values compressed
+  _encode(val) {
+    const str = typeof val === 'string' ? val : JSON.stringify(val);
+    if (str.length <= this.compressThreshold) return {v:str, c:false};
+    // Simple LZ-style compression for repeated patterns (good for JSON/knowledge)
+    const compressed = this._lzCompress(str);
+    return compressed.length < str.length ? {v:compressed, c:true} : {v:str, c:false};
+  }
+  
+  _decode(entry) {
+    if (!entry.c) return entry.v;
+    return this._lzDecompress(entry.v);
+  }
+  
+  // Lightweight LZ77-ish compression (no external deps)
+  _lzCompress(input) {
+    let out = '', i = 0, window = 4096;
+    while (i < input.length) {
+      let bestLen = 0, bestDist = 0;
+      const start = Math.max(0, i - window);
+      for (let j = start; j < i; j++) {
+        let len = 0;
+        while (i + len < input.length && input[j + len] === input[i + len]) len++;
+        if (len > bestLen && len >= 3) { bestLen = len; bestDist = i - j; }
+      }
+      if (bestLen >= 3) {
+        out += String.fromCharCode(0xF000 | (bestDist >> 4)) + String.fromCharCode(0xF000 | ((bestDist & 0xF) << 4) | (bestLen - 3));
+        i += bestLen;
+      } else {
+        out += input[i++];
+      }
+    }
+    return out;
+  }
+  
+  _lzDecompress(input) {
+    let out = '', i = 0;
+    while (i < input.length) {
+      const c = input.charCodeAt(i);
+      if (c >= 0xF000) {
+        const c2 = input.charCodeAt(i+1);
+        const dist = ((c & 0xFFF) << 4) | ((c2 >> 4) & 0xF);
+        const len = (c2 & 0xF) + 3;
+        const start = out.length - dist;
+        out += out.slice(start, start + len);
+        i += 2;
+      } else {
+        out += input[i++];
+      }
+    }
+    return out;
+  }
+  
+  // Allocate or reuse a chunk
+  _allocChunk() {
+    if (this.freeList.length) return this.freeList.pop();
+    if (this.chunks.size >= this.maxChunks) this._evictLRU();
+    return this.nextId++;
+  }
+  
+  _evictLRU() {
+    // Simple LRU: find oldest unused chunk
+    let oldest = null, oldestTime = Infinity;
+    for (const [id, chunk] of this.chunks) {
+      if (!chunk.dirty && chunk.lastAccess < oldestTime) {
+        oldestTime = chunk.lastAccess; oldest = id;
+      }
+    }
+    if (oldest) { this.chunks.delete(oldest); this.freeList.push(oldest); }
+  }
+  
+  // Public API
+  set(key, value) {
+    const encoded = this._encode(value);
+    const size = encoded.v.length;
+    let chunkId = this.index.get(key);
+    
+    if (chunkId && this.chunks.has(chunkId)) {
+      const chunk = this.chunks.get(chunkId);
+      const oldSize = chunk.data.length;
+      chunk.data = encoded.v;
+      chunk.meta = {key, size, compressed: encoded.c, updated: Date.now()};
+      chunk.dirty = true;
+      this.stats.bytesSaved += oldSize - size;
+    } else {
+      chunkId = this._allocChunk();
+      this.chunks.set(chunkId, {
+        data: encoded.v,
+        meta: {key, size, compressed: encoded.c, created: Date.now(), updated: Date.now()},
+        dirty: true,
+        lastAccess: Date.now()
+      });
+      this.index.set(key, chunkId);
+    }
+    this.stats.writes++;
+    return chunkId;
+  }
+  
+  get(key) {
+    const chunkId = this.index.get(key);
+    if (!chunkId) return undefined;
+    const chunk = this.chunks.get(chunkId);
+    if (!chunk) { this.index.delete(key); return undefined; }
+    chunk.lastAccess = Date.now();
+    this.stats.reads++;
+    return this._decode({v: chunk.data, c: chunk.meta.compressed});
+  }
+  
+  has(key) { return this.index.has(key); }
+  delete(key) {
+    const chunkId = this.index.get(key);
+    if (!chunkId) return false;
+    this.chunks.delete(chunkId);
+    this.freeList.push(chunkId);
+    this.index.delete(key);
+    return true;
+  }
+  
+  // Incremental compaction - runs in small time slices
+  compact(timeBudget = this.workBudget) {
+    const start = performance.now();
+    let compacted = 0;
+    
+    for (const [id, chunk] of this.chunks) {
+      if (performance.now() - start > timeBudget) break;
+      if (!chunk.dirty) continue;
+      
+      // Re-compress if beneficial
+      const decoded = this._decode({v: chunk.data, c: chunk.meta.compressed});
+      const reEncoded = this._encode(decoded);
+      if (reEncoded.v.length < chunk.data.length) {
+        this.stats.bytesSaved += chunk.data.length - reEncoded.v.length;
+        chunk.data = reEncoded.v;
+        chunk.meta.compressed = reEncoded.c;
+        chunk.meta.size = reEncoded.v.length;
+      }
+      chunk.dirty = false;
+      chunk.meta.updated = Date.now();
+      compacted++;
+    }
+    
+    this.stats.compactions++;
+    this.stats.timeSpent += performance.now() - start;
+    return compacted;
+  }
+  
+  // Background compaction via requestIdleCallback
+  startBackgroundCompaction() {
+    if (this._worker) return;
+    const tick = (deadline) => {
+      while (deadline.timeRemaining() > 0 && this.chunks.size > 0) {
+        this.compact(1);
+      }
+      this._worker = requestIdleCallback(tick, {timeout: 5000});
+    };
+    this._worker = requestIdleCallback(tick, {timeout: 5000});
+  }
+  
+  stopBackgroundCompaction() {
+    if (this._worker) { cancelIdleCallback(this._worker); this._worker = null; }
+  }
+  
+  // Serialization for persistence
+  serialize() {
+    const chunks = [];
+    for (const [id, chunk] of this.chunks) {
+      chunks.push({id, ...chunk});
+    }
+    return JSON.stringify({chunks, index: [...this.index.entries()], nextId: this.nextId});
+  }
+  
+  static deserialize(json, opts) {
+    const compactor = new MemoryCompactor(opts);
+    const {chunks, index, nextId} = JSON.parse(json);
+    for (const c of chunks) {
+      compactor.chunks.set(c.id, {data: c.data, meta: c.meta, dirty: false, lastAccess: c.lastAccess || Date.now()});
+    }
+    compactor.index = new Map(index);
+    compactor.nextId = nextId;
+    return compactor;
+  }
+  
+  getStats() { return {...this.stats, chunks: this.chunks.size, indexSize: this.index.size};
+  }
+  
+  clear() {
+    this.chunks.clear();
+    this.index.clear();
+    this.freeList = [];
+    this.nextId = 1;
+  }
+}
+
+// Global instance for knowledge base
+window.__memoryCompactor = new MemoryCompactor({chunkSize: 64*1024, maxChunks: 2048});
+
+// Periodic compaction hook into render loop (low priority)
+window.__compactionTick = 0;
+function _compactionHook() {
+  if (++window.__compactionTick % 120 === 0) { // every ~2s at 60fps
+    window.__memoryCompactor.compact(2);
+  }
+}
+
+/* AURA_GEN_MEMORY_COMPACTION_OPTIMIZE
 requestAnimationFrame(frame);
 
 /* ---------------- audio blips ---------------- */
