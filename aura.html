@@ -3627,6 +3627,65 @@ window.setPerfMode=function(m){
   slog(m==="saver"?"⚡ battery saver ON — 30fps, lighter core, no blur":"⚡ performance mode restored — full core at "+FPS_GOAL()+"fps");
   $("tPts")&&document.body.getAttribute("data-tab")==="system"&&($("tPts").textContent=N+" / "+NMAX);
 };
+
+/* AURA_GEN_MEMORY_COMPACTION_OPTIMIZE — incremental compaction for large knowledge bases */
+const MEM_COMPACT = {
+  batchSize: 5000,
+  maxBatchTime: 16,
+  compressionRatio: 0.5,
+  queue: [],
+  working: false,
+  stats: { compacted: 0, freed: 0, cycles: 0 }
+};
+
+function scheduleCompaction(data, priority = 0) {
+  MEM_COMPACT.queue.push({ data, priority, ts: Date.now() });
+  MEM_COMPACT.queue.sort((a, b) => b.priority - a.priority);
+  if (!MEM_COMPACT.working) requestAnimationFrame(runCompaction);
+}
+
+async function runCompaction() {
+  MEM_COMPACT.working = true;
+  const start = performance.now();
+  while (MEM_COMPACT.queue.length && performance.now() - start < MEM_COMPACT.maxBatchTime) {
+    const item = MEM_COMPACT.queue.shift();
+    if (!item) continue;
+    const compacted = compactKnowledgeBase(item.data);
+    MEM_COMPACT.stats.compacted += item.data.length || 0;
+    MEM_COMPACT.stats.freed += (item.data.length || 0) - (compacted.length || 0);
+    MEM_COMPACT.stats.cycles++;
+    if (item.onComplete) item.onComplete(compacted);
+  }
+  MEM_COMPACT.working = false;
+  if (MEM_COMPACT.queue.length) requestAnimationFrame(runCompaction);
+}
+
+function compactKnowledgeBase(kb) {
+  if (!kb || !kb.length) return kb;
+  const seen = new Map();
+  const result = [];
+  for (const entry of kb) {
+    const key = entry.id || JSON.stringify(entry).slice(0, 128);
+    if (seen.has(key)) {
+      const existing = seen.get(key);
+      existing.weight = (existing.weight || 1) + (entry.weight || 1);
+      existing.updated = Date.now();
+    } else {
+      seen.set(key, { ...entry, weight: entry.weight || 1, updated: Date.now() });
+    }
+  }
+  for (const [, v] of seen) result.push(v);
+  result.sort((a, b) => (b.weight || 1) - (a.weight || 1));
+  const keep = Math.max(1, Math.floor(result.length * MEM_COMPACT.compressionRatio));
+  return result.slice(0, keep);
+}
+
+function getCompactionStats() {
+  return { ...MEM_COMPACT.stats, queueLength: MEM_COMPACT.queue.length };
+}
+
+window.scheduleCompaction = scheduleCompaction;
+window.getCompactionStats = getCompactionStats;
 requestAnimationFrame(frame);
 
 /* ---------------- audio blips ---------------- */
