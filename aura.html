@@ -3627,68 +3627,6 @@ window.setPerfMode=function(m){
   slog(m==="saver"?"⚡ battery saver ON — 30fps, lighter core, no blur":"⚡ performance mode restored — full core at "+FPS_GOAL()+"fps");
   $("tPts")&&document.body.getAttribute("data-tab")==="system"&&($("tPts").textContent=N+" / "+NMAX);
 };
-
-/* AURA_GEN_MEMORY_COMPACTION_OPTIMIZE — knowledge-base compactor with quantization + attention dedup */
-window.__kbCompactor = (function(){
-  let queue = [], running = false, lastRun = 0;
-  const QUANTIZE_BITS = 4; // 4-bit quantization per TurboQuant extreme compression
-  const ATTENTION_THRESHOLD = 0.85; // MIT Attention Matching 50x compression principle
-  const MAX_BATCH = 5000; // chunk size for incremental compaction (Ancestry Iceberg partitioning)
-  
-  function quantizeVec(vec){
-    const min=Math.min(...vec), max=Math.max(...vec), scale=(max-min)/((1<<QUANTIZE_BITS)-1);
-    return vec.map(v=>Math.round((v-min)/scale));
-  }
-  function dequantizeVec(qvec, min, max){
-    const scale=(max-min)/((1<<QUANTIZE_BITS)-1);
-    return qvec.map(q=>q*scale+min);
-  }
-  function attentionDedup(entries){
-    // simple cosine-similarity dedup for attention vectors
-    const kept=[];
-    for(const e of entries){
-      let dup=false;
-      for(const k of kept){
-        let dot=0, na=0, nb=0;
-        for(let i=0;i<e.vec.length;i++){dot+=e.vec[i]*k.vec[i]; na+=e.vec[i]*e.vec[i]; nb+=k.vec[i]*k.vec[i];}
-        const sim=dot/Math.sqrt(na*nb);
-        if(sim>ATTENTION_THRESHOLD){dup=true; break;}
-      }
-      if(!dup) kept.push(e);
-    }
-    return kept;
-  }
-  function compactBatch(batch){
-    // quantize embeddings, dedup by attention, return compacted batch
-    const withMeta = batch.map(b=>({...b, _q:quantizeVec(b.embedding), _min:Math.min(...b.embedding), _max:Math.max(...b.embedding)}));
-    const deduped = attentionDedup(withMeta);
-    return deduped.map(d=>({...d, embedding:dequantizeVec(d._q, d._min, d._max), _q:undefined, _min:undefined, _max:undefined}));
-  }
-  async function drain(){
-    if(running||!queue.length) return;
-    running=true;
-    while(queue.length){
-      const batch = queue.splice(0, MAX_BATCH);
-      const compacted = compactBatch(batch);
-      // write back to knowledge store (assumes window.__kbStore.replaceBatch exists)
-      if(window.__kbStore&&window.__kbStore.replaceBatch) await window.__kbStore.replaceBatch(compacted);
-      if(window.__perfMode==="saver") await new Promise(r=>setTimeout(r,16)); // yield on saver
-    }
-    running=false; lastRun=Date.now();
-  }
-  return {
-    enqueue(entries){ queue.push(...entries); if(!running) drain(); },
-    force(){ return drain(); },
-    stats(){ return {queued:queue.length, lastRun, running}; }
-  };
-})();
-
-// hook into perf mode changes
-const _origSetPerfMode = window.setPerfMode;
-window.setPerfMode = function(m){
-  _origSetPerfMode(m);
-  if(m==="saver") window.__kbCompactor.enqueue([]); // trigger immediate compaction pass on saver
-};
 requestAnimationFrame(frame);
 
 /* ---------------- audio blips ---------------- */
