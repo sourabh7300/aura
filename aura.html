@@ -3626,6 +3626,62 @@ window.setPerfMode=function(m){
   if(m==="saver"){for(let i=0;i<pts.length;i++)pts[i].z=Math.abs(pts[i].z)*2+.1}
   slog(m==="saver"?"⚡ battery saver ON — 30fps, lighter core, no blur":"⚡ performance mode restored — full core at "+FPS_GOAL()+"fps");
   $("tPts")&&document.body.getAttribute("data-tab")==="system"&&($("tPts").textContent=N+" / "+NMAX);
+
+/* AURA_GEN_MEMORY_COMPACTION_OPTIMIZE — tiered compaction with attention weighting */
+const MEM_COMPACTION = {
+  tiers: { hot: 0.7, warm: 0.2, cold: 0.1 },
+  maxTokens: 120000,
+  compressRatio: 0.15,
+  attentionDecay: 0.95,
+  lastRun: 0,
+  interval: 300000,
+  
+  scoreEntry(e, now) {
+    const age = (now - (e.ts || now)) / 1000 / 3600;
+    const access = (e.accessCount || 1) * Math.pow(this.attentionDecay, age);
+    const relevance = e.embedding ? this.cosineRelevance(e.embedding) : 0.5;
+    return access * 0.6 + relevance * 0.4;
+  },
+  
+  cosineRelevance(vec) {
+    if (!window.__currentQueryVec) return 0.5;
+    let dot=0, na=0, nb=0;
+    for(let i=0;i<vec.length;i++){ dot+=vec[i]*window.__currentQueryVec[i]; na+=vec[i]*vec[i]; nb+=window.__currentQueryVec[i]*window.__currentQueryVec[i]; }
+    return na&&nb ? dot/Math.sqrt(na*nb) : 0.5;
+  },
+  
+  compact(kb, now=Date.now()) {
+    if (now - this.lastRun < this.interval) return kb;
+    this.lastRun = now;
+    const entries = Object.entries(kb || {});
+    if (!entries.length) return kb;
+    
+    const scored = entries.map(([k,v])=>({k,v,score:this.scoreEntry(v,now)}));
+    scored.sort((a,b)=>b.score-a.score);
+    
+    const keep = Math.floor(entries.length * (1 - this.compressRatio));
+    const hotCount = Math.floor(keep * this.tiers.hot);
+    const warmCount = Math.floor(keep * this.tiers.warm);
+    
+    const newKb = {};
+    scored.slice(0, hotCount).forEach(e=>{ newKb[e.k] = {...e.v, tier:'hot'}; });
+    scored.slice(hotCount, hotCount+warmCount).forEach(e=>{ newKb[e.k] = {...e.v, tier:'warm', compressed:true}; });
+    scored.slice(hotCount+warmCount, keep).forEach(e=>{ newKb[e.k] = {...e.v, tier:'cold', compressed:true, summaryOnly:true}; });
+    
+    slog(`🧠 memory compaction: ${entries.length}→${Object.keys(newKb).length} entries (hot:${hotCount} warm:${warmCount} cold:${keep-hotCount-warmCount})`);
+    return newKb;
+  },
+  
+  schedule(kb) { setTimeout(()=>{ window.__knowledgeBase = this.compact(kb); }, 0); }
+};
+
+/* hook into PERF governor */
+const _origSetPerfMode = window.setPerfMode;
+window.setPerfMode = function(m) {
+  _origSetPerfMode(m);
+  if (m==="saver") { MEM_COMPACTION.compressRatio = 0.3; MEM_COMPACTION.interval = 60000; }
+  else { MEM_COMPACTION.compressRatio = 0.15; MEM_COMPACTION.interval = 300000; }
+};
 };
 requestAnimationFrame(frame);
 
