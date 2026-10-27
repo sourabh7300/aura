@@ -3585,14 +3585,21 @@ function drawScan(t){
 }
 
 /* HOLOGRAM v3 — depth fog: bottom-up ambience + horizon haze (video look) */
+let _fogGrad=null,_hazeGrad=null;
 function drawFog(){
-  const fg=cx.createLinearGradient(0,H*.45,0,H);
-  fg.addColorStop(0,"rgba(4,12,24,0)");fg.addColorStop(1,"rgba(4,12,24,.42)");
-  cx.fillStyle=fg;cx.fillRect(0,H*.45,W,H*.55);
-  const hz=cx.createLinearGradient(0,H*.28,0,H*.46);
-  hz.addColorStop(0,"rgba(34,211,238,0)");hz.addColorStop(.5,"rgba(34,211,238,.045)");hz.addColorStop(1,"rgba(34,211,238,0)");
-  cx.fillStyle=hz;cx.fillRect(0,H*.28,W,H*.18);
-}
+  if(!_fogGrad||_fogGrad._w!==W||_fogGrad._h!==H){
+    _fogGrad=cx.createLinearGradient(0,H*.45,0,H);
+    _fogGrad.addColorStop(0,"rgba(4,12,24,0)");_fogGrad.addColorStop(1,"rgba(4,12,24,.42)");
+    _fogGrad._w=W;_fogGrad._h=H;
+  }
+  if(!_hazeGrad||_hazeGrad._w!==W||_hazeGrad._h!==H){
+    _hazeGrad=cx.createLinearGradient(0,H*.28,0,H*.46);
+    _hazeGrad.addColorStop(0,"rgba(34,211,238,0)");_hazeGrad.addColorStop(.5,"rgba(34,211,238,.045)");_hazeGrad.addColorStop(1,"rgba(34,211,238,0)");
+    _hazeGrad._w=W;_hazeGrad._h=H;
+  }
+  cx.fillStyle=_fogGrad;cx.fillRect(0,H*.45,W,H*.55);
+  cx.fillStyle=_hazeGrad;cx.fillRect(0,H*.28,W,H*.18);
+} /* AURA_GEN_MEMORY_COMPACTION_OPTIMIZE */
 
 /* ---------------- render loop ---------------- */
 let last=performance.now(),fpsN=0,fpsT=0,fpsVal=0,bootT0=performance.now();
