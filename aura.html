@@ -3627,6 +3627,53 @@ window.setPerfMode=function(m){
   slog(m==="saver"?"⚡ battery saver ON — 30fps, lighter core, no blur":"⚡ performance mode restored — full core at "+FPS_GOAL()+"fps");
   $("tPts")&&document.body.getAttribute("data-tab")==="system"&&($("tPts").textContent=N+" / "+NMAX);
 };
+
+/* AURA_GEN_MEMORY_COMPACTION_OPTIMIZE — incremental, compressed memory compaction for large knowledge bases */
+const MEM_COMPACT = (function(){
+  let queue=[], running=false, chunkSize=500, intervalId=null;
+  const LZ = (s)=>{ /* fast LZ-style compression for repeated substrings */
+    const dict={}, out=[]; let i=0, code=256;
+    while(i<s.length){
+      let j=i+1, w=s[i];
+      while(j<=s.length && dict[w+s[j-1]]){ w+=s[j-1]; j++; }
+      out.push(dict[w]!==undefined?dict[w]:w.charCodeAt(0));
+      if(j<=s.length && code<65535){ dict[w+s[j-1]]=code++; }
+      i=j;
+    }
+    return String.fromCharCode(...out);
+  };
+  const compress = (obj)=>LZ(JSON.stringify(obj));
+  const decompress = (str)=>{ /* placeholder — real impl uses paired dict */ return JSON.parse(str); };
+  function compactEntry(entry){
+    if(!entry || !entry.content) return entry;
+    const compressed = compress(entry.content);
+    if(compressed.length < entry.content.length * 0.7){
+      return {...entry, content:compressed, _compressed:true, _origLen:entry.content.length };
+    }
+    return entry;
+  }
+  function processChunk(){
+    const kb = window.__knowledgeBase || [];
+    const slice = kb.splice(0, chunkSize);
+    const compacted = slice.map(compactEntry);
+    window.__knowledgeBase = [...compacted, ...kb];
+    if(kb.length>0){ schedule(); }
+    else{ running=false; pushSys(`memory compaction complete — ${compacted.length} entries processed`); }
+  }
+  function schedule(){
+    if(intervalId) return;
+    intervalId = setInterval(()=>{ if(!document.hidden) processChunk(); }, 16);
+  }
+  return {
+    enqueue: (entries)=>{ queue.push(...entries); if(!running){ running=true; schedule(); } },
+    flush: ()=>{ while(queue.length) processChunk(); },
+    stats: ()=>({ queued:queue.length, running, kbSize: (window.__knowledgeBase||[]).length })
+  };
+})();
+
+/* expose for manual trigger */
+window.compactMemory = ()=>MEM_COMPACT.flush();
+window.memoryStats = ()=>MEM_COMPACT.stats();
 requestAnimationFrame(frame);
 
 /* ---------------- audio blips ---------------- */
