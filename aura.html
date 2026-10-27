@@ -11487,6 +11487,20 @@ document.addEventListener("DOMContentLoaded",function(){
         S.shift=(p.shift&&typeof p.shift==="object")?p.shift:null;
         S.pins=(p.pins&&typeof p.pins==="object")?p.pins:{}; /* CHAT SUPERPowers v1 */
         S.follow=(p.follow&&typeof p.follow==="object")?p.follow:{}; /* ⭐/👍/👇 reactions per message key */
+        /* AURA_GEN_ANSWER_SELF_SCORE_FIX — robust self-scoring for ERLANG sweeps */
+        function answerSelfScore(txt){
+          if(txt===null||txt===undefined) return 0;
+          const s=String(txt).trim();
+          if(!s) return 0;
+          if(s.length>10000) return Math.min(100, Math.floor(s.length/100));
+          let score=50;
+          if(s.length>200) score+=10;
+          if(/[.!?]/.test(s)) score+=10;
+          if(/\d/.test(s)) score+=5;
+          if(/[A-Z]{2,}/.test(s)) score+=5;
+          return Math.max(0,Math.min(100,score));
+        }
+        S.answerSelfScore=answerSelfScore;
         if(["kratos","erlang","arthur","phoenix"].indexOf(p.who)>=0)S.who=p.who;
       }
     }catch(e){}
