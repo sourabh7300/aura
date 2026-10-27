@@ -3619,6 +3619,115 @@ window.setPerfMode=function(m){
   slog(m==="saver"?"⚡ battery saver ON — 30fps, lighter core, no blur":"⚡ performance mode restored — full core at "+FPS_GOAL()+"fps");
   $("tPts")&&document.body.getAttribute("data-tab")==="system"&&($("tPts").textContent=N+" / "+NMAX);
 };
+
+/* AURA_GEN_MEMORY_COMPACTION_OPTIMIZE — attention-based memory compaction for large knowledge bases */
+class MemoryCompactionOptimizer {
+  constructor() {
+    this.compressionRatio = 1.0;
+    this.attentionWeights = new Map();
+    this.quantizationLevel = 8; // 8-bit default
+    this.compactionInterval = 30000; // 30s
+    this.lastCompaction = 0;
+    this.enabled = true;
+    this.stats = { originalSize: 0, compressedSize: 0, compactions: 0 };
+  }
+
+  // Attention matching: score memory entries by relevance/recency
+  computeAttentionScore(entry, queryContext = null) {
+    const now = Date.now();
+    const age = now - (entry.timestamp || now);
+    const recencyScore = Math.exp(-age / 3600000); // 1hr half-life
+    const accessScore = Math.min((entry.accessCount || 1) / 10, 1.0);
+    const relevanceScore = queryContext && entry.content ?
+      this.cosineSimilarity(this.embed(queryContext), this.embed(entry.content)) : 0.5;
+    return (recencyScore * 0.4) + (accessScore * 0.3) + (relevanceScore * 0.3);
+  }
+
+  // Lightweight embedding for similarity (hash-based)
+  embed(text) {
+    const hash = Array.from(text || '').reduce((h, c) => ((h << 5) - h + c.charCodeAt(0)) | 0, 0);
+    const vec = new Float32Array(16);
+    for (let i = 0; i < 16; i++) vec[i] = ((hash >> i) & 1) * 2 - 1;
+    return vec;
+  }
+
+  cosineSimilarity(a, b) {
+    let dot = 0, na = 0, nb = 0;
+    for (let i = 0; i < a.length; i++) { dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }
+    return dot / (Math.sqrt(na) * Math.sqrt(nb) + 1e-8);
+  }
+
+  // TurboQuant-style quantization: compress numeric arrays
+  quantize(array, bits = this.quantizationLevel) {
+    if (!array || !array.length) return { data: [], scale: 0, min: 0 };
+    const min = Math.min(...array), max = Math.max(...array);
+    const scale = (max - min) / ((1 << bits) - 1) || 1;
+    const quantized = new Uint8Array(array.length);
+    for (let i = 0; i < array.length; i++) {
+      quantized[i] = Math.round((array[i] - min) / scale);
+    }
+    return { data: quantized, scale, min, bits };
+  }
+
+  dequantize({ data, scale, min, bits }) {
+    const out = new Float32Array(data.length);
+    for (let i = 0; i < data.length; i++) out[i] = data[i] * scale + min;
+    return out;
+  }
+
+  // Main compaction: prune low-attention entries, quantize vectors
+  compact(knowledgeBase, queryContext = null) {
+    if (!this.enabled || !knowledgeBase || !knowledgeBase.length) return knowledgeBase;
+    const now = Date.now();
+    if (now - this.lastCompaction < this.compactionInterval) return knowledgeBase;
+
+    this.lastCompaction = now;
+    const originalSize = JSON.stringify(knowledgeBase).length;
+    this.stats.originalSize = originalSize;
+
+    // Score all entries
+    const scored = knowledgeBase.map(entry => ({
+      ...entry,
+      _attention: this.computeAttentionScore(entry, queryContext)
+    })).sort((a, b) => b._attention - a._attention);
+
+    // Keep top 80% by attention, quantize vector fields
+    const keepCount = Math.max(1, Math.floor(scored.length * 0.8));
+    const compacted = scored.slice(0, keepCount).map(entry => {
+      const { _attention, ...rest } = entry;
+      // Quantize any numeric arrays (embeddings, vectors)
+      for (const key of Object.keys(rest)) {
+        if (Array.isArray(rest[key]) && rest[key].every(v => typeof v === 'number')) {
+          rest[key] = this.quantize(rest[key]);
+        }
+      }
+      return rest;
+    });
+
+    this.stats.compressedSize = JSON.stringify(compacted).length;
+    this.stats.compactions++;
+    this.compressionRatio = originalSize / (this.stats.compressedSize || 1);
+
+    pushSys(`🧠 memory compaction: ${originalSize}→${this.stats.compressedSize} bytes (${this.compressionRatio.toFixed(1)}x) | kept ${keepCount}/${scored.length}`);
+    return compacted;
+  }
+
+  getStats() {
+    return { ...this.stats, ratio: this.compressionRatio.toFixed(2) };
+  }
+
+  setQuantizationLevel(bits) { this.quantizationLevel = Math.max(4, Math.min(16, bits)); }
+  setInterval(ms) { this.compactionInterval = Math.max(5000, ms); }
+  toggle(enabled) { this.enabled = enabled; }
+}
+
+// Global instance
+window.__memoryCompactor = new MemoryCompactionOptimizer();
+
+// Expose for debugging/control
+window.compactMemory = (kb, ctx) => window.__memoryCompactor.compact(kb, ctx);
+window.getMemoryStats = () => window.__memoryCompactor.getStats();
+window.setMemoryQuantization = (bits) => window.__memoryCompactor.setQuantizationLevel(bits);
 requestAnimationFrame(frame);
 
 /* ---------------- audio blips ---------------- */
