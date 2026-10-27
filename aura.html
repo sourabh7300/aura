@@ -3600,58 +3600,6 @@ function drawFog(){
   cx.fillStyle=hz;cx.fillRect(0,H*.28,W,H*.18);
 }
 
-/* AURA_GEN_MEMORY_COMPACTION_OPTIMIZE — attention-based memory compaction for large knowledge bases */
-class MemoryCompactor{
-  constructor(opts={}){
-    this.attentionThreshold=opts.attentionThreshold||0.15;
-    this.quantizationBits=opts.quantizationBits||8;
-    this.maxBatchSize=opts.maxBatchSize||5000;
-    this.similarityCache=new Map();
-  }
-  async compact(memoryEntries){
-    if(!memoryEntries||memoryEntries.length<100)return memoryEntries;
-    const scored=memoryEntries.map(e=>({
-      ...e,
-      attentionScore:this._computeAttention(e),
-      quantized:this._quantizeVector(e.embedding)
-    }));
-    scored.sort((a,b)=>b.attentionScore-a.attentionScore);
-    const keepCount=Math.max(Math.floor(scored.length*0.3),50);
-    const kept=scored.slice(0,keepCount);
-    const compressed=scored.slice(keepCount).map(e=>({
-      id:e.id,summary:e.summary||e.text?.slice(0,120),attentionScore:e.attentionScore,
-      quantized:e.quantized,timestamp:e.timestamp
-    }));
-    return [...kept,...compressed];
-  }
-  _computeAttention(entry){
-    const key=entry.id||JSON.stringify(entry).slice(0,64);
-    if(this.similarityCache.has(key))return this.similarityCache.get(key);
-    let score=0.5;
-    if(entry.accessCount)score+=Math.min(entry.accessCount*0.02,0.3);
-    if(entry.recency)score+=Math.max(0,1-(Date.now()-entry.recency)/864e5)*0.2;
-    if(entry.relevance)score+=entry.relevance*0.3;
-    score=Math.min(1,score);
-    this.similarityCache.set(key,score);
-    if(this.similarityCache.size>1e4)this.similarityCache.clear();
-    return score;
-  }
-  _quantizeVector(vec){
-    if(!vec||!vec.length)return null;
-    const min=Math.min(...vec),max=Math.max(...vec);
-    const scale=max-min||1;
-    const levels=(1<<this.quantizationBits)-1;
-    return vec.map(v=>Math.round(((v-min)/scale)*levels));
-  }
-  dequantizeVector(qvec,min,max){
-    if(!qvec)return [];
-    const scale=max-min||1;
-    const levels=(1<<this.quantizationBits)-1;
-    return qvec.map(q=>min+(q/levels)*scale);
-  }
-}
-window.__memoryCompactor=new MemoryCompactor();
-
 /* ---------------- render loop ---------------- */
 let last=performance.now(),fpsN=0,fpsT=0,fpsVal=0,bootT0=performance.now();
 /* PERF governor: 60fps desktop · 30fps phones/saver/filtered-hue · zero work on hidden tabs */
