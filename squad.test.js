@@ -348,6 +348,24 @@ function mkDeps(over) {
     ok("auto-revert commits the PREVIOUS source back", d4.calls.commit.length === 2 && d4.calls.commit[1].content === fakeSource());
     ok("a reverted ship is never credited in the ledger", d4.store.state.ships.length === 0);
 
+    /* 4b — a publish lane that never reaches the live page must NOT loop forever
+       (the real 27 Oct 2026 churn: same mission applied → live check failed →
+       auto-reverted, dozens of times). One failure now opens a retry window, and
+       three consecutive failures block the mission until the next day. */
+    const liveM = () => d4.store.state.missions[auto.MISSIONS[0].id];
+    ok("a failed live check starts a real retry window", liveM().liveFails === 1 && liveM().retryAfter > Date.now());
+    ok("the same mission is not re-picked while it waits", auto.pendingByImportance(d4.store.state).every(m => m.id !== auto.MISSIONS[0].id));
+    for (let i = 0; i < 2; i++) {
+      /* skip the wait window artificially so the 3-strike rule can be observed */
+      const m = liveM(); m.retryAfter = 0; m.attempts = 0;
+      await ap4.tick({ force: true });
+    }
+    ok("three consecutive live failures BLOCK the mission honestly", liveM().liveBlocked === true && /blocked/.test(liveM().note || ""), liveM().note);
+    ok("a blocked mission drops out of the pick list", auto.pendingByImportance(d4.store.state).every(m => m.id !== auto.MISSIONS[0].id));
+    d4.store.state.nonstop = true;
+    await ap4.tick({ force: true });
+    ok("nonstop mode does not unblock a broken live lane (no churn)", liveM().liveBlocked === true);
+
     /* 5 — unanchored edits fail honestly and get parked (no infinite retries) */
     const d5 = mkDeps({ brain: async () => editsJson("ANCHOR_THAT_IS_NOT_IN_THE_FILE", "x") });
     const ap5 = auto.createAutopilot(d5);
