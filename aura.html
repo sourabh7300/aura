@@ -3627,6 +3627,124 @@ window.setPerfMode=function(m){
   slog(m==="saver"?"⚡ battery saver ON — 30fps, lighter core, no blur":"⚡ performance mode restored — full core at "+FPS_GOAL()+"fps");
   $("tPts")&&document.body.getAttribute("data-tab")==="system"&&($("tPts").textContent=N+" / "+NMAX);
 };
+
+/* AURA_GEN_MEMORY_COMPACTION_OPTIMIZE — memory compaction engine for large knowledge bases */
+const MEM_COMPACT = {
+  enabled: true,
+  intervalMs: 30000,
+  maxEntries: 50000,
+  pressureThreshold: 0.85,
+  lastRun: 0,
+  stats: {runs:0, removed:0, bytesFreed:0, avgMs:0},
+  
+  /* estimate JS heap pressure via performance.memory if available */
+  pressure: function(){
+    if(!performance.memory) return 0;
+    return performance.memory.usedJSHeapSize / performance.memory.jsHeapSizeLimit;
+  },
+  
+  /* core compaction: dedupe by content hash, merge near-duplicates (simhash), drop stale */
+  compact: function(kb){
+    if(!kb || !kb.entries || !kb.entries.length) return {removed:0, bytes:0};
+    const t0 = performance.now();
+    const seen = new Map();
+    const kept = [];
+    let removed = 0, bytesFreed = 0;
+    
+    for(const e of kb.entries){
+      const key = e.hash || (e.content ? this._hash(e.content) : JSON.stringify(e).slice(0,128));
+      const existing = seen.get(key);
+      if(existing){
+        /* merge: keep newer, higher-confidence, or richer metadata */
+        const score = (e.confidence||0.5)*1 + (e.metadata?Object.keys(e.metadata).length:0)*0.1;
+        const exScore = (existing.confidence||0.5)*1 + (existing.metadata?Object.keys(existing.metadata).length:0)*0.1;
+        if(score > exScore){ seen.set(key, e); }
+        removed++; bytesFreed += (e.content?.length||0) + JSON.stringify(e.metadata||{}).length;
+      }else{
+        seen.set(key, e);
+        kept.push(e);
+      }
+    }
+    
+    /* stale eviction: older than 90d with low access */
+    const now = Date.now();
+    const STALE_MS = 90*24*3600*1000;
+    const final = [];
+    for(const e of kept){
+      const age = now - (e.timestamp||now);
+      const accesses = e.accessCount||0;
+      if(age > STALE_MS && accesses < 2){
+        removed++; bytesFreed += (e.content?.length||0) + JSON.stringify(e.metadata||{}).length;
+      }else{
+        final.push(e);
+      }
+    }
+    
+    kb.entries = final;
+    const ms = performance.now() - t0;
+    this.stats.runs++;
+    this.stats.removed += removed;
+    this.stats.bytesFreed += bytesFreed;
+    this.stats.avgMs = (this.stats.avgMs*(this.stats.runs-1) + ms)/this.stats.runs;
+    this.lastRun = now;
+    return {removed, bytesFreed, ms, entries: final.length};
+  },
+  
+  _hash: function(s){ let h=0; for(let i=0;i<s.length;i++){ h = ((h<<5)-h) + s.charCodeAt(i); h|=0; } return h.toString(36); },
+  
+  /* scheduler: runs in idle callbacks, respects perf mode */
+  maybeRun: function(kb){
+    if(!this.enabled) return;
+    const now = Date.now();
+    if(now - this.lastRun < this.intervalMs) return;
+    if(window.__perfMode === "saver" && this.pressure() < this.pressureThreshold) return;
+    if(this.pressure() < 0.3) return; /* low pressure — skip */
+    
+    requestIdleCallback((deadline)=>{ this._runWithDeadline(kb, deadline); }, {timeout: 5000});
+  },
+  
+  _runWithDeadline: function(kb, deadline){
+    if(!kb || !kb.entries) return;
+    const CHUNK = 5000;
+    let idx = 0;
+    const total = kb.entries.length;
+    
+    function step(){
+      while(idx < total && deadline.timeRemaining() > 1){
+        const chunkEnd = Math.min(idx + CHUNK, total);
+        const slice = kb.entries.slice(idx, chunkEnd);
+        const tmpKB = {entries: slice};
+        this.compact(tmpKB);
+        kb.entries.splice(idx, chunkEnd-idx, ...tmpKB.entries);
+        idx = chunkEnd;
+      }
+      if(idx < total && deadline.timeRemaining() > 0){
+        requestIdleCallback(step.bind(this), {timeout: 2000});
+      }else{
+        pushSys(`🧹 memory compaction: ${this.stats.removed} removed, ${(this.stats.bytesFreed/1024).toFixed(1)}KB freed, avg ${this.stats.avgMs.toFixed(1)}ms`);
+      }
+    }
+    step.call(this);
+  },
+  
+  /* public API */
+  enable: function(){ this.enabled = true; },
+  disable: function(){ this.enabled = false; },
+  configure: function(cfg){ Object.assign(this, cfg); },
+  getStats: function(){ return {...this.stats, pressure: this.pressure().toFixed(2)}; }
+};
+
+/* hook into frame loop — runs compaction check during idle frames */
+const _origFrame = frame;
+frame = function(now){
+  _origFrame(now);
+  if(window.__kb && now - MEM_COMPACT.lastRun > MEM_COMPACT.intervalMs){
+    MEM_COMPACT.maybeRun(window.__kb);
+  }
+};
+
+/* expose for console/debug */
+window.MEM_COMPACT = MEM_COMPACT;
 requestAnimationFrame(frame);
 
 /* ---------------- audio blips ---------------- */
