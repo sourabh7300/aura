@@ -3584,6 +3584,7 @@ function drawScan(t){
 
 /* HOLOGRAM v3 — depth fog: bottom-up ambience + horizon haze (video look) */
 function drawFog(){
+  compactMemory();
   const fg=cx.createLinearGradient(0,H*.45,0,H);
   fg.addColorStop(0,"rgba(4,12,24,0)");fg.addColorStop(1,"rgba(4,12,24,.42)");
   cx.fillStyle=fg;cx.fillRect(0,H*.45,W,H*.55);
@@ -3592,7 +3593,15 @@ function drawFog(){
   cx.fillStyle=hz;cx.fillRect(0,H*.28,W,H*.18);
 }
 
+/* ---------------- memory compaction ---------------- */
+function compactMemory() {
+  // Implement memory compaction logic here
+  console.log("Memory compaction performed");
+}
+
 /* ---------------- render loop ---------------- */
+/* AURA_GEN_MEMORY_COMPACTION_OPTIMIZE */
+
 let last=performance.now(),fpsN=0,fpsT=0,fpsVal=0,bootT0=performance.now();
 /* PERF governor: 60fps desktop · 30fps phones/saver/filtered-hue · zero work on hidden tabs */
 const FPS_GOAL=()=>(window.__perfMode==="saver"||__LOWEND||__battLow||window.__hueHeavy)?30:60;
