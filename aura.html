@@ -3627,6 +3627,50 @@ window.setPerfMode=function(m){
   slog(m==="saver"?"⚡ battery saver ON — 30fps, lighter core, no blur":"⚡ performance mode restored — full core at "+FPS_GOAL()+"fps");
   $("tPts")&&document.body.getAttribute("data-tab")==="system"&&($("tPts").textContent=N+" / "+NMAX);
 };
+
+/* AURA_GEN_MEMORY_COMPACTION_OPTIMIZE — tiered memory compaction for large knowledge bases */
+window.__memCompactionTier = 0; /* 0=off, 1=light, 2=aggressive */
+window.__memCompactionStats = {runs:0, freed:0, last:0};
+function runMemoryCompaction(tier){
+  if(!window.__knowledgeBase) return {freed:0};
+  const kb = window.__knowledgeBase;
+  const before = JSON.stringify(kb).length;
+  let freed = 0;
+  if(tier >= 1){
+    /* Tier 1: deduplicate identical embeddings, prune stale entries >90d */
+    const seen = new Map();
+    const now = Date.now();
+    const STALE_MS = 90*24*60*60*1000;
+    for(const [key, val] of Object.entries(kb)){
+      if(val && val.embedding){
+        const sig = JSON.stringify(val.embedding.slice(0,16));
+        if(seen.has(sig)){ delete kb[key]; freed++; }
+        else seen.set(sig, key);
+      }
+      if(val && val.ts && now - val.ts > STALE_MS){ delete kb[key]; freed++; }
+    }
+  }
+  const after = JSON.stringify(kb).length;
+  window.__memCompactionStats.runs++;
+  window.__memCompactionStats.freed += (before - after);
+  window.__memCompactionStats.last = now;
+  return {freed, before, after, tier};
+}
+window.setMemCompactionTier = function(t){
+  window.__memCompactionTier = Math.max(0, Math.min(2, t|0));
+  if(window.__memCompactionTier > 0){
+    const res = runMemoryCompaction(window.__memCompactionTier);
+    pushSys("🧠 memory compaction tier "+window.__memCompactionTier+" — freed "+(res.freed/1024).toFixed(1)+" KB");
+  }else{
+    pushSys("🧠 memory compaction disabled");
+  }
+};
+const _origSetPerfMode = window.setPerfMode;
+window.setPerfMode = function(m){
+  _origSetPerfMode(m);
+  if(m==="saver") window.setMemCompactionTier(1);
+  else if(m==="performance") window.setMemCompactionTier(0);
+};
 requestAnimationFrame(frame);
 
 /* ---------------- audio blips ---------------- */
