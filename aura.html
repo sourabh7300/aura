@@ -3627,6 +3627,83 @@ window.setPerfMode=function(m){
   slog(m==="saver"?"⚡ battery saver ON — 30fps, lighter core, no blur":"⚡ performance mode restored — full core at "+FPS_GOAL()+"fps");
   $("tPts")&&document.body.getAttribute("data-tab")==="system"&&($("tPts").textContent=N+" / "+NMAX);
 };
+
+/* AURA_GEN_MEMORY_COMPACTION_OPTIMIZE — attention-based memory compaction for large knowledge bases */
+class MemoryCompactor {
+  constructor(){
+    this.memories=[]; // {id, text, embedding, score, ts, accessCount}
+    this.maxMemories=50000;
+    this.compactionThreshold=0.85;
+    this.attentionWeights={recency:0.3, relevance:0.4, frequency:0.2, uniqueness:0.1};
+    this.lastCompaction=0;
+    this.compactionInterval=300000; // 5 min
+  }
+  add(memory){
+    this.memories.push({...memory, score:1.0, ts:Date.now(), accessCount:0});
+    if(this.memories.length>this.maxMemories*this.compactionThreshold){
+      this.scheduleCompaction();
+    }
+  }
+  access(id){
+    const m=this.memories.find(x=>x.id===id);
+    if(m){m.accessCount++; m.lastAccess=Date.now();}
+  }
+  computeAttention(m){
+    const now=Date.now();
+    const ageHours=(now-m.ts)/3.6e6;
+    const recency=Math.exp(-ageHours/168); // week half-life
+    const relevance=m.score||0.5;
+    const frequency=Math.min(m.accessCount/50,1);
+    const uniqueness=1-Math.min((this.memories.filter(x=>this.similar(x,m)).length-1)/10,1);
+    const w=this.attentionWeights;
+    return w.recency*recency + w.relevance*relevance + w.frequency*frequency + w.uniqueness*uniqueness;
+  }
+  similar(a,b){
+    if(!a.embedding||!b.embedding) return a.text===b.text;
+    let dot=0, na=0, nb=0;
+    for(let i=0;i<a.embedding.length;i++){dot+=a.embedding[i]*b.embedding[i]; na+=a.embedding[i]**2; nb+=b.embedding[i]**2;}
+    return dot/Math.sqrt(na*nb)>0.88;
+  }
+  scheduleCompaction(){ if(!this.compactionScheduled){this.compactionScheduled=1; setTimeout(()=>this.compact(),0);} }
+  async compact(){
+    this.compactionScheduled=0; this.lastCompaction=Date.now();
+    if(this.memories.length<this.maxMemories*0.5) return;
+    pushSys("🧠 memory compaction started — "+this.memories.length+" entries");
+    const scored=this.memories.map(m=>({...m, attention:this.computeAttention(m)}));
+    scored.sort((a,b)=>b.attention-a.attention);
+    const keep=scored.slice(0,Math.floor(this.maxMemories*0.7));
+    const discard=scored.slice(Math.floor(this.maxMemories*0.7));
+    // Merge similar low-attention memories (TurboQuant-style quantization)
+    const merged=this.mergeSimilar(discard);
+    this.memories=[...keep, ...merged];
+    pushSys("🧠 compaction complete — "+this.memories.length+" entries (removed "+(discard.length-merged.length)+")");
+    this.persist();
+  }
+  mergeSimilar(items){
+    const clusters=[];
+    for(const item of items){
+      let placed=false;
+      for(const cluster of clusters){
+        if(this.similar(item,cluster.rep)){cluster.items.push(item); placed=true; break;}
+      }
+      if(!placed) clusters.push({rep:item, items:[item]});
+    }
+    return clusters.map(c=>{
+      if(c.items.length===1) return c.rep;
+      // Create compressed summary memory
+      const avgEmb=c.rep.embedding?c.items.reduce((a,b)=>a.map((v,i)=>v+b.embedding[i]/c.items.length),new Array(c.rep.embedding.length).fill(0)):null;
+      return {...c.rep, id:"comp_"+Date.now()+"_"+Math.random().toString(36).slice(2), text:"[compressed] "+c.items.map(x=>x.text.slice(0,80)).join(" | "), embedding:avgEmb, score:Math.max(...c.items.map(x=>x.attention)), ts:Date.now(), accessCount:0, compressedFrom:c.items.length};
+    });
+  }
+  persist(){ try{localStorage.setItem("aura_memories",JSON.stringify(this.memories.slice(-this.maxMemories)));}catch(e){} }
+  load(){ try{const raw=localStorage.getItem("aura_memories"); if(raw) this.memories=JSON.parse(raw);}catch(e){} }
+  getStats(){ return {total:this.memories.length, max:this.maxMemories, lastCompaction:this.lastCompaction, threshold:this.compactionThreshold}; }
+}
+window.__memoryCompactor=new MemoryCompactor();
+window.__memoryCompactor.load();
+// Expose for debugging
+window.compactNow=()=>window.__memoryCompactor.compact();
+window.memoryStats=()=>window.__memoryCompactor.getStats();
 requestAnimationFrame(frame);
 
 /* ---------------- audio blips ---------------- */
