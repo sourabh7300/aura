@@ -76,6 +76,8 @@ if (!S || typeof S.resolveFragment !== "function") {
   ok("the model is told the CURRENT TOPIC before it answers", /CURRENT TOPIC \(from this same thread\)/.test(String(S.injectFollowUp(g).find(m => m.role === "system").content)));
   const merged = S.followUpQuery(g, S.lastUserMsg(g));
   ok("the search query merges topic + ask, never the whole transcript", /bmic/i.test(merged) && !/ONGOING CONVERSATION/.test(merged) && merged.length < 200, merged.slice(0, 90));
+  const sq = S.searchQuery(g);
+  ok("searchQuery itself keeps the topic (not just the follow-up noun)", /bmic/i.test(sq) && /teams/i.test(sq) && !/ONGOING CONVERSATION/.test(sq), sq.slice(0, 90));
   ok("a self-contained question is NOT rewritten into the old topic", S.resolveFragment(flatten("how to start a cloud kitchen", convo)) === null);
   ok("the plain messages[] shape still resolves (API clients)", !!S.resolveFragment([{ role: "user", content: "when will the bmic starts?" }, { role: "assistant", content: "30 Oct 2026" }, { role: "user", content: "teams in it" }]));
 }
