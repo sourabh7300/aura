@@ -62,12 +62,12 @@ const KEY_POOL = [...new Set([
 ].filter(Boolean))];
 /* BUILD MARKER — one request tells you which build the host is really serving.
    If /health does not show this string, the deploy did NOT land (stale build). */
-const BUILD = process.env.AURA_BUILD || "squad-v14";
+const BUILD = process.env.AURA_BUILD || "squad-v15";
 /* WHAT THIS FILE IS — a dashboard env var can hold any value (or an old one may be
    left behind), which makes /health look stale even when the new code IS serving.
    srcBuild is compiled into the source itself, so no env var can fake it: if /health
    shows srcBuild = the value below, THIS code is live. */
-const SRC_BUILD = "squad-v14";
+const SRC_BUILD = "squad-v15";
 const SECRET = process.env.SECRET || "";        // optional shared secret
 const REQUIRE_SECRET = process.env.REQUIRE_SECRET === "1";
 /* AUTOPILOT tick key — GitHub Actions presents this so the squad keeps working
@@ -78,7 +78,34 @@ const GEMINI_API_KEY = envv("AI_KEY_VISION", "GEMINI_API_KEY");            // gi
 const VISION_MODEL = process.env.VISION_MODEL || atob("Z2VtaW5pLTMuNi1mbGFzaA==");
 /* one Gemini model having a demand spike must not blind the studio or AURA: try the
    configured model first, then the other flash models, before reporting failure */
-const VISION_MODELS = [VISION_MODEL, "gemini-2.5-flash", "gemini-2.0-flash"].filter((m, i, a) => m && a.indexOf(m) === i);
+/* 28 Oct 2026 — Google retired gemini-2.5-flash for new keys (“no longer available
+   to new users … use models/gemini-3.8-flash”). Hard-coded model names rot, which
+   is exactly why Lucid kept saying “high demand”. So the list below is only a
+   SEED: geminiModels() asks the API which models this key can actually use and
+   caches that answer, and the studio walks the discovered list first. */
+const VISION_MODELS = ["gemini-3.8-flash", VISION_MODEL, "gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.0-flash"].filter((m, i, a) => m && a.indexOf(m) === i);
+let visionModelCache = { at: 0, names: [] };
+function modelScore(n) {
+  const v = (n.match(/(\d+(?:\.\d+)?)/) || [])[1];
+  const num = v ? parseFloat(v) : 0;
+  return num * 10 + (/flash/.test(n) ? 5 : 0) - (/lite|thinking|image|tts|audio|embed/.test(n) ? 20 : 0);
+}
+async function geminiModels() {
+  if (!GEMINI_API_KEY) return [];
+  if (visionModelCache.names.length && Date.now() - visionModelCache.at < 3600_000) return visionModelCache.names;
+  try {
+    const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models?key=" + encodeURIComponent(GEMINI_API_KEY), { signal: AbortSignal.timeout(15_000) });
+    if (!r.ok) return visionModelCache.names;
+    const j = await r.json();
+    const names = (j.models || [])
+      .filter(m => (m.supportedGenerationMethods || []).indexOf("generateContent") >= 0)
+      .map(m => String(m.name || "").replace(/^models\//, ""))
+      .filter(n => /^gemini-/.test(n) && /flash|pro/.test(n));
+    names.sort((a, b) => modelScore(b) - modelScore(a));
+    if (names.length) visionModelCache = { at: Date.now(), names: names.slice(0, 6) };
+  } catch (e) { /* keep the seeds */ }
+  return visionModelCache.names;
+}
 
 /* RESERVE BRAIN — fires only when the primary key bank has drained (or died),
    so users keep getting real AI answers instead of the out-of-tokens notice.
@@ -1708,8 +1735,11 @@ function lucidCount(req) {
   else lucidCap.set(id, { day, n: 1 });
   if (lucidCap.size > 3000) for (const [k, v] of lucidCap) if (v.day !== day) lucidCap.delete(k);
 }
-/* honest, non-alarming message a visitor can act on */
-const LUCID_NO_KEY = "The studio's AI key is not wired on this server yet. Add your own free Gemini key in Lucid (🔑 Set key) — aistudio.google.com/apikey";
+/* honest, non-alarming message a visitor can act on.
+   OWNER ORDER (28 Oct 2026): visitors must never paste their own key — the key is
+   the studio's job. So this never tells anyone to bring a key; if the server has
+   none, we say so plainly and the owner fixes the deployment. */
+const LUCID_NO_KEY = "Studio ka AI server par abhi set nahi hua. Kuch der baad try karo — aapko koi key nahi chahiye.";
 app.post("/v1/lucid/edit", async (req, res) => {
   if (!GEMINI_API_KEY) return res.status(501).json({ error: { code: 501, message: LUCID_NO_KEY } });
   if (lucidOverCap(req)) return res.status(429).json({ error: { code: 429, message: "Aaj ki AI editing limit poori ho gayi — kal phir try karo." } });
@@ -1738,28 +1768,57 @@ app.post("/v1/lucid/edit", async (req, res) => {
   /* a demand spike on one Gemini model (503 "high demand") must not break editing:
      walk the model list and serve the first that answers */
   const lbody = JSON.stringify({ contents: [{ role: "user", parts }], generationConfig: gen });
+  /* discovered models first (so a retirement can never 404 the studio), then seeds */
+  const discovered = await geminiModels().catch(() => []);
+  const chain = [...new Set([...discovered, ...VISION_MODELS])].slice(0, 7);
+  /* A demand spike (503 “high demand”) is TEMPORARY, so a single miss must not reach
+     the visitor. Every model is tried twice with a short backoff, and the whole
+     walk is a few seconds at worst. The raw Google sentence (“This model is
+     currently experiencing high demand…”) never leaves this server — the studio
+     gets a short, human line it can show without looking broken. */
   let lastStatus = 502, lastMsg = "vision call failed";
-  for (const vmodel of VISION_MODELS) {
-    try {
-      const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + vmodel + ":generateContent?key=" + encodeURIComponent(GEMINI_API_KEY), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: lbody,
-        signal: AbortSignal.timeout(60_000)
-      });
-      const j = await r.json().catch(() => null);
-      if (!r.ok) {
-        lastStatus = r.status;
-        lastMsg = (j && j.error && j.error.message) || ("vision upstream HTTP " + r.status + " (" + vmodel + ")");
-        if (r.status === 503 || r.status === 429 || r.status >= 500) continue; /* busy → next model */
-        break; /* a real request error: other models would say the same */
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  for (const vmodel of chain) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + vmodel + ":generateContent?key=" + encodeURIComponent(GEMINI_API_KEY), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: lbody,
+          signal: AbortSignal.timeout(60_000)
+        });
+        const j = await r.json().catch(() => null);
+        if (!r.ok) {
+          lastStatus = r.status;
+          lastMsg = (j && j.error && j.error.message) || ("vision upstream HTTP " + r.status + " (" + vmodel + ")");
+          /* 404 = this model was RETIRED for this key (“no longer available to new
+             users”) → silently move on; a fresh model may still answer. */
+          if (r.status === 404) break;
+          if (r.status === 503 || r.status === 429 || r.status >= 500) {
+            if (attempt === 0) { await sleep(250 + Math.random() * 250); continue; }
+            break; /* this model is genuinely busy → next one */
+          }
+          return res.status(r.status === 400 ? 400 : 502).json({ error: { code: r.status, message: "AI ne request samajh nahi payi — thoda chhota sawaal try karo." } });
+        }
+        lucidCount(req);
+        recordUse(req, "vision", (j && j.usageMetadata && j.usageMetadata.totalTokenCount) || 0);
+        return res.json(j); /* Gemini shape → Lucid reads candidates[0].content.parts */
+      } catch (e) {
+        lastStatus = 502;
+        lastMsg = e.message || "vision call failed";
+        if (attempt === 0) await sleep(300);
       }
-      lucidCount(req);
-      recordUse(req, "vision", (j && j.usageMetadata && j.usageMetadata.totalTokenCount) || 0);
-      return res.json(j); /* Gemini shape → Lucid reads candidates[0].content.parts */
-    } catch (e) { lastStatus = 502; lastMsg = e.message || "vision call failed"; }
+    }
   }
-  return res.status(lastStatus === 429 ? 429 : 502).json({ error: { code: lastStatus, message: lastMsg } });
+  /* every lane busy: say it in one calm line, never Google's raw 503 text */
+  return res.status(lastStatus === 429 ? 429 : 503).json({
+    error: {
+      code: lastStatus === 429 ? 429 : 503,
+      message: lastStatus === 429
+        ? "Aaj ki AI limit poori ho gayi — kal phir try karo."
+        : "AI abhi thoda busy hai. 10–15 second baad ek baar phir try karo — aapko koi key nahi chahiye."
+    }
+  });
 });
 
 /* health + root */
@@ -1781,7 +1840,7 @@ app.get("/health", (req, res) => {
   const now = Date.now();
   try { fbInit(); } catch (e) { noteCrash("fb-init", e); } /* lazy+eager both fine: it caches its verdict */
   const fbState = fbTried ? (fbAdmin ? "online" : (FB_PROJECT ? "package-missing" : "not-configured")) : "pending";
-  res.json({ ok: true, build: BUILD, srcBuild: SRC_BUILD, node: process.version, rssMB: Math.round(process.memoryUsage().rss / 1048576), crashes: bootCrashes.length, lastCrash: bootCrashes[bootCrashes.length - 1] || null, started: new Date(Date.now() - process.uptime() * 1000).toISOString(), uptime: process.uptime(), keysTotal: KEY_POOL.length, publicKeys: PUBLIC_KEYS.length, makerReserved: KEY_POOL.length > 1, keysLive: KEY_POOL.filter(k => !(keyCool.get(k) > now)).length, reserve: !!RESERVE_KEY, nimKey: !!NVIDIA_NIM_KEY, codeLane: !!CODE_KEY, adminLane: !!ADMIN_KEY, vision: !!GEMINI_API_KEY, stream: true, accounts: fbState, github: GH_TOKEN ? "configured" : "missing", liveMirror: ghMirrorLast.note, bootStage: BOOT.stage, bootErr: BOOT.err, bootMs: Date.now() - BOOT.at, githubCheck: ghCheckCache.state, githubCheckedAt: ghCheckCache.at || null, research: researchProbeCache, brain: brainLast, chat: chatLast, squad: squadHealth(), warmers: "background" });
+  res.json({ ok: true, build: BUILD, srcBuild: SRC_BUILD, node: process.version, rssMB: Math.round(process.memoryUsage().rss / 1048576), crashes: bootCrashes.length, lastCrash: bootCrashes[bootCrashes.length - 1] || null, started: new Date(Date.now() - process.uptime() * 1000).toISOString(), uptime: process.uptime(), keysTotal: KEY_POOL.length, publicKeys: PUBLIC_KEYS.length, makerReserved: KEY_POOL.length > 1, keysLive: KEY_POOL.filter(k => !(keyCool.get(k) > now)).length, reserve: !!RESERVE_KEY, nimKey: !!NVIDIA_NIM_KEY, codeLane: !!CODE_KEY, adminLane: !!ADMIN_KEY, vision: !!GEMINI_API_KEY, visionModels: visionModelCache.names.slice(0, 4), visionSeed: VISION_MODELS.slice(0, 3), stream: true, accounts: fbState, github: GH_TOKEN ? "configured" : "missing", liveMirror: ghMirrorLast.note, bootStage: BOOT.stage, bootErr: BOOT.err, bootMs: Date.now() - BOOT.at, githubCheck: ghCheckCache.state, githubCheckedAt: ghCheckCache.at || null, research: researchProbeCache, brain: brainLast, chat: chatLast, squad: squadHealth(), warmers: "background" });
 });
 /* keep the last-known values fresh without ever blocking the endpoint */
 setTimeout(warmHealth, 1500);
