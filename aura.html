@@ -3627,6 +3627,102 @@ window.setPerfMode=function(m){
   slog(m==="saver"?"⚡ battery saver ON — 30fps, lighter core, no blur":"⚡ performance mode restored — full core at "+FPS_GOAL()+"fps");
   $("tPts")&&document.body.getAttribute("data-tab")==="system"&&($("tPts").textContent=N+" / "+NMAX);
 };
+
+/* AURA_GEN_MEMORY_COMPACTION_OPTIMIZE — tiered knowledge-base compaction with vector quantization */
+const MEM_COMPACTION = (() => {
+  const TIER_HOT = 0, TIER_WARM = 1, TIER_COLD = 2;
+  const MAX_HOT = 5000, MAX_WARM = 20000, QUANT_BITS = 8;
+  let store = { hot: new Map(), warm: new Map(), cold: new Map() };
+  let stats = { total: 0, compressed: 0, deduped: 0, bytesSaved: 0 };
+  let compactionTimer = null;
+
+  function hashKey(obj) {
+    return JSON.stringify(obj).split('').reduce((h, c) => ((h << 5) - h + c.charCodeAt(0)) | 0, 0).toString(36);
+  }
+
+  function quantizeVector(vec, bits = QUANT_BITS) {
+    if (!vec || !vec.length) return vec;
+    const min = Math.min(...vec), max = Math.max(...vec);
+    if (min === max) return vec.map(() => 0);
+    const scale = (1 << bits) - 1;
+    return vec.map(v => Math.round(((v - min) / (max - min)) * scale));
+  }
+
+  function dequantizeVector(qvec, min, max, bits = QUANT_BITS) {
+    if (!qvec || !qvec.length) return qvec;
+    const scale = (1 << bits) - 1;
+    return qvec.map(v => min + (v / scale) * (max - min));
+  }
+
+  function compressEntry(entry) {
+    const key = hashKey(entry.content);
+    if (store.hot.has(key) || store.warm.has(key) || store.cold.has(key)) {
+      stats.deduped++;
+      return { key, duplicate: true };
+    }
+    const vec = entry.embedding || [];
+    const min = vec.length ? Math.min(...vec) : 0;
+    const max = vec.length ? Math.max(...vec) : 0;
+    const qvec = quantizeVector(vec);
+    const compressed = { ...entry, embedding: qvec, _qmin: min, _qmax: max, _tier: TIER_HOT, _ts: Date.now() };
+    store.hot.set(key, compressed);
+    stats.total++; stats.compressed++; stats.bytesSaved += JSON.stringify(entry).length - JSON.stringify(compressed).length;
+    return { key, duplicate: false };
+  }
+
+  function promote(key, fromTier, toTier) {
+    const src = store[fromTier], dst = store[toTier];
+    const entry = src.get(key);
+    if (!entry) return false;
+    src.delete(key);
+    entry._tier = toTier; entry._ts = Date.now();
+    dst.set(key, entry);
+    return true;
+  }
+
+  function runCompaction() {
+    const now = Date.now();
+    for (const [k, v] of store.hot) if (now - v._ts > 3600000) promote(k, 'hot', 'warm');
+    for (const [k, v] of store.warm) if (now - v._ts > 86400000) promote(k, 'warm', 'cold');
+    if (store.hot.size > MAX_HOT) {
+      const entries = [...store.hot.entries()].sort((a, b) => a[1]._ts - b[1]._ts);
+      while (store.hot.size > MAX_HOT * 0.8) promote(entries.shift()[0], 'hot', 'warm');
+    }
+    if (store.warm.size > MAX_WARM) {
+      const entries = [...store.warm.entries()].sort((a, b) => a[1]._ts - b[1]._ts);
+      while (store.warm.size > MAX_WARM * 0.8) promote(entries.shift()[0], 'warm', 'cold');
+    }
+    pushSys(`🧠 memory compaction: hot=${store.hot.size} warm=${store.warm.size} cold=${store.cold.size} saved=${(stats.bytesSaved/1024).toFixed(1)}KB`);
+  }
+
+  function startScheduler(intervalMs = 300000) {
+    if (compactionTimer) clearInterval(compactionTimer);
+    compactionTimer = setInterval(runCompaction, intervalMs);
+    runCompaction();
+  }
+
+  function stopScheduler() {
+    if (compactionTimer) { clearInterval(compactionTimer); compactionTimer = null; }
+  }
+
+  function getStats() { return { ...stats, tiers: { hot: store.hot.size, warm: store.warm.size, cold: store.cold.size } }; }
+
+  function retrieve(key) {
+    for (const tier of ['hot', 'warm', 'cold']) {
+      const entry = store[tier].get(key);
+      if (entry) {
+        const vec = dequantizeVector(entry.embedding, entry._qmin, entry._qmax);
+        return { ...entry, embedding: vec };
+      }
+    }
+    return null;
+  }
+
+  return { compressEntry, retrieve, getStats, startScheduler, stopScheduler, runCompaction };
+})();
+
+window.MEM_COMPACTION = MEM_COMPACTION;
+MEM_COMPACTION.startScheduler();
 requestAnimationFrame(frame);
 
 /* ---------------- audio blips ---------------- */
