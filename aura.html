@@ -3627,6 +3627,89 @@ window.setPerfMode=function(m){
   slog(m==="saver"?"⚡ battery saver ON — 30fps, lighter core, no blur":"⚡ performance mode restored — full core at "+FPS_GOAL()+"fps");
   $("tPts")&&document.body.getAttribute("data-tab")==="system"&&($("tPts").textContent=N+" / "+NMAX);
 };
+
+/* AURA_GEN_MEMORY_COMPACTION_OPTIMIZE — quantization + attention-weighted pruning for large KBs */
+const MEM_COMPACTION = {
+  enabled: true,
+  intervalMs: 300000,          // 5 min
+  maxVectors: 50000,           // trigger threshold
+  quantBits: 8,                // 8-bit quantization (TurboQuant-style)
+  attentionTopK: 0.15,         // retain top 15% by attention score (MIT Attention Matching)
+  lastRun: 0,
+  store: null,                 // set by initMemoryStore()
+  
+  init(storeRef) { this.store = storeRef; },
+  
+  shouldRun() {
+    if (!this.enabled || !this.store) return false;
+    const vecCount = this.store.vectors?.length ?? 0;
+    return vecCount > this.maxVectors && (Date.now() - this.lastRun) > this.intervalMs;
+  },
+  
+  async run() {
+    if (!this.shouldRun()) return { pruned: 0, quantized: 0 };
+    this.lastRun = Date.now();
+    const vecs = this.store.vectors;
+    if (!vecs || !vecs.length) return { pruned: 0, quantized: 0 };
+    
+    // 1) Attention-weighted scoring (simplified: recency × accessCount × relevance)
+    const now = Date.now();
+    const scored = vecs.map((v, i) => ({
+      idx: i,
+      score: (v.accessCount || 1) * Math.exp(-(now - (v.lastAccess || now)) / 86400000) * (v.relevance || 1)
+    }));
+    scored.sort((a, b) => b.score - a.score);
+    
+    // 2) Keep topK by attention, quantize the rest
+    const keepCount = Math.max(1000, Math.floor(vecs.length * this.attentionTopK));
+    const keepSet = new Set(scored.slice(0, keepCount).map(s => s.idx));
+    
+    let pruned = 0, quantized = 0;
+    const newVecs = [];
+    
+    for (let i = 0; i < vecs.length; i++) {
+      const v = vecs[i];
+      if (keepSet.has(i)) {
+        newVecs.push(v);
+      } else if (v.embedding && v.embedding.length) {
+        // 8-bit quantization: scale to [-128,127] int8
+        const emb = v.embedding;
+        const maxVal = Math.max(...emb.map(Math.abs), 1e-6);
+        const scale = 127 / maxVal;
+        const quantizedEmb = new Int8Array(emb.length);
+        for (let j = 0; j < emb.length; j++) {
+          quantizedEmb[j] = Math.round(clamp(emb[j] * scale, -128, 127));
+        }
+        newVecs.push({ ...v, embedding: quantizedEmb, _quantScale: 1/scale, _quantized: true });
+        quantized++;
+      } else {
+        pruned++; // drop malformed
+      }
+    }
+    
+    this.store.vectors = newVecs;
+    slog(`🧠 memory-compaction: pruned=${pruned} quantized=${quantized} remaining=${newVecs.length}`);
+    return { pruned, quantized };
+  },
+  
+  // Dequantize on read
+  dequantize(vec) {
+    if (!vec._quantized || !vec._quantScale) return vec.embedding;
+    const out = new Float32Array(vec.embedding.length);
+    for (let i = 0; i < vec.embedding.length; i++) out[i] = vec.embedding[i] * vec._quantScale;
+    return out;
+  }
+};
+
+// Hook into frame loop for periodic compaction (zero-cost when idle)
+const _origFrame = frame;
+frame = function(now) {
+  _origFrame(now);
+  if (MEM_COMPACTION.enabled && now - MEM_COMPACTION.lastRun > MEM_COMPACTION.intervalMs) {
+    // Run async, non-blocking
+    setTimeout(() => MEM_COMPACTION.run(), 0);
+  }
+};
 requestAnimationFrame(frame);
 
 /* ---------------- audio blips ---------------- */
