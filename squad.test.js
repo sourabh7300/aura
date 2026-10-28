@@ -688,9 +688,14 @@ suite("Deploy — backend mirror + build marker (real functions)", () => {
   let srv3 = "", depSrc = "";
   try { srv3 = fs.readFileSync(path.join(__dirname, "aura-backend", "server.js"), "utf8"); } catch (e) {}
   try { depSrc = fs.readFileSync(path.join(__dirname, "deploy.js"), "utf8"); } catch (e) {}
-  ok("server reports BUILD + start time in /health", srv3.indexOf("const BUILD = process.env.AURA_BUILD") >= 0 && srv3.indexOf("build: BUILD, started:") >= 0);
+  /* the /health payload grew (node/rss/crashes/boot diagnostics) so the build and
+     start time are no longer neighbours — assert both are in THAT payload */
+  const healthLine = srv3.split("\n").find(l => l.indexOf("res.json({ ok: true, build: BUILD") >= 0) || "";
+  ok("server reports BUILD + start time in /health", srv3.indexOf("const BUILD = process.env.AURA_BUILD") >= 0 && healthLine.indexOf("build: BUILD") >= 0 && healthLine.indexOf("started: new Date(") >= 0);
   ok("deploy mirrors from a FRESH clone, not a stale local copy", depSrc.indexOf("git clone --depth 1") >= 0);
-  ok("deploy verifies the backend build landed", depSrc.indexOf("j.build === build") >= 0 && depSrc.indexOf("Manual Deploy") >= 0);
+  /* srcBuild is the source-compiled marker (env-proof), so the deploy check accepts
+     it first and falls back to the dashboard build string */
+  ok("deploy verifies the backend build landed", (depSrc.indexOf("(j.srcBuild || j.build) === build") >= 0 || depSrc.indexOf("j.build === build") >= 0) && depSrc.indexOf("Manual Deploy") >= 0);
   ok("deploy offers a safe dry run", depSrc.indexOf("--dry-run") >= 0);
 });
 
@@ -714,7 +719,7 @@ suite("Autonomy clock + source lane — the squad works with nobody watching", (
   ok("the timer runs on the engine cadence, not a hardcoded interval", armed.length === 1 && armed[0].ms === Math.max(5, lib.DEFAULTS.tickMinutes) * 60000, armed.length ? ("got " + armed[0].ms + "ms") : "no timer");
   ok("a cadence under 5 minutes refuses to arm (never a busy loop)", auto.indexOf("if (!mins || mins < 5) return null;") >= 0);
   ok("that timer fires a REAL cycle, not a stub", /tick\(\{ trigger: "timer" \}\)/.test(auto));
-  ok("the server starts the clock on boot", srv.indexOf("const t = autopilot.boot();") >= 0 && srv.indexOf("squadClock.running = !!t") >= 0);
+  ok("the server starts the clock on boot", srv.indexOf("autopilot.boot()") >= 0 && srv.indexOf("squadClock.running = !!t") >= 0);
   ok("a dead timer is visible from outside (/health)", srv.indexOf("clock: clock") >= 0 && srv.indexOf("squadClock.lastTick = Date.now()") >= 0);
   ok("the cron verifies that clock instead of exiting quietly", wf.indexOf("clock is down") >= 0 && wf.indexOf("const c = s.clock") >= 0 && wf.indexOf("!c.running") >= 0);
 
@@ -723,7 +728,9 @@ suite("Autonomy clock + source lane — the squad works with nobody watching", (
   ok("the engine reads through that lane", srv.indexOf("readSource: squadReadSource") >= 0 && srv.indexOf("sourceLane: () => lastSourceLane") >= 0);
   ok("a dead source lane is reported with its reason", auto.indexOf("source lane unavailable") >= 0 && auto.indexOf('state.fails.push({ mission: "(source)"') >= 0);
   ok("the squad brain still runs without the maker's admin lane", srv.indexOf("pickLaneKey(ADMIN_KEY || KEY_POOL[0], true)") >= 0);
-  ok("real sources are provable from /health (cached)", srv.indexOf("async function researchProbe") >= 0 && srv.indexOf("research: await researchProbe()") >= 0 && srv.indexOf("300_000") >= 0);
+  /* /health went synchronous (a deploy must never wait on a web search); the probe
+     result is cached and served straight from memory, and a warmer keeps it fresh */
+  ok("real sources are provable from /health (cached)", srv.indexOf("async function researchProbe") >= 0 && srv.indexOf("research: researchProbeCache") >= 0 && srv.indexOf("300_000") >= 0 && srv.indexOf("setInterval(warmHealth") >= 0);
   ok("the panel shows the live clock + source lane", ui.indexOf("clock CHALU") >= 0 && ui.indexOf("st.sourceLane") >= 0);
 
   /* the brain lane: capacity, token diet, honest failure reason */

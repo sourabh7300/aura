@@ -144,7 +144,9 @@ if (require.main !== module) {
     await new Promise(r => setTimeout(r, 15000));
     try {
       const j = await (await fetch(BACKEND_URL + "/health?cb=" + Date.now(), { cache: "no-store" })).json();
-      if (build && j.build === build) {
+      /* srcBuild is compiled into server.js, so it proves the NEW code is live even
+         when the dashboard's AURA_BUILD still holds an older marker */
+      if (build && (j.srcBuild || j.build) === build) {
         backendOk = true;
         console.log("✅ backend → live build \"" + j.build + "\" (squad lane: " + (j.squad ? JSON.stringify(j.squad) : "missing") + ")");
         break;
