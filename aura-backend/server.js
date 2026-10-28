@@ -1926,40 +1926,90 @@ async function rosterGuard(t, messages) {
 }
 /* “teams name in it” carries no topic — inherit the previous real question so the
    search lane looks for BMIC 2026, not for the words “teams name in it”. */
-/* "teams in it" has no subject of its own — the thread does. Owner report 28 Oct 2026:
-   asked "when will the bmic start", then "teams in it", and got a definition of
-   Microsoft Teams. The search lane already merged the two turns, but the MODEL never
-   saw the merged question. This resolves a bare fragment against the previous turn and
-   hands every model an explicit instruction, so the answer stays on the same event. */
+/* ---------- THREAD READING (28 Oct 2026) ------------------------------------
+   Owner report: “auraa ho ya zeus, yeh catch hi nahi kar pa raha ki kaise kaam
+   karna hai … main nahi chahta koi yeh issue face kare.”
+
+   ROOT CAUSE: the browser does not send messages[] turns — it sends the WHOLE chat
+   inside ONE user message:
+       "<this question>\n\nONGOING CONVERSATION (…):\nUser: …\nYou: …"
+   The old resolver only looked at messages[] entries, so in the real app it needed
+   TWO user entries, found ONE, and never ran. Every follow-up ("teams in it",
+   "uska prize", "aur batao") reached the model with no topic attached.
+   threadTurns() reads BOTH shapes, so the fix works for the app, the API and tests. */
+/* Only words that are meaningless WITHOUT a topic. A question that starts with
+   "how/why/explain/kya" is self-contained and must never be rewritten into the
+   previous topic — that would be a worse bug than the one we are fixing. */
+const FOLLOW_WORD = /^(teams?|team\s*names?|names?|list|lineup|line-?up|roster|participants|squads?|players?|dates?|schedule|venue|location|prize|prize\s*pool|format|winner|winners|scores?|who|whom|kaun|kon|kab|kahan|kitne?|kitni|kaunse|kaunsi|kaun\s*sa|more|aur|details?|usme|uska|uski|unka|inke|iska|iske|isko|wahan|waha|phir)\b/i;
+const PRONOUN = /\b(it|its|this|that|these|those|them|they|same|above|previous|last|usme|usmein|uska|uski|uske|unka|unki|unke|inke|inka|inki|iska|iski|iske|ise|isko|inme|inmein|wahan|waha|pehle|pichle|baaki)\b/i;
+function threadTurns(messages) {
+  const out = [];
+  for (const m of (messages || [])) {
+    if (!m || typeof m.content !== "string") continue;
+    if (m.role !== "user" && m.role !== "assistant") continue;
+    const txt = String(m.content);
+    const at = txt.search(/\n\s*ONGOING CONVERSATION\b/i);
+    const head = (at >= 0 ? txt.slice(0, at) : txt).trim();
+    if (head) out.push({ role: m.role, text: head });
+    if (at < 0) continue;
+    /* only the transcript itself — the date/memory/profile blocks that follow it
+       are not conversation and must never be mistaken for a user turn */
+    const tail = txt.slice(at).split(/\n\s*(?:CURRENT DATE & TIME|LIVE WEB RESULTS|AUTHORITATIVE ESPORTS FACTS|MEMORY|PROFILE|DOCUMENTS)\b/i)[0];
+    const re = /(?:^|\n)\s*(user|you|assistant|aura|ai)\s*:\s*/gi;
+    const marks = [];
+    let mm;
+    while ((mm = re.exec(tail))) marks.push({ role: /^user$/i.test(mm[1]) ? "user" : "assistant", start: re.lastIndex });
+    for (let i = 0; i < marks.length; i++) {
+      const end = i + 1 < marks.length ? marks[i + 1].start : tail.length;
+      const text = tail.slice(marks[i].start, end).trim();
+      if (text) out.push({ role: marks[i].role, text: text });
+    }
+  }
+  return out;
+}
+/* A follow-up carries no subject of its own — the thread does. This resolves a bare
+   continuation against the previous REAL question and hands every model an explicit
+   instruction, so "teams in it" can never turn into a Microsoft Teams definition. */
 function resolveFragment(messages) {
-  const users = (messages || []).filter(m => m && m.role === "user" && typeof m.content === "string" && m.content.trim());
-  if (users.length < 2) return null;
-  const q = String(users[users.length - 1].content).trim();
-  const prev = String(users[users.length - 2].content).trim();
-  if (!prev || prev.length < 8) return null;
+  const raw = lastUserMsg(messages);
+  const q = (currentAsk(raw) || raw || "").trim();
+  if (!q) return null;
+  const turns = threadTurns(messages);
+  const prior = turns.filter(t => t.role === "user" && t.text && (currentAsk(t.text) || t.text).trim() !== q);
+  const prev = prior.length ? prior[prior.length - 1].text : "";
+  if (!prev) return null;
+  const topic = (currentAsk(prev) || prev).replace(/\s+/g, " ").trim();
+  if (!topic || topic.length < 8) return null;
   const words = q.split(/\s+/).filter(Boolean);
-  const bareNoun = /^(teams?|team\s*names?|names?|list|lineup|line-?up|roster|participants|squad|dates?|schedule|venue|location|prize|format|winner|winners|who|kaun|kon|kab|kahan|kitne?|more|aur|details?)\b/i.test(q);
-  /* a genuinely short continuation ("teams in it"), or a short list-word ask
-     ("team names in it"). A LONG question that merely contains "it" has its own
-     subject — rewriting that would be the bug, not the fix. */
-  if (!(words.length <= 6 || (bareNoun && words.length <= 9))) return null;
-  return { q: q, topic: prev.replace(/\s+/g, " ").slice(0, 240) };
+  const bare = FOLLOW_WORD.test(q);
+  const pronoun = PRONOUN.test(q);
+  /* Short AND pointing at something already said. A fresh, self-contained question
+     ("how to start a cloud kitchen") has no pronoun and does not start on a follow-up
+     word, so it is never rewritten into the previous topic. */
+  if (!(bare && words.length <= 10) && !(pronoun && words.length <= 7)) return null;
+  return { q: q, topic: topic.slice(0, 240) };
 }
 function injectFollowUp(messages) {
   const frag = resolveFragment(messages);
   if (!frag) return messages;
-  const note = "FOLLOW-UP RESOLUTION — the user's last message (\"" + frag.q + "\") is a continuation of the previous question (\"" + frag.topic + "\"). Answer about THAT same subject/event; never switch to a different meaning of the words (for example, a tournament's \"teams\" are its participating squads, NOT Microsoft Teams). Reply in the user's own language, briefly, without restating the question.";
+  const note = "CURRENT TOPIC (from this same thread): \"" + frag.topic + "\".\n" +
+    "THE USER'S LAST MESSAGE: \"" + frag.q + "\" — it is a FOLLOW-UP to that topic, not a new subject.\n" +
+    "Rules: (1) resolve every ambiguous word against the topic — in a tournament thread \"teams\" means its participating squads and \"dates\" means that event's dates, NEVER Microsoft Teams or any other product; (2) keep the same entity/acronym the thread was about; " +
+    "(3) if the exact fact is not in the evidence, say so in one line and offer the closest verified fact — never invent rosters, dates or scores; " +
+    "(4) answer in the user's language (Hinglish stays Hinglish), briefly, and do not restate the question.";
   const out = messages.slice();
   const si = out.findIndex(m => m && m.role === "system" && typeof m.content === "string");
   if (si >= 0) out[si] = { role: "system", content: String(out[si].content) + "\n\n" + note };
   else out.unshift({ role: "system", content: note });
   return out;
 }
+/* what the search lane should actually look for: the topic the thread is on plus the
+   words the user just typed. Never the raw flattened blob (transcript included). */
 function followUpQuery(messages, q) {
-  const users = (messages || []).filter(m => m && m.role === "user" && typeof m.content === "string" && m.content.trim()).map(m => String(m.content).trim());
-  const prev = users.length > 1 ? users[users.length - 2] : "";
-  const short = q.split(/\s+/).length <= 5 || /^(teams?|team names?|names?|list|lineup|roster|schedule|dates?|usme|uska|uski|unka|in it|more|aur|kab|kaun|kon)\b/i.test(q);
-  return short && prev ? (prev + " " + q).slice(0, 300) : q;
+  const cur = (currentAsk(q) || String(q || "")).replace(/\s+/g, " ").trim();
+  const frag = resolveFragment(messages);
+  if (!frag) return cur || String(q || "");
+  return (frag.topic + " " + cur).replace(/\s+/g, " ").trim().slice(0, 300);
 }
 /* A reader-proxy bot wall ("Verify you are human") is not evidence — several sites hand
    one back instead of the article, and pasting that into the prompt used to wipe out the
@@ -2861,7 +2911,7 @@ if (IS_MAIN) {
 
 module.exports = {
   app,
-  groundChat, toolSearch, toolFetch, searchQuery, currentAsk, topicHint, followUpQuery,
+  groundChat, toolSearch, toolFetch, searchQuery, currentAsk, topicHint, followUpQuery, threadTurns,
   evidenceFacts, esportsFastAnswer, rosterGuard, cleanRead, isRosterAsk, fakeRoster,
   prettyDate, lastUserMsg, resolveFragment, injectFollowUp,
 };

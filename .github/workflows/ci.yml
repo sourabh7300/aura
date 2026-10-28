@@ -23,6 +23,7 @@ jobs:
       - name: "Core regression — engine, auth, voice, syntax"
         run: |
           node aura.test.js
+          node roster-guard.test.js
           node user-profile.test.js
           node voice-regress.test.js
           node voice-mode.test.js
