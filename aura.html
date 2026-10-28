@@ -3627,6 +3627,86 @@ window.setPerfMode=function(m){
   slog(m==="saver"?"⚡ battery saver ON — 30fps, lighter core, no blur":"⚡ performance mode restored — full core at "+FPS_GOAL()+"fps");
   $("tPts")&&document.body.getAttribute("data-tab")==="system"&&($("tPts").textContent=N+" / "+NMAX);
 };
+
+/* AURA_GEN_MEMORY_COMPACTION_OPTIMIZE — knowledge-base compactor (Attention Matching + TurboQuant inspired) */
+window.__memCompactor = (function(){
+  const KB_KEY = "aura_knowledge_base";
+  const MAX_KB_BYTES = 50 * 1024 * 1024; // 50MB soft cap
+  const COMPACTION_INTERVAL = 300000; // 5 min
+  let lastRun = 0;
+  let enabled = true;
+
+  function estimateSize(obj) { return new Blob([JSON.stringify(obj)]).size; }
+
+  function compressEntry(entry) {
+    // TurboQuant-style: quantize embeddings to int8, drop low-attention tokens
+    if (entry.embedding && entry.embedding.length > 64) {
+      const arr = new Float32Array(entry.embedding);
+      const max = Math.max(...arr.map(Math.abs)) || 1;
+      entry.embedding_q = Array.from(arr, v => Math.round((v / max) * 127));
+      entry.embedding_scale = max;
+      delete entry.embedding;
+    }
+    // Attention Matching: keep only top-k attention weights
+    if (entry.attn && entry.attn.length > 32) {
+      const idx = entry.attn.map((v,i)=>[v,i]).sort((a,b)=>b[0]-a[0]).slice(0,32).map(x=>x[1]);
+      entry.attn = idx.map(i=>entry.attn[i]);
+      entry.attn_idx = idx;
+    }
+    return entry;
+  }
+
+  function decompressEntry(entry) {
+    if (entry.embedding_q && entry.embedding_scale) {
+      entry.embedding = entry.embedding_q.map(v => (v / 127) * entry.embedding_scale);
+      delete entry.embedding_q; delete entry.embedding_scale;
+    }
+    if (entry.attn_idx && entry.attn) {
+      const full = new Array(entry.attn_idx[entry.attn_idx.length-1]+1).fill(0);
+      entry.attn_idx.forEach((idx,i)=>full[idx]=entry.attn[i]);
+      entry.attn = full;
+      delete entry.attn_idx;
+    }
+    return entry;
+  }
+
+  async function compact() {
+    if (!enabled) return;
+    const now = Date.now();
+    if (now - lastRun < COMPACTION_INTERVAL) return;
+    lastRun = now;
+
+    try {
+      const raw = localStorage.getItem(KB_KEY);
+      if (!raw) return;
+      const kb = JSON.parse(raw);
+      const before = estimateSize(kb);
+      if (before < MAX_KB_BYTES) return;
+
+      // Compress oldest 30% of entries first
+      const entries = Object.entries(kb);
+      entries.sort((a,b)=> (a[1].ts||0) - (b[1].ts||0));
+      const target = Math.floor(entries.length * 0.3);
+      for (let i=0;i<target;i++) kb[entries[i][0]] = compressEntry(kb[entries[i][0]]);
+
+      const after = estimateSize(kb);
+      localStorage.setItem(KB_KEY, JSON.stringify(kb));
+      slog(`🧠 memory-compaction: ${(before/1024/1024).toFixed(2)}MB → ${(after/1024/1024).toFixed(2)}MB (${((1-after/before)*100).toFixed(1)}% reduction)`);
+    } catch(e) { console.warn("[memCompactor]", e); }
+  }
+
+  // Hook into idle callbacks for zero-jank background work
+  function schedule() {
+    if (window.requestIdleCallback) {
+      requestIdleCallback(()=>{ compact(); schedule(); }, {timeout: 5000});
+    } else {
+      setTimeout(()=>{ compact(); schedule(); }, COMPACTION_INTERVAL);
+    }
+  }
+  schedule();
+
+  return { enable:()=>enabled=true, disable:()=>enabled=false, run:compact };
+})();
 requestAnimationFrame(frame);
 
 /* ---------------- audio blips ---------------- */
