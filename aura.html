@@ -3627,6 +3627,24 @@ window.setPerfMode=function(m){
   slog(m==="saver"?"⚡ battery saver ON — 30fps, lighter core, no blur":"⚡ performance mode restored — full core at "+FPS_GOAL()+"fps");
   $("tPts")&&document.body.getAttribute("data-tab")==="system"&&($("tPts").textContent=N+" / "+NMAX);
 };
+
+/* AURA_GEN_MEMORY_COMPACTION_OPTIMIZE — particle memory compaction for large datasets */
+function compactParticleMemory(){
+  if(!pts||!pts.length)return;
+  const alive=[];
+  for(let i=0;i<pts.length;i++){
+    const p=pts[i];
+    if(p&&p.z>0&&isFinite(p.x)&&isFinite(p.y)&&isFinite(p.z))alive.push(p);
+  }
+  if(alive.length<pts.length){
+    pts.length=0;pts.push(...alive);
+    N=pts.length;
+    slog("🧹 particle memory compacted: "+alive.length+" alive");
+  }
+  if(window.gc&&N>NMAX*.8)window.gc();
+}
+setInterval(compactParticleMemory,30000);
+window.__compactParticles=compactParticleMemory;
 requestAnimationFrame(frame);
 
 /* ---------------- audio blips ---------------- */
