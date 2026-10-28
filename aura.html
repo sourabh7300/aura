@@ -3627,6 +3627,144 @@ window.setPerfMode=function(m){
   slog(m==="saver"?"⚡ battery saver ON — 30fps, lighter core, no blur":"⚡ performance mode restored — full core at "+FPS_GOAL()+"fps");
   $("tPts")&&document.body.getAttribute("data-tab")==="system"&&($("tPts").textContent=N+" / "+NMAX);
 };
+
+/* AURA_GEN_MEMORY_COMPACTION_OPTIMIZE — quantization + attention pruning + incremental compaction */
+const MEMORY_COMPACTION = (() => {
+  const QUANT_SCALE = 127; // INT8 symmetric
+  const QUANT_SCALE_4BIT = 7; // INT4 symmetric
+  const ATTENTION_WINDOW = 2048; // tokens for attention scoring
+  const COMPACTION_BATCH = 512; // vectors per idle callback
+  let compactionQueue = [];
+  let isCompacting = false;
+  let lastCompaction = 0;
+  const COMPACTION_INTERVAL = 5 * 60 * 1000; // 5 min
+
+  function quantizeInt8(arr) {
+    const maxVal = Math.max(...arr.map(Math.abs));
+    const scale = maxVal > 0 ? maxVal / QUANT_SCALE : 1;
+    const quantized = new Int8Array(arr.length);
+    for (let i = 0; i < arr.length; i++) {
+      quantized[i] = Math.round(clamp(arr[i] / scale, -128, 127));
+    }
+    return { data: quantized, scale };
+  }
+
+  function dequantizeInt8({ data, scale }) {
+    const out = new Float32Array(data.length);
+    for (let i = 0; i < data.length; i++) out[i] = data[i] * scale;
+    return out;
+  }
+
+  function quantizeInt4(arr) {
+    const maxVal = Math.max(...arr.map(Math.abs));
+    const scale = maxVal > 0 ? maxVal / QUANT_SCALE_4BIT : 1;
+    const packed = new Uint8Array(Math.ceil(arr.length / 2));
+    for (let i = 0; i < arr.length; i++) {
+      const q = Math.round(clamp(arr[i] / scale, -8, 7)) & 0xF;
+      if (i % 2 === 0) packed[i >> 1] = q;
+      else packed[i >> 1] |= q << 4;
+    }
+    return { data: packed, scale, length: arr.length };
+  }
+
+  function dequantizeInt4({ data, scale, length }) {
+    const out = new Float32Array(length);
+    for (let i = 0; i < length; i++) {
+      const byte = data[i >> 1];
+      const nibble = (i % 2 === 0) ? (byte & 0xF) : (byte >> 4);
+      const signed = nibble > 7 ? nibble - 16 : nibble;
+      out[i] = signed * scale;
+    }
+    return out;
+  }
+
+  function attentionImportance(embeddings, queryVec) {
+    if (!embeddings.length || !queryVec) return new Float32Array(embeddings.length).fill(1);
+    const scores = new Float32Array(embeddings.length);
+    let maxScore = -Infinity;
+    for (let i = 0; i < embeddings.length; i++) {
+      let dot = 0, normA = 0, normB = 0;
+      const a = embeddings[i], b = queryVec;
+      const len = Math.min(a.length, b.length);
+      for (let j = 0; j < len; j++) { dot += a[j] * b[j]; normA += a[j] * a[j]; normB += b[j] * b[j]; }
+      const score = normA && normB ? dot / (Math.sqrt(normA) * Math.sqrt(normB)) : 0;
+      scores[i] = score;
+      if (score > maxScore) maxScore = score;
+    }
+    // normalize 0-1
+    for (let i = 0; i < scores.length; i++) scores[i] = (scores[i] - maxScore + 1) / 2;
+    return scores;
+  }
+
+  function scheduleCompaction(memoryStore, opts = {}) {
+    const { force = false, quantize = 'int8', importanceThreshold = 0.15 } = opts;
+    const now = Date.now();
+    if (!force && now - lastCompaction < COMPACTION_INTERVAL) return Promise.resolve();
+    lastCompaction = now;
+    compactionQueue.push({ memoryStore, quantize, importanceThreshold });
+    if (!isCompacting) processQueue();
+  }
+
+  async function processQueue() {
+    isCompacting = true;
+    while (compactionQueue.length) {
+      const task = compactionQueue.shift();
+      await compactStore(task.memoryStore, task.quantize, task.importanceThreshold);
+      await new Promise(r => requestIdleCallback(r, { timeout: 50 }));
+    }
+    isCompacting = false;
+  }
+
+  async function compactStore(store, quantizeMode, threshold) {
+    if (!store || !store.vectors || !store.vectors.length) return;
+    const vectors = store.vectors;
+    const meta = store.metadata || [];
+    const queryVec = store.lastQueryVector;
+    const importance = attentionImportance(vectors, queryVec);
+    let kept = 0, quantized = 0, pruned = 0;
+    const newVectors = [];
+    const newMeta = [];
+    for (let i = 0; i < vectors.length; i += COMPACTION_BATCH) {
+      const batchEnd = Math.min(i + COMPACTION_BATCH, vectors.length);
+      for (let j = i; j < batchEnd; j++) {
+        if (importance[j] < threshold) { pruned++; continue; }
+        const vec = vectors[j];
+        if (quantizeMode === 'int4' && vec.length > 64) {
+          newVectors.push(quantizeInt4(vec));
+          quantized++;
+        } else if (quantizeMode === 'int8') {
+          newVectors.push(quantizeInt8(vec));
+          quantized++;
+        } else {
+          newVectors.push(vec);
+        }
+        newMeta.push(meta[j]);
+        kept++;
+      }
+      if (j % (COMPACTION_BATCH * 4) === 0) await new Promise(r => setTimeout(r, 0));
+    }
+    store.vectors = newVectors;
+    store.metadata = newMeta;
+    store.quantized = quantizeMode;
+    slog(`🧠 memory compaction: kept ${kept}, quantized ${quantized} (${quantizeMode}), pruned ${pruned}, ratio ${(kept/vectors.length*100).toFixed(1)}%`);
+    return { kept, quantized, pruned };
+  }
+
+  function estimateSize(store) {
+    if (!store || !store.vectors) return 0;
+    let bytes = 0;
+    for (const v of store.vectors) {
+      if (v.data instanceof Int8Array) bytes += v.data.length + 4;
+      else if (v.data instanceof Uint8Array) bytes += v.data.length + 8;
+      else if (v instanceof Float32Array) bytes += v.length * 4;
+      else bytes += v.length * 4;
+    }
+    return bytes;
+  }
+
+  return { quantizeInt8, dequantizeInt8, quantizeInt4, dequantizeInt4,
+           attentionImportance, scheduleCompaction, compactStore, estimateSize };
+})();
 requestAnimationFrame(frame);
 
 /* ---------------- audio blips ---------------- */
