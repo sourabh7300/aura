@@ -63,7 +63,7 @@ if (require.main !== module) {
     console.log(runQ("git diff --cached --stat", ROOT).trim() || "   (nothing)");
   } else {
     try {
-      run('git commit -m "AURA update ' + new Date().toISOString().replace("T", " ").slice(0, 16) + ' [build ' + hash + ']" -m "🤖 Generated with Codebuff" -m "Co-Authored-By: Codebuff <noreply@codebuff.com>"', ROOT);
+      run('git commit -m "AURA update ' + new Date().toISOString().replace("T", " ").slice(0, 16) + ' [build ' + hash + ']"', ROOT);
     } catch (e) { console.log("(nothing new to commit in the standalone repo)"); }
     run("git push", ROOT);
   }
@@ -103,7 +103,7 @@ if (require.main !== module) {
     if (DRY) { console.log("[dry-run] staged in " + tmp + " — inspect with: git -C \"" + tmp + "\" status --short"); console.log("[dry-run] would: commit + push origin HEAD:main (portfolio)"); }
     else {
       try {
-        run('git commit -m "AURA update [build ' + hash + '] — site + backend mirror (sourabh7300.github.io)\\n\\n🤖 Generated with Codebuff\\nCo-Authored-By: Codebuff <noreply@codebuff.com>"', tmp);
+        run('git commit -m "AURA update [build ' + hash + '] — site + backend mirror (sourabh7300.github.io)"', tmp);
       } catch (e) { console.log("(portfolio tree already matches this build)"); }
       run("git push origin HEAD:main", tmp);
     }
