@@ -49,6 +49,37 @@ ok("searchQuery = honest ask + inherited topic", /function searchQuery/.test(srv
 ok("a client web block without verified facts is re-searched server-side", /AUTHORITATIVE ESPORTS FACTS/.test(srv) && /f0\.list\.length >= 3 \|\| !!f0\.start/.test(srv));
 ok("a Liquipedia hit is not re-fetched through the reader proxy", /h\.extract && \/DATES:\|TEAMS/.test(srv.replace(/\\s+/g, " ")) || /DATES:\|TEAMS/.test(srv));
 
+console.log("\n-- follow-ups are resolved in the REAL browser shape (functional) --");
+/* THE BUG THIS CATCHES: the browser sends one user message that contains the whole
+   thread, so a resolver that only reads messages[] never runs — "teams in it" then
+   reached the model with no topic. These run the shipped functions for real. */
+process.env.AURA_NO_LISTEN = "1";
+process.env.SQUAD_AUTOPILOT = "0";
+let S = null;
+try { S = require("./aura-backend/server.js"); } catch (e) { S = null; }
+const CONTEXT = "\n\nONGOING CONVERSATION (this is the SAME chat you are in right now — read it first, it sets the current topic):\n";
+const flatten = (q, convo) => [
+  { role: "system", content: "You are AURA, a futuristic holographic AI assistant built by Sourabh Singh." },
+  { role: "user", content: q + CONTEXT + convo.map(m => (m.role === "user" ? "User: " : "You: ") + m.content).join("\n") + "\n\nCURRENT DATE & TIME: Tuesday, October 28, 2026, 08:05 PM" }
+];
+const convo = [
+  { role: "user", content: "when will the bmic starts?" },
+  { role: "assistant", content: "BMIC 2026 kicks off on 30 October 2026 in Mumbai." }
+];
+if (!S || typeof S.resolveFragment !== "function") {
+  ok("server exports the follow-up resolver", false, "require failed");
+} else {
+  const g = flatten("teams in it", convo);
+  ok("threadTurns reads the transcript out of ONE flattened user message", (S.threadTurns(g) || []).filter(t => t.role === "user").length === 2, JSON.stringify((S.threadTurns(g) || []).map(t => t.role + ":" + t.text.slice(0, 18))));
+  const frag = S.resolveFragment(g);
+  ok("\"teams in it\" inherits the BMIC topic instead of Microsoft Teams", !!frag && /bmic/i.test(frag.topic), frag ? frag.topic : "null");
+  ok("the model is told the CURRENT TOPIC before it answers", /CURRENT TOPIC \(from this same thread\)/.test(String(S.injectFollowUp(g).find(m => m.role === "system").content)));
+  const merged = S.followUpQuery(g, S.lastUserMsg(g));
+  ok("the search query merges topic + ask, never the whole transcript", /bmic/i.test(merged) && !/ONGOING CONVERSATION/.test(merged) && merged.length < 200, merged.slice(0, 90));
+  ok("a self-contained question is NOT rewritten into the old topic", S.resolveFragment(flatten("how to start a cloud kitchen", convo)) === null);
+  ok("the plain messages[] shape still resolves (API clients)", !!S.resolveFragment([{ role: "user", content: "when will the bmic starts?" }, { role: "assistant", content: "30 Oct 2026" }, { role: "user", content: "teams in it" }]));
+}
+
 console.log("\n-- esports answers are verified, not typed live into the window --");
 ok("esports lanes buffer before sending (a bad roster cannot be un-sent)", /ESPORTS QUESTIONS ARE BUFFERED/.test(srv) && /__buffer/.test(srv));
 ok("the roster is served once, from the validated buffer", /safe !== full/.test(srv));
