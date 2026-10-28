@@ -1955,13 +1955,18 @@ function threadTurns(messages) {
     /* only the transcript itself — the date/memory/profile blocks that follow it
        are not conversation and must never be mistaken for a user turn */
     const tail = txt.slice(at).split(/\n\s*(?:CURRENT DATE & TIME|LIVE WEB RESULTS|AUTHORITATIVE ESPORTS FACTS|MEMORY|PROFILE|DOCUMENTS)\b/i)[0];
-    const re = /(?:^|\n)\s*(user|you|assistant|aura|ai)\s*:\s*/gi;
+    const re = /(?:^|\n)[ \t]*(user|you|assistant|aura|ai)\s*:\s*/gi;
     const marks = [];
     let mm;
-    while ((mm = re.exec(tail))) marks.push({ role: /^user$/i.test(mm[1]) ? "user" : "assistant", start: re.lastIndex });
+    while ((mm = re.exec(tail))) {
+      /* the label itself belongs to the NEXT turn, so a turn ends where the next
+         label BEGINS — otherwise every captured line drags "You:" along with it */
+      const labelAt = mm.index + (mm[0].charAt(0) === "\n" ? 1 : 0);
+      marks.push({ role: /^user$/i.test(mm[1]) ? "user" : "assistant", labelAt: labelAt, contentAt: re.lastIndex });
+    }
     for (let i = 0; i < marks.length; i++) {
-      const end = i + 1 < marks.length ? marks[i + 1].start : tail.length;
-      const text = tail.slice(marks[i].start, end).trim();
+      const end = i + 1 < marks.length ? marks[i + 1].labelAt : tail.length;
+      const text = tail.slice(marks[i].contentAt, end).trim();
       if (text) out.push({ role: marks[i].role, text: text });
     }
   }
@@ -2069,9 +2074,10 @@ function topicHint(raw) {
    topic when the question itself doesn't name it. */
 function searchQuery(messages) {
   const raw = lastUserMsg(messages);
-  let q = followUpQuery(messages, raw);
-  const cur = currentAsk(raw);
-  if (cur && cur !== raw) q = cur;
+  /* followUpQuery already returns "topic + this ask" for a real follow-up, and
+     just the ask otherwise — overriding it with the bare head (the old bug) threw
+     the topic away and searched for the words “teams in it”. */
+  let q = followUpQuery(messages, raw) || currentAsk(raw) || raw;
   const hint = topicHint(raw);
   if (hint && !new RegExp("\\b" + hint + "\\b", "i").test(q)) q = hint + " " + q;
   return q.replace(/\s+/g, " ").trim().slice(0, 300);
