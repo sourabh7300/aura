@@ -66,6 +66,19 @@ through the backend's `/v1/websearch` lane (Google News RSS + page reads), so
 squad answers are grounded in same-day sources — and when a live lane is down,
 the bot says so instead of inventing data.
 
+Give the lane a real search API and it answers first from ranked results
+instead of headlines. Add **one** of these on the Render service → Environment;
+priority is left to right, and with none set the free lanes above still run:
+
+| Env var | Provider | Where |
+|---|---|---|
+| `TAVILY_API_KEY` | Tavily | tavily.com → API keys |
+| `BRAVE_SEARCH_API_KEY` | Brave Search | api.search.brave.com → subscription token |
+| `EXA_API_KEY` | Exa | dashboard.exa.ai → API keys |
+
+Keys live only in Render's env; `/health` reports which lane is active
+(`search: "tavily" | "brave" | "exa" | "free"`) so you can confirm it took.
+
 ### Training v3
 
 Top-tier system training: 10-point Mythos protocol, calibrated Hinglish
