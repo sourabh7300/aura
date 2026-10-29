@@ -7730,7 +7730,19 @@ async function aiReply(q){
     }
     if(CURRENCY_Q.test(q)){const lc=currencyMetaReply((q||"").toLowerCase());if(lc)return{t:lc,eng:"local core · currency & time"};}
     /* TIME-SENSITIVE → live research path first (real-time web + citations) */
-    if(NEED_WEB.test(q)){const rr=await researchReply(q,hiMode);if(rr&&rr.trim())return{t:rr,eng:"live web research · "+personaName()};}
+    if(NEED_WEB.test(q)){
+      /* CURRENT QUESTIONS GO TO THE SECURE BACKEND FIRST (29 Oct 2026): it searches,
+         reads the newest source and answers from it (or returns the live headlines
+         with a link). The in-browser research lane was one generation behind —
+         "latest iPhone" came back as iPhone 17 Pro Max — and it is slower. */
+      if(backendUrl()){
+        try{
+          const bt=await backendCall([{role:"system",content:replyStyle()},{role:"user",content:q}],1000);
+          if(bt&&bt.trim().length>12)return{t:bt.trim(),eng:"live web · secure backend"};
+        }catch(e){slog("backend web answer failed — falling back to in-browser research",true)}
+      }
+      const rr=await researchReply(q,hiMode);if(rr&&rr.trim())return{t:rr,eng:"live web research · "+personaName()};
+    }
     /* THE THINKING BRAIN FIRST — gather live evidence, then reason over it in human fashion */
     const th=await thinkAnswer(q,deep,hiMode);if(th)return th;
     if(hiMode){const hw=await hiWikiAnswer(q,deep);if(hw)return hw;}
@@ -10553,14 +10565,22 @@ async function _aiToolsAnswer(q){
       return "🛰 "+t.name+" — "+t.why+"\n\nBEST FOR: "+t.best+"\n\nMODEL CLOUD STATUS: "+live+"\n\nAsk me about any other tool, model or framework by name — or say 'compare the best ai models' for the full leaderboard.";
     }
   }
-  if(/\b(compare|top|best|leaderboard|ranking|latest)\b.*\b(ai|model|llm|tool)s?\b|\b(ai|model|llm|tool)s?\b.*\b(compare|top|best|leaderboard|ranking|latest)\b/.test(lq)){
-    const live=await _aiToolsLive();
-    return "🛰 THE 2026 AI STACK, RANKED BY WHAT I'D BET ON —\n\n1. GPT-OSS-120B (open weights) — my own primary brain; frontier reasoning at open-model cost\n2. Claude 4 — long documents, careful code, best writing\n3. Gemini 2.5 — 1M-token context, native video/screen understanding\n4. DeepSeek R1 — reasoning that shows its work, absurdly cheap\n5. Qwen 3 — 100+ languages, unbeatable for Hindi/Hinglish\n6. Llama 3.x — the mature fine-tuning ecosystem\n7. Mistral — Europe's open-weight champion, edge-sized\n8. GPT-4o — the polished consumer multimodal king\n\nINFRA: Groq LPUs for speed (my home), vLLM for self-hosting, Ollama for your laptop\nMEMORY: vector DBs — Chroma (local), Pinecone (managed) — the same tech as my own memory\nAGENTS: LangGraph for state, LlamaIndex for RAG, n8n for glue\nVOICE: ElevenLabs for realism, Whisper for bulletproof ears\n\nMODEL CLOUD STATUS: "+live+"\n\nWant a deep dive on any of these? Just name it.";
+  /* The old ranked list here was a frozen snapshot (GPT-4o, Gemini 2.5, DeepSeek R1)
+     that went stale the moment new models shipped — and because the gate below
+     matched the bare word "model", "latest iPhone model" was answered with it.
+     A "best/latest models" question is a CURRENT-EVENTS question: let the live
+     research lane answer it with today's evidence. */
+  if(/\b(compare|top|best|leaderboard|ranking|latest)\b.*\b(ai|llm|gpt|claude|gemini|llama|deepseek|qwen|mistral|groq)s?\b|\b(ai|llm)s?\b.*\b(compare|top|best|leaderboard|ranking|latest)\b/.test(lq)){
+    return null;
   }
   return null;
 }
 async function aiToolsText(q){
-  if(!/\b(ai|model|llm|gpt|claude|gemini|llama|deepseek|qwen|mistral|groq|openai|anthropic|google ai|meta ai|hugging ?face|langchain|llama ?index|ollama|vllm|cursor|copilot|perplexity|elevenlabs|whisper|pinecone|chroma|qdrant|weaviate|vector (db|database)|midjourney|dall|stable diffusion|flux|sora|runway|veo|n8n|zapier|make\.com|automation (tool|platform)|puter)\b/i.test(q))return null;
+  /* "model" alone is NOT an AI signal — "latest iPhone model" was hijacked into the
+     AI-stack answer. Require a real AI word, and never fire on consumer hardware. */
+  const __aiWord=/\b(ai|llm|llms|artificial intelligence|language model|foundation model|gpt|claude|gemini|llama|deepseek|qwen|mistral|groq|openai|anthropic|google ai|meta ai|hugging ?face|langchain|llama ?index|ollama|vllm|cursor|copilot|perplexity|elevenlabs|whisper|pinecone|chroma|qdrant|weaviate|vector (db|database)|midjourney|dall|stable diffusion|flux|sora|runway|veo|n8n|zapier|make\.com|automation (tool|platform)|puter)\b/i.test(q);
+  const __gadget=/\b(iphone|ipad|macbook|pixel|galaxy|oneplus|phone|smartphone|laptop|tablet|camera|tv|watch|car|bike)\b/i.test(q);
+  if(!__aiWord||__gadget)return null;
   /* NEWS-SHAPED asks ('latest news in AI', 'AI headlines today', 'what's new in models') are
      CURRENT-EVENTS questions — the live research lane must answer them from the web, never
      this cached leaderboard snapshot. */
