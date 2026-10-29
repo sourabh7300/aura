@@ -11659,6 +11659,9 @@ document.addEventListener("DOMContentLoaded",function(){
         S.shift=(p.shift&&typeof p.shift==="object")?p.shift:null;
         S.pins=(p.pins&&typeof p.pins==="object")?p.pins:{}; /* CHAT SUPERPowers v1 */
         S.follow=(p.follow&&typeof p.follow==="object")?p.follow:{}; /* ⭐/👍/👇 reactions per message key */
+        S.answerSelfScore=null; /* placeholder for answer-self-score fn */
+/* AURA_GEN_ANSWER_SELF_SCORE_FIX */
+
         if(["kratos","erlang","arthur","phoenix"].indexOf(p.who)>=0)S.who=p.who;
       }
     }catch(e){}
