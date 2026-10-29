@@ -22,6 +22,15 @@ services:
         value: "https://sourabh7300.github.io"
       - key: SECRET
         sync: false          # optional private gate key — owner tools present it as X-AURA-Key
+      # REAL SEARCH (29 Oct 2026): with one of these set, every "latest …" question is
+      # answered from ranked results instead of news headlines. Priority: tavily → brave → exa.
+      - key: TAVILY_API_KEY
+        sync: false          # tavily.com → API keys
+      - key: BRAVE_SEARCH_API_KEY
+        sync: false          # api.search.brave.com subscription token
+      - key: EXA_API_KEY
+        sync: false          # dashboard.exa.ai
+
       # OWNER ORDER 16 Oct 2026: "nonstop kaam — ChatGPT-Astra-class jab tak".
       # Phase-3 ChatGPT-parity roadmap ON, 30 cycle/din, 20-min tick.
       - key: SQUAD_NONSTOP
