@@ -62,12 +62,12 @@ const KEY_POOL = [...new Set([
 ].filter(Boolean))];
 /* BUILD MARKER — one request tells you which build the host is really serving.
    If /health does not show this string, the deploy did NOT land (stale build). */
-const BUILD = process.env.AURA_BUILD || "squad-v20";
+const BUILD = process.env.AURA_BUILD || "squad-v27";
 /* WHAT THIS FILE IS — a dashboard env var can hold any value (or an old one may be
    left behind), which makes /health look stale even when the new code IS serving.
    srcBuild is compiled into the source itself, so no env var can fake it: if /health
    shows srcBuild = the value below, THIS code is live. */
-const SRC_BUILD = "squad-v20";
+const SRC_BUILD = "squad-v27";
 const SECRET = process.env.SECRET || "";        // optional shared secret
 const REQUIRE_SECRET = process.env.REQUIRE_SECRET === "1";
 /* AUTOPILOT tick key — GitHub Actions presents this so the squad keeps working
@@ -168,6 +168,55 @@ const NVIDIA_NIM_KEY = envv("NVIDIA_NIM_KEY", "NVIDIA_API_KEY", "NIM_API_KEY", "
    No vision key → an honest 501 — never a text model pretending it saw the photo. */
 function msgHasImage(messages) {
   return messages.some(m => Array.isArray(m.content) && m.content.some(p => p && p.type === "image_url"));
+}
+/* TEXT CHAT ON GEMINI — same request shape as visionCall, but with a hard total
+   budget and the known-good model first. 29 Oct 2026: a discovered model accepted
+   the call and never answered, and visionCall's per-model 60s timeout let one bad
+   model hold a chat request for a minute (the connection was reset before a reply). */
+let geminiCool = 0; /* circuit breaker: a rate-limited key must not cost every chat 20s */
+function looksLikeReasoning(t) {
+  const s = String(t || "").trim();
+  if (!s || s.length < 12) return false;
+  if (/^(let me|let's|lets |we need|the user|okay|ok,|first,|i need to|i'll |hmm|sure, let)/i.test(s)) return true;
+  if (/\b(let me check|i should check|we should check|the user is asking)\b/i.test(s) && s.length > 120) return true;
+  return false;
+}
+async function geminiChat(messages, maxTok, temperature, req) {
+  if (!GEMINI_API_KEY) return null;
+  if (Date.now() < geminiCool) return null;
+  const sys = messages.filter(m => m.role === "system").map(m => typeof m.content === "string" ? m.content : "").join("\n").trim();
+  const contents = messages.filter(m => m.role !== "system").map(m => ({
+    role: m.role === "assistant" ? "model" : "user",
+    parts: [{ text: String(typeof m.content === "string" ? m.content : "") }]
+  })).filter(c => c.parts[0].text);
+  if (!contents.length) return null;
+  const body = JSON.stringify(Object.assign(
+    { contents, generationConfig: { maxOutputTokens: Math.min(maxTok || 1400, 3000), temperature: temperature != null ? temperature : 0.6 } },
+    sys ? { systemInstruction: { parts: [{ text: sys.slice(0, 12000) }] } } : {}
+  ));
+  const chain = [...new Set([VISION_MODEL, ...VISION_MODELS])].slice(0, 2);
+  const deadline = Date.now() + 12_000;
+  for (const vmodel of chain) {
+    const left = deadline - Date.now();
+    if (left < 2500) break;
+    try {
+      const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + vmodel + ":generateContent?key=" + encodeURIComponent(GEMINI_API_KEY), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+        signal: AbortSignal.timeout(Math.min(9_000, left))
+      });
+      if (!r.ok) continue; /* busy / retired model → next one */
+      const d = await r.json();
+      const t = (d.candidates && d.candidates[0] && d.candidates[0].content && d.candidates[0].content.parts || []).map(p => p.text || "").join("").trim();
+      if (t) {
+        if (looksLikeReasoning(t)) { geminiCool = Date.now() + 120_000; continue; }
+        recordUse(req, "vision", 0); return t;
+      }
+    } catch (e) { /* timeout or network → next model */ }
+  }
+  geminiCool = Date.now() + 300_000; /* 5 min: stop paying the timeout on every question */
+  return null;
 }
 async function visionCall(messages, maxTok, temperature, req) {
   if (!GEMINI_API_KEY) return null;
@@ -400,8 +449,12 @@ function normQ(messages) {
   const last = [...messages].reverse().find(m => m.role === "user" && typeof m.content === "string");
   return last ? last.content.replace(/\s+/g, " ").trim().toLowerCase().slice(0, 300) : "";
 }
+/* a cache must never answer a question whose whole point is being current —
+   "latest iPhone" was served a wrong 1-hour-old answer from here */
+const FRESH_Q = /(latest|today|tonight|now|current|news|price|rate|score|result|schedule|when|kab|aaj|abhi|20[2-9][0-9]|winner|won|match|tournament|election|weather|stock|ipo|launch|release|update|trending|kitna)/i;
 function cacheGet(messages) {
   const k = normQ(messages); if (!k) return null;
+  if (FRESH_Q.test(k)) return null;
   const hit = answerCache.get(k);
   if (hit && Date.now() - hit.t < ANSWER_CACHE_TTL) return hit;
   if (hit) answerCache.delete(k);
@@ -409,6 +462,7 @@ function cacheGet(messages) {
 }
 function cachePut(messages, answer, model) {
   const k = normQ(messages); if (!k || !answer) return;
+  if (FRESH_Q.test(k)) return;
   if (answerCache.size > 400) answerCache.clear(); /* tiny footprint, self-healing */
   answerCache.set(k, { answer, model, t: Date.now() });
 }
@@ -1885,7 +1939,7 @@ app.get("/health", (req, res) => {
   const now = Date.now();
   try { fbInit(); } catch (e) { noteCrash("fb-init", e); } /* lazy+eager both fine: it caches its verdict */
   const fbState = fbTried ? (fbAdmin ? "online" : (FB_PROJECT ? "package-missing" : "not-configured")) : "pending";
-  res.json({ ok: true, build: BUILD, srcBuild: SRC_BUILD, node: process.version, rssMB: Math.round(process.memoryUsage().rss / 1048576), crashes: bootCrashes.length, lastCrash: bootCrashes[bootCrashes.length - 1] || null, started: new Date(Date.now() - process.uptime() * 1000).toISOString(), uptime: process.uptime(), keysTotal: KEY_POOL.length, publicKeys: PUBLIC_KEYS.length, makerReserved: KEY_POOL.length > 1, keysLive: KEY_POOL.filter(k => !(keyCool.get(k) > now)).length, reserve: !!RESERVE_KEY, nimKey: !!NVIDIA_NIM_KEY, codeLane: !!CODE_KEY, adminLane: !!ADMIN_KEY, vision: !!GEMINI_API_KEY, visionModels: visionModelCache.names.slice(0, 4), visionSeed: VISION_MODELS.slice(0, 3), stream: true, accounts: fbState, github: GH_TOKEN ? "configured" : "missing", liveMirror: ghMirrorLast.note, bootStage: BOOT.stage, bootErr: BOOT.err, bootMs: Date.now() - BOOT.at, githubCheck: ghCheckCache.state, githubCheckedAt: ghCheckCache.at || null, research: researchProbeCache, brain: brainLast, chat: chatLast, squad: squadHealth(), warmers: "background" });
+  res.json({ ok: true, build: BUILD, srcBuild: SRC_BUILD, node: process.version, rssMB: Math.round(process.memoryUsage().rss / 1048576), crashes: bootCrashes.length, lastCrash: bootCrashes[bootCrashes.length - 1] || null, started: new Date(Date.now() - process.uptime() * 1000).toISOString(), uptime: process.uptime(), keysTotal: KEY_POOL.length, publicKeys: PUBLIC_KEYS.length, makerReserved: KEY_POOL.length > 1, keysLive: KEY_POOL.filter(k => !(keyCool.get(k) > now)).length, reserve: !!RESERVE_KEY, nimKey: !!NVIDIA_NIM_KEY, codeLane: !!CODE_KEY, adminLane: !!ADMIN_KEY, vision: !!GEMINI_API_KEY, search: searchProvider(), visionModels: visionModelCache.names.slice(0, 4), visionSeed: VISION_MODELS.slice(0, 3), stream: true, accounts: fbState, github: GH_TOKEN ? "configured" : "missing", liveMirror: ghMirrorLast.note, bootStage: BOOT.stage, bootErr: BOOT.err, bootMs: Date.now() - BOOT.at, githubCheck: ghCheckCache.state, githubCheckedAt: ghCheckCache.at || null, research: researchProbeCache, brain: brainLast, chat: chatLast, squad: squadHealth(), warmers: "background" });
 });
 /* keep the last-known values fresh without ever blocking the endpoint */
 setTimeout(warmHealth, 1500);
@@ -2043,6 +2097,15 @@ function resolveFragment(messages) {
    diagramming tool Lucidchart. The owner's own products have unique names, so when
    one is mentioned the answer must be about THAT app. Same block carries the
    language rule: a Hinglish question gets a Hinglish answer. */
+/* a Hinglish question searches badly: "latest iphone konsa hai abhi" was sent to
+   the news lane verbatim and came back with Rajasthan current affairs. Keep the
+   searchable core, drop the conversational wrapper. */
+function cleanAsk(q) {
+  return String(q || "")
+    .replace(/[?!.,;:"'()]+/g, " ")
+    .replace(/\b(mujhe|humein|please|plz|bhai|yaar|batao|bataiye|bata|batana|jankari|jaankari|chahiye|kya|kaun|kaunsa|konsa|konsi|kaisi|kaisa|kaise|kab|kahan|abhi|aaj|hai|hain|ka|ki|ke|me|mein|se|ko|ek|line|short|answer|please)\b/gi, " ")
+    .replace(/\s+/g, " ").trim().slice(0, 120);
+}
 const PRODUCT_FACTS = [
   "OWNER PRODUCTS (authoritative — these are the only products these names refer to in this chat):",
   "• Lucid — a photo studio that runs entirely in one HTML file, built by Sourabh Singh. Real WebGL editing (exposure, curves, HSL mixer, clarity, bloom, bokeh, grain), layers, brush masks, batch export to ZIP, 48 ready-made templates and an AI studio that applies edits from a typed request or an attached photo/video frame. It is NOT Lucidchart and NOT a diagramming tool.",
@@ -2239,6 +2302,7 @@ app.post("/v1/chat/completions", async (req, res) => {
      live web results (the same toolSearch/toolFetch lanes /v1/websearch uses) injected
      as a system block before the model call. Small talk and already-armed requests are
      untouched; empty search costs nothing (fail-open). */
+  let __live = null; /* real web hits, kept so a failed model still cannot answer from a stale cutoff */
   try {
     const _lastUser = [...messages].reverse().find(m => m && m.role === "user" && typeof m.content === "string" && m.content.trim());
     const _q = _lastUser ? searchQuery(messages) : "";
@@ -2253,14 +2317,18 @@ app.post("/v1/chat/completions", async (req, res) => {
       const _now = new Date().toLocaleDateString("en-IN", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
       let _web = "";
       try {
-        const _hits = await toolSearch(_q.replace(/\s+/g, " "));
+        const _sq = cleanAsk(_q) || _q.replace(/\s+/g, " ");
+        const _hits = await toolSearch(_sq);
         if (_hits && _hits.length) {
-          const _top = _hits.slice(0, 2);
+          __live = { now: _now, hits: _hits.slice(0, 3) };
+          /* ONE page, capped at 5s: two uncapped reads were costing 5–10s before the
+             model even started, and the headlines alone already answer "latest X" */
+          const _top = _hits.slice(0, 1);
           const _reads = await Promise.all(_top.map(h => toolFetch(h.url).catch(() => null)));
           _web = _top.map((h, i) => "[SOURCE " + (i + 1) + ": live web — " + (h.title || "") + "]\n" + String(cleanRead(_reads[i]) || h.extract || h.title || "").slice(0, 1600)).join("\n\n");
         }
       } catch (e) { /* search down → date-only block still fixes the cutoff */ }
-      messages = messages.concat([{ role: "system", content: "CURRENT DATE & TIME: " + _now + " (anchor 'today/now/latest' to THIS moment — never answer from an old training cutoff, never state a stale knowledge date).\n" + (_web ? "LIVE WEB RESULTS (fetched seconds ago — REAL and CURRENT; ground every time-sensitive fact in them; when they conflict with your memory of past events, dates, scores, prices or records, the live results WIN; never invent dates, scores, prices or winners):\n" + _web : "No live results — answer with today's date in mind; if the answer may have changed more recently than your training, say today's date and mark the uncertainty instead of guessing a specific recent value.") }]);
+      messages = messages.concat([{ role: "system", content: "CURRENT DATE & TIME: " + _now + " (anchor 'today/now/latest' to THIS moment — never answer from an old training cutoff, never state a stale knowledge date).\n" + (_web ? "LIVE WEB RESULTS (fetched seconds ago — REAL and CURRENT; ground every time-sensitive fact in them; when they conflict with your memory of past events, dates, scores, prices or records, the live results WIN; never invent dates, scores, prices or winners):\n" + _web + "\nANSWER FROM THE RESULTS FIRST: the specific model, price, date or name the user asked about must be taken from these results. If they do not contain it, say plainly that you could not verify today's value — never present an older model, price or version as the current one. Your first sentence must answer, not describe your reasoning." : "No live results — answer with today's date in mind; if the answer may have changed more recently than your training, say today's date and mark the uncertainty instead of guessing a specific recent value.") }]);
     }
   } catch (e) { /* amplification is best-effort — never block the answer */ }
   /* the fact rules apply even to already-grounded / cached / small-talk requests */
@@ -2274,6 +2342,30 @@ app.post("/v1/chat/completions", async (req, res) => {
     const _fastA = esportsFastAnswer(messages, searchQuery(messages), _rawU);
     if (_fastA) return res.json({ choices: [{ message: { content: _fastA } }], model: "live esports data" });
   } catch (e) {}
+  /* GEMINI FIRST (29 Oct 2026): the Groq ids on this account are retired and the
+     NIM fallback ignored the injected live results — a "latest iPhone" question got
+     answered from a stale cutoff. Gemini actually follows the evidence block and is
+     fast; the key bank below stays as the fallback. */
+  if (GEMINI_API_KEY) {
+    try {
+      const gt = await geminiChat(messages, Math.min(body.max_tokens || 1400, 3000), body.temperature, req);
+      if (gt) {
+        if (!makerHere) { cachePut(messages, gt, "gemini"); countAnswer(req); }
+        return res.json({ choices: [{ message: { content: gt } }], model: "gemini (text)" });
+      }
+    } catch (e) { /* fall through to the key bank */ }
+  }
+  /* TRUTH OVER PROSE (29 Oct 2026): Gemini's free quota is intermittent and the NIM
+     fallback answered "latest iPhone" with iPhone 16. When the question is about
+     something current and the live web actually returned results, answer from those
+     headlines and link the source — no model may quietly substitute an old version. */
+  if (!makerHere && __live && __live.hits && __live.hits.length) {
+    const clean = s => String(s || "").replace(/&amp;/g, "&").replace(/<[^>]+>/g, "").trim();
+    const lines = __live.hits.map((h, i) => (i + 1) + ". " + clean(h.title).replace(/\s+-\s+[^-]{2,40}$/, "") + (h.date ? " · " + clean(h.date).slice(0, 24) : "")).join("\n");
+    const src = (__live.hits.find(h => /^https?:/.test(String(h.url || "")) && !/news\.google\.com\/?$/.test(String(h.url))) || __live.hits[0]).url;
+    const t = "Live web · " + __live.now + "\n" + lines + "\n\nSource: " + src;
+    return res.json({ choices: [{ message: { content: t } }], model: "live web" });
+  }
 
   let sawLimit = false; // at least one key hit a rate/limit error
   let lastChatErr = ""; // every upstream reason, surfaced in the 502 instead of a guess
@@ -2333,7 +2425,13 @@ app.post("/v1/chat/completions", async (req, res) => {
     if (NIM_KEY) {
       /* fastest NIM model first: the 550B flagship is a last resort, not the public
          default — it adds seconds to every answer */
-      for (const model of ["nvidia/nemotron-3.5-lightning-30b-a3b", "nvidia/nemotron-3-super-120b-a12b", "nvidia/nemotron-3-ultra-550b-a55b"]) {
+      /* the 30B model is fast but loses the prompt when the evidence block is long;
+         the 120B one follows it. Lite speed for short chat, 120B whenever the
+         route injected live results (see nimPick below). */
+      const nimPick = /LIVE WEB RESULTS/.test(JSON.stringify(messages))
+        ? ["nvidia/nemotron-3-super-120b-a12b", "nvidia/nemotron-3.5-lightning-30b-a3b", "nvidia/nemotron-3-ultra-550b-a55b"]
+        : ["nvidia/nemotron-3.5-lightning-30b-a3b", "nvidia/nemotron-3-super-120b-a12b", "nvidia/nemotron-3-ultra-550b-a55b"];
+      for (const model of nimPick) {
         try {
           const nimBase = { model, messages, max_tokens: Math.min(body.max_tokens || 1400, 4000), temperature: body.temperature != null ? body.temperature : 0.6 };
           const nimAsk = extra => fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
@@ -2405,6 +2503,69 @@ function extractJson(text) {
   try { return JSON.parse(m[0]); } catch (e) { return null; }
 }
 const WEB_JUNK = /unusual traffic|not a robot|why did this happen|captcha|enable javascript|just a moment|access denied|are you a human/i;
+/* ============ REAL SEARCH (29 Oct 2026) ============
+   The free lanes (Google News RSS, DDG lite, Wikipedia) are best-effort: on some
+   days they return nothing for a product question and the answer falls back to the
+   model's training cutoff. A real search API fixes that, so this layer supports the
+   three keys an owner is likely to have and uses whichever one is present:
+     TAVILY_API_KEY · BRAVE_SEARCH_API_KEY · EXA_API_KEY
+   Results are normalized to {title,url,date,snippet}; nothing here is exposed to
+   the browser and no key ever leaves the server. */
+const SEARCH_KEYS = {
+  tavily: (process.env.TAVILY_API_KEY || "").trim(),
+  brave: (process.env.BRAVE_SEARCH_API_KEY || process.env.BRAVE_API_KEY || "").trim(),
+  exa: (process.env.EXA_API_KEY || "").trim()
+};
+function searchProvider() {
+  if (SEARCH_KEYS.tavily) return "tavily";
+  if (SEARCH_KEYS.brave) return "brave";
+  if (SEARCH_KEYS.exa) return "exa";
+  return "free";
+}
+const cleanHit = (title, url, snippet, date) => ({
+  title: String(title || "").replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim(),
+  url: String(url || "").trim(),
+  date: String(date || ""),
+  snippet: String(snippet || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 400)
+});
+async function realSearch(q, n) {
+  const count = Math.max(3, Math.min(n || 5, 8));
+  const provider = searchProvider();
+  try {
+    if (provider === "tavily") {
+      const r = await fetch("https://api.tavily.com/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ api_key: SEARCH_KEYS.tavily, query: q, max_results: count, search_depth: "basic", include_answer: false }),
+        signal: AbortSignal.timeout(12_000)
+      });
+      if (!r.ok) return null;
+      const j = await r.json();
+      return (j.results || []).map(x => cleanHit(x.title, x.url, x.content, x.published_date)).filter(h => h.url);
+    }
+    if (provider === "brave") {
+      const r = await fetch("https://api.search.brave.com/res/v1/web/search?q=" + encodeURIComponent(q) + "&count=" + count + "&safesearch=moderate", {
+        headers: { "Accept": "application/json", "X-Subscription-Token": SEARCH_KEYS.brave },
+        signal: AbortSignal.timeout(12_000)
+      });
+      if (!r.ok) return null;
+      const j = await r.json();
+      return ((j.web && j.web.results) || []).map(x => cleanHit(x.title, x.url, x.description, x.age)).filter(h => h.url);
+    }
+    if (provider === "exa") {
+      const r = await fetch("https://api.exa.ai/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": SEARCH_KEYS.exa },
+        body: JSON.stringify({ query: q, numResults: count, type: "auto", contents: { highlights: { numSentences: 2 } } }),
+        signal: AbortSignal.timeout(12_000)
+      });
+      if (!r.ok) return null;
+      const j = await r.json();
+      return (j.results || []).map(x => cleanHit(x.title, x.url, (x.highlights && x.highlights[0]) || x.text, x.publishedDate)).filter(h => h.url);
+    }
+  } catch (e) { /* a bad key or a network blip falls back to the free lanes */ }
+  return null;
+}
 async function toolSearch(q) {
   /* live web search — ordered by cloud-IP reliability:
      0) Liquipedia API (esports only — the only source that actually carries rosters,
@@ -2422,6 +2583,14 @@ async function toolSearch(q) {
        is the whole evidence set — irrelevant headlines were what nudged the model
        into mixing events up in the first place */
     if (out.length) return out.slice(0, 2);
+  }
+  /* a real search API answers first when its key is configured — this is the lane
+     that guarantees fresh, ranked results for "latest …" questions */
+  if (searchProvider() !== "free") {
+    try {
+      const hits = await realSearch(q, 6);
+      if (hits && hits.length) return hits.slice(0, 5);
+    } catch (e) { /* fall through to the free lanes */ }
   }
   try {
     const r = await fetch("https://news.google.com/rss/search?q=" + encodeURIComponent(q) + "&hl=en-IN&gl=IN&ceid=IN:en", { signal: AbortSignal.timeout(10_000), headers: { "User-Agent": "Mozilla/5.0 (compatible; AURA-backend/1.0)" } });
