@@ -62,12 +62,12 @@ const KEY_POOL = [...new Set([
 ].filter(Boolean))];
 /* BUILD MARKER — one request tells you which build the host is really serving.
    If /health does not show this string, the deploy did NOT land (stale build). */
-const BUILD = process.env.AURA_BUILD || "squad-v16";
+const BUILD = process.env.AURA_BUILD || "squad-v20";
 /* WHAT THIS FILE IS — a dashboard env var can hold any value (or an old one may be
    left behind), which makes /health look stale even when the new code IS serving.
    srcBuild is compiled into the source itself, so no env var can fake it: if /health
    shows srcBuild = the value below, THIS code is live. */
-const SRC_BUILD = "squad-v16";
+const SRC_BUILD = "squad-v20";
 const SECRET = process.env.SECRET || "";        // optional shared secret
 const REQUIRE_SECRET = process.env.REQUIRE_SECRET === "1";
 /* AUTOPILOT tick key — GitHub Actions presents this so the squad keeps working
@@ -105,6 +105,35 @@ async function geminiModels() {
     if (names.length) visionModelCache = { at: Date.now(), names: names.slice(0, 6) };
   } catch (e) { /* keep the seeds */ }
   return visionModelCache.names;
+}
+
+/* GROQ MODEL DISCOVERY (29 Oct 2026) — model ids retire silently.
+   Every id in PUBLIC_MODELS returned 404 ("does not exist or you do not have
+   access"), so every public answer fell through to a 550B NIM model: 14 seconds
+   and a page of reasoning text instead of an answer. Ask the account what it
+   actually has, once an hour, and prefer our fast list inside that set. */
+let groqCache = { at: 0, ids: [] };
+async function groqModels() {
+  if (groqCache.ids.length && Date.now() - groqCache.at < 3600_000) return groqCache.ids;
+  const key = (typeof pickKey === "function" ? pickKey() : null);
+  if (!key) return groqCache.ids;
+  try {
+    const r = await fetch("https://api.groq.com/openai/v1/models", {
+      headers: { "Authorization": "Bearer " + key },
+      signal: AbortSignal.timeout(8_000)
+    });
+    if (r.ok) {
+      const j = await r.json();
+      const ids = (j.data || []).map(m => String(m.id || ""))
+        .filter(id => id && !/whisper|tts|embed|guard|moderation|safety|orpheus|playai|voice|audio/i.test(id));
+      /* chat models first: an account lists speech and guard models too, and a TTS id
+         answers 400 ("requires terms acceptance") where a chat model just works */
+      const chatty = /llama|gpt-oss|qwen|mixtral|gemma|deepseek|kimi|scout|maverick|versatile|instant/i;
+      ids.sort((a, b) => (chatty.test(b) ? 1 : 0) - (chatty.test(a) ? 1 : 0));
+      if (ids.length) groqCache = { at: Date.now(), ids };
+    }
+  } catch (e) { /* keep whatever we had */ }
+  return groqCache.ids;
 }
 
 /* RESERVE BRAIN — fires only when the primary key bank has drained (or died),
@@ -238,7 +267,7 @@ const keyCool = new Map();
 const PUBLIC_KEYS = KEY_POOL.length > 1 ? KEY_POOL.slice(0, KEY_POOL.length - 1) : KEY_POOL;
 /* public chat prefers lighter, higher-quota models; the flagship stays at the
    tail as a last-resort fallback. The maker always gets the full flagship list. */
-const PUBLIC_MODELS = (process.env.PUBLIC_MODELS || "openai/gpt-oss-20b,qwen/qwen3.8-27b,meta-llama/llama-4-scout-17b-16e-instruct,openai/gpt-oss-120b").split(",").map(s => s.trim()).filter(Boolean);
+const PUBLIC_MODELS = (process.env.PUBLIC_MODELS || "meta-llama/llama-4-scout-17b-16e-instruct,openai/gpt-oss-20b,qwen/qwen3.8-27b,openai/gpt-oss-120b").split(",").map(s => s.trim()).filter(Boolean);
 function pickKey(reserve) {
   const now = Date.now();
   const pool = reserve ? KEY_POOL : PUBLIC_KEYS;
@@ -2010,6 +2039,27 @@ function resolveFragment(messages) {
   if (!(bare && words.length <= 10) && !(pronoun && words.length <= 7)) return null;
   return { q: q, topic: topic.slice(0, 240) };
 }
+/* PRODUCT FACTS (29 Oct 2026) — asked "what is Lucid?", a model answered about the
+   diagramming tool Lucidchart. The owner's own products have unique names, so when
+   one is mentioned the answer must be about THAT app. Same block carries the
+   language rule: a Hinglish question gets a Hinglish answer. */
+const PRODUCT_FACTS = [
+  "OWNER PRODUCTS (authoritative — these are the only products these names refer to in this chat):",
+  "• Lucid — a photo studio that runs entirely in one HTML file, built by Sourabh Singh. Real WebGL editing (exposure, curves, HSL mixer, clarity, bloom, bokeh, grain), layers, brush masks, batch export to ZIP, 48 ready-made templates and an AI studio that applies edits from a typed request or an attached photo/video frame. It is NOT Lucidchart and NOT a diagramming tool.",
+  "• AURA — this assistant: a holographic AI with voice in/out, vision, live web, long-term memory and a 24/7 squad.",
+  "• IdeaVeda — a startup decision engine: 40 India business ideas, city-fit scores, unit economics, 14 funding schemes, stress test and plan/pitch generator.",
+  "Live URLs: lucid-app-preview.web.app · aura-live-81185.web.app · ideaveda-live-app.web.app · portfolio sourabh7300.github.io",
+  "LANGUAGE: answer in the language the user wrote — Hinglish in, Hinglish out; Hindi in, Hindi out; English in, English out."
+].join("\n");
+function withProductFacts(messages) {
+  try {
+    if (!Array.isArray(messages)) return messages;
+    if (messages.some(m => m && m.role === "system" && String(m.content || "").includes("OWNER PRODUCTS"))) return messages;
+    const ask = messages.filter(m => m && m.role === "user").map(m => String(m.content || "")).join(" ");
+    if (!/\b(lucid|aura|ideaveda|idea veda)\b/i.test(ask)) return messages;
+    return messages.concat([{ role: "system", content: PRODUCT_FACTS }]);
+  } catch (e) { return messages; }
+}
 function injectFollowUp(messages) {
   const frag = resolveFragment(messages);
   if (!frag) return messages;
@@ -2146,13 +2196,23 @@ app.post("/v1/chat/completions", async (req, res) => {
   }
   /* a one-word continuation ("teams in it") is resolved against the previous turn
      BEFORE any model sees it — that is what stops the topic from drifting */
-  messages = injectFollowUp(messages);
+  messages = withProductFacts(injectFollowUp(messages));
   const makerHere = req.__role === "maker" || req.__role === "ceo";
   /* makers choose any model (flagship first); public requests are served the lighter
      tier regardless of what the browser asks for — that's the quota saver */
   const requestedModel = makerHere ? (body.model || MODELS[0]).trim() : "";
   const modelList = makerHere ? MODELS : PUBLIC_MODELS;
-  const order = makerHere ? [requestedModel, ...MODELS.filter(m => m !== requestedModel)] : PUBLIC_MODELS.slice();
+  let order = makerHere ? [requestedModel, ...MODELS.filter(m => m !== requestedModel)] : PUBLIC_MODELS.slice();
+  /* swap in the model ids this account really has — a browser asking for a retired
+     id must not turn into a 14-second fallback to a giant reasoning model */
+  try {
+    const avail = await groqModels();
+    if (avail.length) {
+      const pref = order.filter(m => avail.indexOf(m) >= 0);
+      const rest = avail.filter(m => pref.indexOf(m) < 0).slice(0, 2);
+      order = [...new Set([...pref, ...rest])];
+    }
+  } catch (e) { /* discovery is best-effort; the configured order still stands */ }
 
   /* ANSWER CACHE — makers bypass; identical visitor questions cost zero tokens */
   if (!makerHere && !body.stream) {
@@ -2184,7 +2244,12 @@ app.post("/v1/chat/completions", async (req, res) => {
     const _q = _lastUser ? searchQuery(messages) : "";
     const _small = /^(hi+|hello+|hey+|yo|ok(ay)?|thanks?|thank you|namaste|good\s*(morning|evening|night|afternoon)|who are you|what('s| is) your name|are you (real|human|an ai))\b/i.test(_q);
     const _alreadyArmed = messages.some(m => m && m.role === "system" && /CURRENT DATE & TIME|LIVE WEB RESULTS/.test(String(m.content || "")));
-    if (_q && !_small && !_alreadyArmed) {
+    /* SPEED (29 Oct 2026): a search plus two page reads BEFORE the model cost every
+       ordinary question seconds — even "what is 2+2". Only questions that can
+       actually have changed recently are worth that wait; math, code, definitions,
+       how-to and small talk answer straight from the brain. */
+    const _fresh = /(latest|today|tonight|now|current|news|price|rate|score|result|schedule|when|kab|aaj|abhi|20[2-9][0-9]|winner|won|match|tournament|election|weather|stock|ipo|launch|release|update|trending|kitna)/i.test(_q);
+    if (_q && _fresh && !_small && !_alreadyArmed) {
       const _now = new Date().toLocaleDateString("en-IN", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
       let _web = "";
       try {
@@ -2256,6 +2321,9 @@ app.post("/v1/chat/completions", async (req, res) => {
       if (t && t.trim()) { t = await rosterGuard(t, messages); recordUse(req, key, (d.usage && d.usage.total_tokens) || Math.round(t.length / 4), model); if (!makerHere) { cachePut(messages, t.trim(), model); countAnswer(req); } return res.json({ choices: [{ message: { content: t.trim() } }], model }); }
     } catch (e) { /* network hiccup → try next model */ }
   }
+  /* keep the reason the fast lane failed visible in /health — a silent fall through
+     to a 550B model is exactly how "replies are slow" stayed undiagnosed */
+  chatLast.at = Date.now(); chatLast.err = lastChatErr || "";
   /* NIM + reserve run whatever Groq said (28 Oct 2026): a retired model id makes
      every Groq call 400/404 — that is NOT a rate limit — so the old `if (sawLimit)`
      gate skipped the maker's NIM lane entirely and public chat fell straight through
@@ -2263,14 +2331,22 @@ app.post("/v1/chat/completions", async (req, res) => {
   {
     const NIM_KEY = process.env.NVIDIA_NIM_KEY || "";
     if (NIM_KEY) {
-      for (const model of ["nvidia/nemotron-3-ultra-550b-a55b", "nvidia/nemotron-3-super-120b-a12b", "nvidia/nemotron-3.5-lightning-30b-a3b"]) {
+      /* fastest NIM model first: the 550B flagship is a last resort, not the public
+         default — it adds seconds to every answer */
+      for (const model of ["nvidia/nemotron-3.5-lightning-30b-a3b", "nvidia/nemotron-3-super-120b-a12b", "nvidia/nemotron-3-ultra-550b-a55b"]) {
         try {
-          const r = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+          const nimBase = { model, messages, max_tokens: Math.min(body.max_tokens || 1400, 4000), temperature: body.temperature != null ? body.temperature : 0.6 };
+          const nimAsk = extra => fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
             method: "POST",
             headers: { "Authorization": "Bearer " + NIM_KEY, "Content-Type": "application/json" },
-            body: JSON.stringify({ model, messages, max_tokens: Math.min(body.max_tokens || 1400, 4000), temperature: body.temperature != null ? body.temperature : 0.6 }),
-            signal: AbortSignal.timeout(120_000)
+            body: JSON.stringify(Object.assign({}, nimBase, extra)),
+            signal: AbortSignal.timeout(60_000)
           });
+          /* a reasoning model narrates its thinking inside `content` when thinking is
+             on — the visitor then reads "The user is asking…" instead of an answer.
+             Ask for it off; if this NIM deployment rejects the flag, retry plain. */
+          let r = await nimAsk({ chat_template_kwargs: { thinking: false } });
+          if (r.status === 400) r = await nimAsk({});
           if (r.status === 429) continue;
           if (!r.ok) continue;
           const d = await r.json();
@@ -2639,7 +2715,7 @@ app.post("/v1/chat/stream", async (req, res) => {
   messages = await groundChat(messages);
   /* resolve a continuation ("teams in it") against the previous turn — the stream lane
      is what the app actually uses, so the topic guard must live here too */
-  messages = injectFollowUp(messages);
+  messages = withProductFacts(injectFollowUp(messages));
   /* ESPORTS QUESTIONS ARE BUFFERED, NOT STREAMED (27 Oct 2026): a wrong team name
      cannot be un-sent once it is on screen. Tournaments are rare, so holding this
      one class of answer for a single validated delta costs nothing and guarantees
@@ -2662,7 +2738,15 @@ app.post("/v1/chat/stream", async (req, res) => {
   const makerHere = req.__role === "maker" || req.__role === "ceo";
   const requestedModel = makerHere ? (body.model || MODELS[0]).trim() : "";
   const modelList = makerHere ? MODELS : PUBLIC_MODELS;
-  const order = makerHere ? [requestedModel, ...MODELS.filter(m => m !== requestedModel)] : PUBLIC_MODELS.slice();
+  let order = makerHere ? [requestedModel, ...MODELS.filter(m => m !== requestedModel)] : PUBLIC_MODELS.slice();
+  try {
+    const avail = await groqModels();
+    if (avail.length) {
+      const pref = order.filter(m => avail.indexOf(m) >= 0);
+      const rest = avail.filter(m => pref.indexOf(m) < 0).slice(0, 2);
+      order = [...new Set([...pref, ...rest])];
+    }
+  } catch (e) { /* discovery is best-effort */ }
 
   /* VISION over stream: image messages resolve via Gemini, delivered as one delta */
   if (msgHasImage(messages)) {
