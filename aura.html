@@ -11621,14 +11621,6 @@ document.addEventListener("DOMContentLoaded",function(){
      +5 s: firebase restore ka fair chance pehle (a saved session par FB_LIVE
      already storage me hota hai, isliye sweep wo koall bhi pehle dekh leta hai). */
   setTimeout(function(){ try{ AuraAuth.cleanStaleAdminToken(); }catch(e){} }, 5000);
-  // Answer-self-score fix for edge cases
-  function answerSelfScoreFix(input) {
-    if (typeof input !== 'string') return 0;
-    if (input.trim() === '') return 0;
-    // simple rubric‑based score
-    return Math.min(5, Math.max(0, input.length % 6));
-  }
-  /* AURA_GEN_ANSWER_SELF_SCORE_FIX */
   /* ADMIN PAGE RESTORE — if the admin's last tab was Mission Control, land him
      back there once the role UI is applied (profile badge is also a manual way in) */
   setTimeout(function(){
