@@ -18,16 +18,25 @@ jobs:
         run: grep -q 'LIVE_DEMO-verified_working' README.md
       - name: Node available for regression suites
         run: node --version
+      # roster-guard loads the REAL backend (express/firebase/ws) to test the follow-up
+      # resolver; without this install the require fails and the suite reports 8/12,
+      # which is what kept this workflow red even though every test passed on a dev box.
+      - name: Install backend dependencies
+        run: npm ci --prefix aura-backend --no-audit --no-fund
       - name: "Squad regression — daily shift + Hinglish router"
         run: node squad.test.js
-      - name: "Core regression — engine, auth, voice, syntax"
-        run: |
-          node aura.test.js
-          node roster-guard.test.js
-          node user-profile.test.js
-          node voice-regress.test.js
-          node voice-mode.test.js
-          node syntax-check.js
+      - name: "Core regression — engine + auth"
+        run: node aura.test.js
+      - name: "Core regression — roster guard"
+        run: node roster-guard.test.js
+      - name: "Core regression — user profile"
+        run: node user-profile.test.js
+      - name: "Core regression — voice regression"
+        run: node voice-regress.test.js
+      - name: "Core regression — voice mode"
+        run: node voice-mode.test.js
+      - name: "Core regression — inline syntax"
+        run: node syntax-check.js
       - name: Live demo must answer HTTP 200
         run: |
           url=$(grep -o 'https://sourabh7300.github.io[^)]*' README.md | head -1)
