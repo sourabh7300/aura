@@ -1132,6 +1132,38 @@ app.post("/v1/dev/revert", async (req, res) => {
    The engine itself lives in ./autonomy.js and takes every IO through injection, so
    the whole thing is unit-testable without network. */
 const autopilotLib = require("./autonomy.js");
+/* ============ THE THREE LANES THAT WERE MISSING (30 Oct 2026) ============
+   1) RAG memory — documents were browser-local substring matching; now chunked,
+      embedded, ranked, persisted per account, with real [file · page] citations.
+   2) Python tool — the agent could search and calculate but not COMPUTE.
+   3) /ws/audio — the mic depended on Chrome's SpeechRecognition; now raw audio goes
+      over a socket and the transcript + answer stream back.
+   Every one of them degrades to something honest when its key/package is absent. */
+const RAG = require("./rag").createRag({
+  geminiKey: GEMINI_API_KEY,
+  db: () => { try { fbInit(); return fbDb; } catch (e) { return null; } }
+});
+const PYTOOL = require("./pytool");
+let audioWss = null; /* /ws/audio — attached with the HTTP server inside the boot block */
+/* one owner id for documents: the verified uid when signed in, else the IP. Never a
+   client-supplied id — a browser must not be able to read someone else's files. */
+function ragOwner(req) {
+  if (req && req.__uid) return String(req.__uid);
+  const ip = (req && (req.ip || (req.headers && req.headers["x-forwarded-for"]))) || "anon";
+  return "ip:" + String(ip).split(",")[0].trim();
+}
+async function withRagContext(messages, req) {
+  try {
+    if (!Array.isArray(messages) || !messages.length) return messages;
+    /* the page already ships its own local excerpts — never pay twice for the same text */
+    if (messages.some(m => m && typeof m.content === "string" && m.content.includes("THE USER'S OWN DOCUMENTS"))) return messages;
+    const ask = [...messages].reverse().find(m => m && m.role === "user" && typeof m.content === "string" && m.content.trim());
+    if (!ask || String(ask.content).length < 4) return messages;
+    const hits = await RAG.retrieve(ragOwner(req), ask.content, 5);
+    if (!hits.length) return messages;
+    return withSystemBeforeAsk(messages, RAG.contextBlock(hits));
+  } catch (e) { return messages; }
+}
 const SQUAD_STATE_FILE = process.env.SQUAD_STATE_FILE || "squad/autopilot-state.json";
 const LIVE_PAGE_URL = process.env.LIVE_PAGE_URL || "https://sourabh7300.github.io/aura/aura.html";
 
@@ -1939,7 +1971,7 @@ app.get("/health", (req, res) => {
   const now = Date.now();
   try { fbInit(); } catch (e) { noteCrash("fb-init", e); } /* lazy+eager both fine: it caches its verdict */
   const fbState = fbTried ? (fbAdmin ? "online" : (FB_PROJECT ? "package-missing" : "not-configured")) : "pending";
-  res.json({ ok: true, build: BUILD, srcBuild: SRC_BUILD, node: process.version, rssMB: Math.round(process.memoryUsage().rss / 1048576), crashes: bootCrashes.length, lastCrash: bootCrashes[bootCrashes.length - 1] || null, started: new Date(Date.now() - process.uptime() * 1000).toISOString(), uptime: process.uptime(), keysTotal: KEY_POOL.length, publicKeys: PUBLIC_KEYS.length, makerReserved: KEY_POOL.length > 1, keysLive: KEY_POOL.filter(k => !(keyCool.get(k) > now)).length, reserve: !!RESERVE_KEY, nimKey: !!NVIDIA_NIM_KEY, codeLane: !!CODE_KEY, adminLane: !!ADMIN_KEY, vision: !!GEMINI_API_KEY, search: searchProvider(), visionModels: visionModelCache.names.slice(0, 4), visionSeed: VISION_MODELS.slice(0, 3), stream: true, accounts: fbState, github: GH_TOKEN ? "configured" : "missing", liveMirror: ghMirrorLast.note, bootStage: BOOT.stage, bootErr: BOOT.err, bootMs: Date.now() - BOOT.at, githubCheck: ghCheckCache.state, githubCheckedAt: ghCheckCache.at || null, research: researchProbeCache, brain: brainLast, chat: chatLast, squad: squadHealth(), warmers: "background" });
+  res.json({ ok: true, build: BUILD, srcBuild: SRC_BUILD, node: process.version, rssMB: Math.round(process.memoryUsage().rss / 1048576), crashes: bootCrashes.length, lastCrash: bootCrashes[bootCrashes.length - 1] || null, started: new Date(Date.now() - process.uptime() * 1000).toISOString(), uptime: process.uptime(), keysTotal: KEY_POOL.length, publicKeys: PUBLIC_KEYS.length, makerReserved: KEY_POOL.length > 1, keysLive: KEY_POOL.filter(k => !(keyCool.get(k) > now)).length, reserve: !!RESERVE_KEY, nimKey: !!NVIDIA_NIM_KEY, codeLane: !!CODE_KEY, adminLane: !!ADMIN_KEY, vision: !!GEMINI_API_KEY, search: searchProvider(), visionModels: visionModelCache.names.slice(0, 4), visionSeed: VISION_MODELS.slice(0, 3), stream: true, accounts: fbState, github: GH_TOKEN ? "configured" : "missing", liveMirror: ghMirrorLast.note, bootStage: BOOT.stage, bootErr: BOOT.err, bootMs: Date.now() - BOOT.at, githubCheck: ghCheckCache.state, githubCheckedAt: ghCheckCache.at || null, research: researchProbeCache, rag: RAG.stats(), ws: !!audioWss, python: PYTOOL.binary() || "probed-on-first-use", brain: brainLast, chat: chatLast, squad: squadHealth(), warmers: "background" });
 });
 /* keep the last-known values fresh without ever blocking the endpoint */
 setTimeout(warmHealth, 1500);
@@ -2118,6 +2150,17 @@ const PRODUCT_FACTS = [
   "Live URLs: lucid-app-preview.web.app · aura-live-81185.web.app · ideaveda-live-app.web.app · portfolio sourabh7300.github.io",
   "LANGUAGE: answer in the language the user wrote — Hinglish in, Hinglish out; Hindi in, Hindi out; English in, English out."
 ].join("\n");
+/* A system block appended AFTER the user's question is easy for small models to skim
+   past — live evidence kept getting ignored and "latest iPhone" came back as iPhone 16.
+   Grounding belongs in front of the ask, where every model reads it first. */
+function withSystemBeforeAsk(messages, content) {
+  const out = Array.isArray(messages) ? messages.slice() : [];
+  let lastUser = -1;
+  out.forEach((m, i) => { if (m && m.role === "user") lastUser = i; });
+  const sys = { role: "system", content };
+  if (lastUser > 0) out.splice(lastUser, 0, sys); else out.push(sys);
+  return out;
+}
 function withProductFacts(messages) {
   try {
     if (!Array.isArray(messages)) return messages;
@@ -2254,6 +2297,52 @@ async function groundChat(messages) {
   } catch (e) { return messages; }
 }
 
+/* ============ RAG ENDPOINTS — upload once, remember everywhere ============
+   The browser sends TEXT (it already extracts PDF/DOCX text with pdf.js/mammoth), so
+   the server never needs a parser package or a file on disk. */
+app.post("/v1/rag/upload", async (req, res) => {
+  const body = req.body || {};
+  const text = String(body.text || "").trim();
+  const name = String(body.name || "document").slice(0, 120);
+  const pages = parseInt(body.pages, 10) || 1;
+  if (!text) return res.status(400).json({ error: "text required" });
+  if (text.length > 3_000_000) return res.status(413).json({ error: "document too large (3MB of text max)" });
+  try {
+    const out = await RAG.addFile(ragOwner(req), { name, text, pages });
+    res.json(Object.assign({ ok: true }, out, RAG.stats()));
+  } catch (e) {
+    res.status(422).json({ error: String(e.message || e).slice(0, 200) });
+  }
+});
+app.get("/v1/rag/files", async (req, res) => {
+  try { res.json({ ok: true, files: await RAG.list(ragOwner(req)), engine: RAG.stats() }); }
+  catch (e) { res.status(500).json({ error: String(e.message || e) }); }
+});
+app.post("/v1/rag/remove", async (req, res) => {
+  const id = String((req.body || {}).id || "").trim();
+  if (!id) return res.status(400).json({ error: "id required" });
+  if (id === "*") return res.json({ ok: true, cleared: await RAG.removeAll(ragOwner(req)) });
+  res.json({ ok: true, removed: await RAG.removeFile(ragOwner(req), id) });
+});
+app.post("/v1/rag/query", async (req, res) => {
+  const body = req.body || {};
+  const q = String(body.question || body.q || "").trim();
+  if (!q) return res.status(400).json({ error: "question required" });
+  const hits = await RAG.retrieve(ragOwner(req), q, body.k || 5);
+  const out = { ok: true, hits, engine: RAG.stats() };
+  if (body.answer) {
+    try {
+      const block = RAG.contextBlock(hits);
+      const convo = [
+        { role: "system", content: "You are AURA. Answer the question from the user's own documents below. Cite [file · page] once per fact used. If the excerpts do not cover it, say so in one line and answer from general knowledge." + block },
+        { role: "user", content: q }
+      ];
+      out.answer = (await llm1(convo, 1200, req)) || "";
+    } catch (e) { out.answer = ""; }
+  }
+  res.json(out);
+});
+
 /* THE PROXY — key stays server-side forever */
 app.post("/v1/chat/completions", async (req, res) => {
   const body = req.body || {};
@@ -2264,6 +2353,8 @@ app.post("/v1/chat/completions", async (req, res) => {
   /* a one-word continuation ("teams in it") is resolved against the previous turn
      BEFORE any model sees it — that is what stops the topic from drifting */
   messages = withProductFacts(injectFollowUp(messages));
+  /* server-side document memory: whichever device asks, the same files answer */
+  messages = await withRagContext(messages, req);
   const makerHere = req.__role === "maker" || req.__role === "ceo";
   /* makers choose any model (flagship first); public requests are served the lighter
      tier regardless of what the browser asks for — that's the quota saver */
@@ -2319,10 +2410,11 @@ app.post("/v1/chat/completions", async (req, res) => {
     const _fresh = /(latest|today|tonight|now|current|news|price|rate|score|result|schedule|when|kab|aaj|abhi|20[2-9][0-9]|winner|won|match|tournament|election|weather|stock|ipo|launch|release|update|trending|kitna)/i.test(_q);
     if (_q && _fresh && !_small && !_alreadyArmed) {
       const _now = new Date().toLocaleDateString("en-IN", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
-      let _web = "";
+      let _web = "", _cand = "";
       try {
         const _sq = cleanAsk(_q) || _q.replace(/\s+/g, " ");
         const _hits = await toolSearch(_sq);
+        if (process.env.AURA_DEBUG) console.log("[chat] live=" + (_hits ? _hits.length : 0) + " q=\"" + _sq + "\"")
         if (_hits && _hits.length) {
           __live = { now: _now, hits: _hits.slice(0, 3) };
           /* ONE page, capped at 5s: two uncapped reads were costing 5–10s before the
@@ -2330,15 +2422,28 @@ app.post("/v1/chat/completions", async (req, res) => {
           const _top = _hits.slice(0, 1);
           const _reads = await Promise.all(_top.map(h => toolFetch(h.url, 5_000).catch(() => null)));
           _web = _top.map((h, i) => "[SOURCE " + (i + 1) + ": live web — " + (h.title || "") + "]\n" + String(cleanRead(_reads[i]) || h.extract || h.title || "").slice(0, 1600)).join("\n\n");
+          /* MODEL-PROOF HEADLINE (29 Oct 2026): the lighter NIM model kept answering
+             "latest iPhone" from memory (iPhone 16) even with dated results in front of
+             it. Putting the newest headline first as a one-line fact, plus every other
+             headline as a bullet, makes the current value the easiest thing to copy. */
+          const _h0 = _hits[0];
+          const _snip = String(cleanRead(_reads[0]) || _h0.extract || "").replace(/\s+/g, " ").trim().slice(0, 300);
+          _cand = "LATEST VERIFIED HEADLINE (" + (_h0.date || _now) + "): \"" + (_h0.title || "") + "\"" + (_snip ? " — " + _snip : "") +
+            "\nOTHER HEADLINES FROM THE SAME SEARCH:\n" + _hits.slice(1, 3).map(h => "• " + (h.title || "") + (h.date ? " (" + String(h.date).slice(0, 24) + ")" : "")).join("\n");
         }
       } catch (e) { /* search down → date-only block still fixes the cutoff */ }
-      messages = messages.concat([{ role: "system", content: "CURRENT DATE & TIME: " + _now + " (anchor 'today/now/latest' to THIS moment — never answer from an old training cutoff, never state a stale knowledge date).\n" + (_web ? "LIVE WEB RESULTS (fetched seconds ago — REAL and CURRENT; ground every time-sensitive fact in them; when they conflict with your memory of past events, dates, scores, prices or records, the live results WIN; never invent dates, scores, prices or winners):\n" + _web + "\nANSWER FROM THE RESULTS FIRST: the specific model, price, date or name the user asked about must be taken from these results. If they do not contain it, say plainly that you could not verify today's value — never present an older model, price or version as the current one. Your first sentence must answer, not describe your reasoning." : "No live results — answer with today's date in mind; if the answer may have changed more recently than your training, say today's date and mark the uncertainty instead of guessing a specific recent value.") }]);
+      messages = withSystemBeforeAsk(messages, "CURRENT DATE & TIME: " + _now + " (anchor 'today/now/latest' to THIS moment — never answer from an old training cutoff, never state a stale knowledge date).\n" + (_web ? _cand + "\n\nLIVE WEB RESULTS (fetched seconds ago — REAL and CURRENT; ground every time-sensitive fact in them; when they conflict with your memory of past events, dates, scores, prices or records, the live results WIN; never invent dates, scores, prices or winners):\n" + _web + "\nANSWER FROM THE RESULTS FIRST: the specific model, price, date or name the user asked about must be taken from these results — if the question is about the newest model/version/price/winner and these results name one, that one is the answer even when your memory says otherwise. If they do not pin the exact figure, still answer with the nearest concrete facts they DO establish (the current model or version, the reported price, range or change) and mark only that one missing detail as unconfirmed — never reply with a bare 'I could not verify', and never present an older model, price or version as the current one. Your first sentence must answer, not describe your reasoning." : "No live results — answer with today's date in mind; if the answer may have changed more recently than your training, say today's date and mark the uncertainty instead of guessing a specific recent value."));
+      /* fresh facts are copied, not composed: a low temperature keeps the model on the
+         headline instead of drifting back into its training data */
+      if (typeof body.temperature !== "number") body.temperature = 0.25;
     }
   } catch (e) { /* amplification is best-effort — never block the answer */ }
+  /* visible to the owner on any response: did this answer get live evidence, and how much */
+  try { res.setHeader("X-Aura-Live", String(__live && __live.hits ? __live.hits.length : 0)); } catch (e) {}
   /* the fact rules apply even to already-grounded / cached / small-talk requests */
   try {
     if (!messages.some(m => m && m.role === "system" && String(m.content || "").includes("FACT RULES (owner order)")))
-      messages = messages.concat([{ role: "system", content: AURA_FACT_RULES }]);
+      messages = withSystemBeforeAsk(messages, AURA_FACT_RULES);
   } catch (e) {}
   /* roster-exact answers never touch a model (see esportsFastAnswer) */
   try {
@@ -2815,10 +2920,11 @@ app.post("/v1/agent", async (req, res) => {
     'IDENTITY RULE: if the request is about you (who are you, what can you do, are you human, greetings, thanks, small talk), use tool "answer" immediately and reply from this identity. Never search for those words and never answer with a TV show, a dictionary entry or an unrelated page.\n' +
     'You are AURA\'s AGENT CORE. Solve every other request by using tools, step by step.\n' +
     'Every reply MUST be exactly one JSON object, nothing else:\n' +
-    '{"thought":"one short sentence about what you know/need","tool":"search|fetch|calc|answer","input":"..."}\n' +
+    '{"thought":"one short sentence about what you know/need","tool":"search|fetch|calc|python|answer","input":"..."}\n' +
     'tool "search": input = web search query (for news/current facts).\n' +
     'tool "fetch": input = a URL from earlier search results worth reading fully.\n' +
     'tool "calc": input = a plain arithmetic expression like 2+2*3.14159.\n' +
+    'tool "python": input = COMPLETE runnable Python source. Use it whenever the request needs real computation, data crunching, an algorithm tested, a loop/stats over numbers, or text processing — not for arithmetic you can do with "calc". print() what you want to see; the sandbox has 6s and no network, no subprocess, no file writes outside its temp dir.\n' +
     'tool "answer": input = the FINAL user-facing answer, written normally (not JSON). Cite sources inline as [1], [2] matching the numbered sources provided. If information is missing, say what you found and what is uncertain.\n';
   const sys = String(body.system || "");
   const maxSteps = Math.min(Math.max(parseInt(body.maxSteps, 10) || 5, 2), MAX_STEPS);
@@ -2863,6 +2969,13 @@ app.post("/v1/agent", async (req, res) => {
       const val = toolCalc(String(j.input || "0"));
       send({ step: { icon: "🧮", label: j.input + " = " + val } });
       transcript.push("calc(" + j.input + ") = " + val);
+    } else if (j.tool === "python") {
+      send({ step: { icon: "🐍", label: "running Python in the sandbox…" } });
+      const code = String(j.input || "");
+      const py = await PYTOOL.runPython(code, { timeout: 8000 });
+      const out = (py.stdout || "").trim() || (py.stderr || "").trim() || "(no output)";
+      send({ step: { icon: py.ok ? "✅" : (py.unavailable ? "⚠️" : "🐍"), label: py.ok ? "python finished in " + py.ms + "ms" : (py.timedOut ? "python hit the 8s wall and was killed" : "python raised — error fed back to the model") } });
+      transcript.push("python(" + code.slice(0, 400) + ") → " + out.slice(0, 1400));
     } else { transcript.push("unknown tool — skipping"); }
   }
   if (!finalAnswer) {
@@ -2900,6 +3013,8 @@ app.post("/v1/chat/stream", async (req, res) => {
   /* resolve a continuation ("teams in it") against the previous turn — the stream lane
      is what the app actually uses, so the topic guard must live here too */
   messages = withProductFacts(injectFollowUp(messages));
+  /* stream lane gets the same server-side document memory as the proxy route */
+  messages = await withRagContext(messages, req);
   /* ESPORTS QUESTIONS ARE BUFFERED, NOT STREAMED (27 Oct 2026): a wrong team name
      cannot be un-sent once it is on screen. Tournaments are rare, so holding this
      one class of answer for a single validated delta costs nothing and guarantees
@@ -3178,6 +3293,32 @@ if (IS_MAIN) {
   const srv = bootSrv;
   srv.removeAllListeners("request");
   srv.on("request", app);
+  /* VOICE SOCKET — raw audio in, transcript + answer out. Same origin gate as the
+     HTTP routes; the answer lane is the same brain, so the voice cannot drift from
+     what the chat would have said. */
+  try {
+    const { attachAudioWs } = require("./audio-ws");
+    audioWss = attachAudioWs(srv, {
+      geminiKey: GEMINI_API_KEY,
+      allowedOrigins: ALLOW_ORIGINS,
+      answer: async (text, ctx) => {
+        const hi = ctx && ctx.lang === "hi";
+        const now = new Date().toLocaleDateString("en-IN", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+        const sys = "You are AURA, Sourabh Singh's holographic AI assistant. This answer is SPOKEN aloud: no markdown, no URLs, no headings, no bullet lists. 1-3 tight sentences unless the question genuinely needs detail. Answer in " + (hi ? "Hindi or Hinglish, whichever the user's speech matched" : "English, unless the user spoke Hindi") + ". Never mention that you are a model.\n" +
+          "CURRENT DATE: " + now + " — anchor 'today/now/latest' to this moment, never to an old training cutoff.\n" +
+          "Never invent team names, rosters, schedules, scores, prices or winners; if the exact fact is not available say so in one short line and offer to look it up.";
+        const history = (ctx && Array.isArray(ctx.history) ? ctx.history : []).slice(-6);
+        let convo = [{ role: "system", content: sys }, ...history, { role: "user", content: text }];
+        /* a time-sensitive spoken question gets the same live-evidence block as the
+           chat lane; ordinary talk answers straight away (voice latency matters) */
+        if (/(latest|today|tonight|now|current|news|price|rate|score|result|schedule|when|kab|aaj|abhi|20[2-9][0-9]|winner|won|match|tournament|election|weather|stock|launch|release|update|trending|kitna)/i.test(String(text || ""))) {
+          try { convo = await groundChat(convo); } catch (e) {}
+        }
+        const out = await llm1(convo, 520, null);
+        return out ? String(out).trim() : "";
+      }
+    });
+  } catch (e) { console.log("[ws] audio lane not armed: " + (e.message || e)); }
   console.log("AURA secure backend live on :" + PORT + " · build " + BUILD + " · rss " + Math.round(process.memoryUsage().rss / 1048576) + "MB");
   bootStage("ready");
   /* KRATOS AUTOPILOT — the squad's own clock. The daily cycle budget inside the
