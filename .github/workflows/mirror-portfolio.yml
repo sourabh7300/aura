@@ -1,0 +1,60 @@
+name: Mirror AURA build -> portfolio site
+
+# The portfolio repo (sourabh7300.github.io) serves three copies of this build:
+# /aura.html, /aura/aura.html and /aura/index.html. Until now they were copied by
+# hand (sync-both.cmd), which is exactly how a live site drifts behind the app.
+# This mirrors every approved aura.html push into all three, automatically.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - aura.html
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mirror-portfolio
+  cancel-in-progress: true
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Does the portfolio token exist?
+        id: gate
+        env:
+          TOKEN: ${{ secrets.PORTFOLIO_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::notice title=Portfolio mirror skipped::Add a PORTFOLIO_TOKEN secret (fine-grained PAT with contents:write on sourabh7300.github.io) to turn on automatic mirroring."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Mirror into all three served paths
+        if: steps.gate.outputs.ok == 'true'
+        env:
+          TOKEN: ${{ secrets.PORTFOLIO_TOKEN }}
+        run: |
+          set -euo pipefail
+          git config --global user.name "AURA bot"
+          git config --global user.email "actions@users.noreply.github.com"
+          git clone --depth 1 "https://x-access-token:${TOKEN}@github.com/sourabh7300/sourabh7300.github.io.git" site
+          cp aura.html site/aura.html
+          cp aura.html site/aura/aura.html
+          cp aura.html site/aura/index.html
+          cd site
+          if git diff --quiet; then
+            echo "::notice title=Portfolio already in sync::nothing to mirror"
+            exit 0
+          fi
+          git add aura.html aura/aura.html aura/index.html
+          git commit -m "Mirror AURA build $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push origin HEAD:main
+          echo "mirrored aura.html into the portfolio repo"
