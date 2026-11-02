@@ -60,7 +60,7 @@ body{font:300 17px/1.5 var(--f);background:radial-gradient(100% 70% at 70% 30%,#
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 const APP='aura.html',$=s=>document.querySelector(s),B=document.body,sm=x=>{x=Math.max(0,Math.min(1,x));return x*x*(3-2*x)},rnd=(a,b)=>a+Math.random()*(b-a),cl=x=>Math.max(0,Math.min(1,x)),lp=(a,b,t)=>a+(b-a)*t;
-const mob=innerWidth<768,N=mob?18000:42000;let t0=performance.now(),mx=0,my=0,st=0,warp=0,warping=0,ent=0,go=0,sound=0,mute=0,cue=0;
+const mob=innerWidth<768,N=mob?900:42000;/* phones: 900 points, not 18,000 */let t0=performance.now(),mx=0,my=0,st=0,warp=0,warping=0,ent=0,go=0,sound=0,mute=0,cue=0;
 let VIS=false;try{VIS=!!localStorage.getItem('auraVisited')}catch(e){}
 const SP=VIS?.62:1;
 if(VIS){$('.ln.sm span').textContent='Welcome';$('.ln.big span').textContent='back.';$('#gate p')?($('#gate p').textContent='WELCOME BACK'):0}
@@ -69,7 +69,8 @@ function sph(r){const u=Math.random()*2-1,t=Math.random()*6.2832,s=Math.sqrt(1-u
 const cubes=[];for(let i=0;i<64;i++)cubes.push({c:[rnd(-7,7),rnd(-3.4,3.4),rnd(-5,3)],s:rnd(.22,.8)});
 function cube(){const q=cubes[Math.floor(Math.random()*64)],p=[rnd(-1,1),rnd(-1,1),rnd(-1,1)],a=Math.floor(Math.random()*3);p[(a+1)%3]=Math.random()<.5?-1:1;if(Math.random()<.8)p[(a+2)%3]=Math.random()<.5?-1:1;return[q.c[0]+p[0]*q.s,q.c[1]+p[1]*q.s,q.c[2]+p[2]*q.s]}
 function brain(){const p=sph(1),sg=Math.random()<.5?-1:1,k=1+.09*Math.sin(6*p[1]+4*p[2])+.05*Math.sin(9*p[0]);return[(p[0]*1.3*k+sg*.7)*1.12,p[1]*1.5*k*1.12,p[2]*1.9*k*1.12]}
-const R=new THREE.WebGLRenderer({canvas:$('#gl'),alpha:true});const dpr=Math.min(devicePixelRatio,2);R.setPixelRatio(dpr);
+const R=new THREE.WebGLRenderer({canvas:$('#gl'),alpha:true});const dpr=Math.min(devicePixelRatio,mob?1.5:2);R.setPixelRatio(dpr);
+$('#gl').style.pointerEvents='none';/* gestures pass straight through to the page */
 const S=new THREE.Scene(),C=new THREE.PerspectiveCamera(45,1,.1,100);C.position.z=12;
 const a=[],b=[],c=[],d=[];for(let i=0;i<N;i++){a.push(...cube());b.push(...brain());c.push(...sph(rnd(7,14)));d.push(Math.random())}
 const g=new THREE.BufferGeometry(),F=x=>new THREE.Float32BufferAttribute(x,3);g.setAttribute('position',F(a));g.setAttribute('t1',F(b));g.setAttribute('sc',F(c));g.setAttribute('sd',new THREE.Float32BufferAttribute(d,1));
@@ -86,6 +87,9 @@ S.add(P);
 const lp2=[];for(let i=0;i<46;i++){const q=cubes[Math.floor(Math.random()*64)],w=cubes[Math.floor(Math.random()*64)];lp2.push(...q.c,...w.c)}
 const lg=new THREE.BufferGeometry();lg.setAttribute('position',new THREE.Float32BufferAttribute(lp2,3));const LN=new THREE.LineSegments(lg,new THREE.LineBasicMaterial({color:0xe9b949,transparent:true,opacity:0,blending:THREE.AdditiveBlending}));P.add(LN);
 const rs=()=>{R.setSize(innerWidth,innerHeight,false);C.aspect=innerWidth/innerHeight;C.updateProjectionMatrix()};rs();addEventListener('resize',rs);
+addEventListener('orientationchange',()=>setTimeout(rs,120));
+addEventListener('pageshow',()=>setTimeout(rs,60));
+try{if(window.visualViewport){visualViewport.addEventListener('resize',()=>setTimeout(rs,80))}}catch(e){}
 addEventListener('pointermove',e=>{mx=e.clientX/innerWidth-.5;my=e.clientY/innerHeight-.5});
 
 let AC=null,master=null;
@@ -115,7 +119,8 @@ try{if('serviceWorker' in navigator&&location.protocol.startsWith('http'))naviga
 function finish(){t0=performance.now()-16500*SP}
 $('#enter').onclick=()=>{if(!warping)warping=1};$('#skip').onclick=finish;$('#replay').onclick=()=>location.reload();
 let lastMs=0;
-(function L(ms){requestAnimationFrame(L);if(document.hidden)return;const t=go?(ms-t0)/1000/SP:-1;
+(function L(ms){requestAnimationFrame(L);if(document.hidden)return;
+if(mob){if(ms-lastMs<33)return;lastMs=ms}/* 30fps ceiling on phones */const t=go?(ms-t0)/1000/SP:-1;
 const m=sm((t-3.6)/1.8),a2=sm((t-4.2)/1.6),a3=sm((t-9)/1.6),a4=sm((t-14)/1.5);
 U.intro.value=1-Math.pow(1-cl((t-.2)/2.4),3);U.m.value=m;U.uM.value.set(mx*2,-my*2);U.uAsp.value=C.aspect;U.uRep.value=sm((t-5)/1.5);U.time.value=ms/1000;LN.material.opacity=.22*(1-m)*cl(t/2);
 let x=mob?0:2.6*a2;x=lp(x,mob?0:-2.5,a3);x=lp(x,0,a4);const y=mob?lp(0,1.7,a2):0;

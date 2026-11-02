@@ -26,6 +26,16 @@ services:
       # answered from ranked results instead of news headlines. Priority: tavily → brave → exa.
       - key: TAVILY_API_KEY
         sync: false          # tavily.com → API keys
+      # KEY BANK (1 Nov 2026): one dev key = 1,000 credits/month at 100 RPM, so a
+      # second key takes over the moment the first drains or gets rate-limited.
+      - key: TAVILY_API_KEY_2
+        sync: false          # backup key — comma-separated lists work too
+      - key: TAVILY_MONTHLY_CREDITS
+        value: "1000"        # credits per key per month; raise it when the plan is
+      - key: TAVILY_STRATEGY
+        value: "spread"      # spread = round-robin (default) · drain = empty one first
+      - key: TAVILY_RPM
+        value: "100"         # dev key 100 · production key 1000
       - key: BRAVE_SEARCH_API_KEY
         sync: false          # api.search.brave.com subscription token
       - key: EXA_API_KEY
