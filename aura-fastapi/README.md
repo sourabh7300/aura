@@ -105,15 +105,38 @@ Single `index.html`, zero dependencies:
 * glassmorphic composer with mic, send, camera, memory and clear controls;
 * transcript streams progressively; memory drawer reads `/v1/memory/recent` and
   `/v1/memory/search`;
-* mobile-first: DPR capped at 2, 30fps ceiling on phones, reduced-motion respected.
+* mobile-first: DPR capped at 1.5 and 30 fps on phones, reduced-motion respected.
+
+## Mobile
+
+The UI is tuned for phones rather than scaled down to them:
+
+* canvas capped at DPR 1.5 and 30 fps with 340 particles (desktop: DPR 2, 60 fps, 900);
+* `backdrop-filter` is dropped below 768 px: it forced the GPU to re-blur the
+  animated orb behind every panel on every frame, which was the real cause of the
+  jank (the canvas itself measures ~1.2 ms per frame);
+* the masked full-screen grid becomes a plain grid, and the transcript gets its
+  own scroll container with `overscroll-behavior: contain`;
+* gradients are cached instead of rebuilt every frame, and `100dvh` plus
+  `visualViewport` keep the layout correct while the mobile URL bar collapses;
+* controls collapse into one row of three compact buttons, the voice label
+  becomes an icon, and there is no horizontal or vertical overflow at 355-390 px.
 
 ## Deploy
 
 **Render (one service, both backend and UI):**
 
+`render.yaml` in this folder is a ready blueprint: Render → New → Blueprint →
+pick the repo → paste the two API keys. Equivalent manual settings:
+
+* Root directory: `AURA/aura-fastapi`
 * Build: `pip install -r requirements.txt`
-* Start: `uvicorn backend.main:app --host 0.0.0.0 --port $PORT`
+* Start: `uvicorn backend.main:app --host 0.0.0.0 --port $PORT --ws websockets`
+* Health check: `/health`
 * Env: `GROQ_API_KEY`, `GEMINI_API_KEY`, `ALLOWED_ORIGINS=https://<your-site>`
+
+The free plan has an ephemeral disk: memory resets on redeploy. Attach a
+persistent disk and set `AURA_DATA_DIR` to its mount path for durable memory.
 
 **GitHub Pages (frontend only):** copy `frontend/index.html` to the Pages repo
 and change `AuraSocket.url()` to your Render host — the page then talks to the

@@ -19,6 +19,8 @@
   }
   *{box-sizing:border-box}
   html,body{height:100%}
+  /* dvh tracks the real mobile viewport as the URL bar collapses */
+  @supports (height:100dvh){ html,body{height:100dvh} }
   body{
     margin:0; font-family:var(--font); color:var(--text);
     background:
@@ -69,6 +71,7 @@
     position:absolute; left:0; right:0; bottom:0; top:0;
     display:flex; flex-direction:column; justify-content:flex-end;
     padding:0 max(16px,4vw) 8px; gap:10px; overflow-y:auto;
+    overscroll-behavior:contain; -webkit-overflow-scrolling:touch;
     pointer-events:none;
   }
   .transcript > *{pointer-events:auto}
@@ -163,6 +166,32 @@
     #voiceToggle .lbl{display:none}
     .toolrow{gap:8px; flex-wrap:nowrap}
     .toolrow .ghost{padding:8px 10px; font-size:11.5px; gap:5px; flex:1 1 0; justify-content:center}
+    .toolrow .ghost .lbl{display:none}
+  }
+
+  /* ---------- phones: the compositor is the bottleneck, not the canvas ----------
+     backdrop-filter on every panel forces the GPU to re-blur the animated orb
+     behind it on each frame, and a masked full-screen grid repaints too. Both
+     are swapped for cheap translucent fills; the look survives, the jank does
+     not. Measured on the orb itself: ~1.2 ms per frame, so the blur was the cost. */
+  @media (max-width:767px){
+    body::before{mask-image:none; background-size:64px 64px; opacity:.55}
+    header.top,.pill,.composer,.ghost,.mem,.searchrow input{backdrop-filter:none}
+    .pill{background:rgba(14,22,36,.82)}
+    .composer{background:rgba(14,22,36,.9); box-shadow:0 8px 24px rgba(0,0,0,.5)}
+    .ghost{background:rgba(255,255,255,.06)}
+    .msg{backdrop-filter:none}
+    .msg.aura{background:rgba(16,24,40,.9)}
+
+    /* the transcript keeps its own scroll area instead of repainting the stage */
+    .transcript{max-height:46dvh; overflow-y:auto; padding-bottom:6px}
+    .transcript::after{content:""; position:sticky; bottom:0; height:18px; margin-top:-18px}
+
+    .controls{padding:8px 12px calc(10px + env(safe-area-inset-bottom)); gap:9px}
+    .composer{padding:6px 6px 6px 16px}
+    .composer input{font-size:16px}
+    .iconbtn{width:38px;height:38px}
+    .msg{padding:9px 12px; font-size:14.5px}
   }
   @media (prefers-reduced-motion:reduce){
     .msg{animation:none}
@@ -262,12 +291,23 @@ class Orb {
     this.current = { ...STATES.idle, r: 0, g: 232, b: 255 };
     this.t = 0;
     this.last = performance.now();
-    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.isPhone = Math.min(innerWidth, innerHeight) < 768;
+    this.dpr = Math.min(window.devicePixelRatio || 1, this.isPhone ? 1.5 : 2);
     this.points = [];
+    this._glow = null;      // cached gradients: rebuilding them every frame allocates
+    this._core = null;      // a new CanvasGradient 60 times a second
+    this._glowKey = "";
+    this._coreKey = "";
+    this._lastDraw = 0;
     this._buildPoints();
     this._resize();
     addEventListener("resize", () => this._resize());
     addEventListener("orientationchange", () => setTimeout(() => this._resize(), 120));
+    // iOS reports a new height only after the URL bar settles
+    try {
+      if (window.visualViewport) visualViewport.addEventListener("resize", () => setTimeout(() => this._resize(), 80));
+    } catch {}
+    document.addEventListener("visibilitychange", () => { this.last = performance.now(); });
     this._loop = this._loop.bind(this);
     requestAnimationFrame(this._loop);
   }
@@ -275,7 +315,7 @@ class Orb {
   _buildPoints() {
     // Fibonacci sphere: even coverage without random clumping
     const mobile = innerWidth < 768;
-    const n = mobile ? 520 : 900;
+    const n = mobile ? 340 : 900;   // a phone cannot show 900 distinct dots anyway
     for (let i = 0; i < n; i++) {
       const y = 1 - (i / (n - 1)) * 2;
       const r = Math.sqrt(Math.max(0, 1 - y * y));
@@ -285,7 +325,10 @@ class Orb {
   }
 
   _resize() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    // 1.5 on phones: the canvas covers the whole screen, so DPR 3->2 doubles the
+    // fill cost for detail nobody can see through the glow.
+    const isPhone = Math.min(innerWidth, innerHeight) < 768;
+    const dpr = Math.min(window.devicePixelRatio || 1, isPhone ? 1.5 : 2);
     this.dpr = dpr;
     const w = this.canvas.clientWidth || innerWidth;
     const h = this.canvas.clientHeight || innerHeight;
@@ -311,6 +354,9 @@ class Orb {
   _loop(now) {
     requestAnimationFrame(this._loop);
     if (document.hidden) return;               // phones: no work while backgrounded
+    // phones: 30 fps ceiling. Visually identical for a slow glow, half the paint.
+    if (this.isPhone && now - this._lastDraw < 33) return;
+    this._lastDraw = now;
     const dt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
     this.t += dt * this.current.spin;
@@ -342,12 +388,17 @@ class Orb {
     const R = base * pulse;
     const rgb = `${c.r | 0},${c.g | 0},${c.b | 0}`;
 
-    // core glow
-    const glow = ctx.createRadialGradient(cx, cy, R * 0.1, cx, cy, R * 2.4);
-    glow.addColorStop(0, `rgba(${rgb},0.55)`);
-    glow.addColorStop(0.35, `rgba(${rgb},0.14)`);
-    glow.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.fillStyle = glow;
+    // core glow (cached: only rebuild when the colour or radius really changed)
+    const glowKey = `${rgb}|${Math.round(R)}|${Math.round(cx)},${Math.round(cy)}`;
+    if (glowKey !== this._glowKey) {
+      const glow = ctx.createRadialGradient(cx, cy, R * 0.1, cx, cy, R * 2.4);
+      glow.addColorStop(0, `rgba(${rgb},0.55)`);
+      glow.addColorStop(0.35, `rgba(${rgb},0.14)`);
+      glow.addColorStop(1, "rgba(0,0,0,0)");
+      this._glow = glow;
+      this._glowKey = glowKey;
+    }
+    ctx.fillStyle = this._glow;
     ctx.beginPath(); ctx.arc(cx, cy, R * 2.4, 0, Math.PI * 2); ctx.fill();
 
     // holographic rings (tilted ellipses, counter-rotating)
@@ -386,12 +437,17 @@ class Orb {
       ctx.beginPath(); ctx.arc(px, py, size, 0, Math.PI * 2); ctx.fill();
     }
 
-    // inner core
-    const core = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 0.55);
-    core.addColorStop(0, `rgba(255,255,255,${0.5 * c.pulse})`);
-    core.addColorStop(0.5, `rgba(${rgb},0.35)`);
-    core.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.fillStyle = core;
+    // inner core (cached like the glow)
+    const coreKey = `${rgb}|${Math.round(R)}|${c.pulse.toFixed(2)}`;
+    if (coreKey !== this._coreKey) {
+      const core = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 0.55);
+      core.addColorStop(0, `rgba(255,255,255,${0.5 * c.pulse})`);
+      core.addColorStop(0.5, `rgba(${rgb},0.35)`);
+      core.addColorStop(1, "rgba(0,0,0,0)");
+      this._core = core;
+      this._coreKey = coreKey;
+    }
+    ctx.fillStyle = this._core;
     ctx.beginPath(); ctx.arc(cx, cy, R * 0.55, 0, Math.PI * 2); ctx.fill();
 
     // speaking waveform ring

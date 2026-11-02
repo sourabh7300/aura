@@ -1,0 +1,33 @@
+# Render Blueprint — one service serves the API, the WebSocket and the UI.
+#
+# Use it: Render dashboard → New → Blueprint → pick this repo.
+# Render reads this file, asks for GROQ_API_KEY / GEMINI_API_KEY, and deploys.
+#
+# Notes that matter on the free plan:
+#  * the disk is ephemeral, so SQLite + Chroma start empty after a restart or
+#    redeploy. Add a persistent disk and point AURA_DATA_DIR at its mount path
+#    (/var/data) when you want memory to survive.
+#  * AURA_USE_CHROMA=0 keeps the boot fast: no ONNX model download on a cold start.
+services:
+  - type: web
+    name: aura-fastapi
+    runtime: python
+    plan: free
+    rootDir: AURA/aura-fastapi
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT --ws websockets
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.6"
+      - key: GROQ_API_KEY
+        sync: false          # asked once in the Render UI, never stored in git
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: ALLOWED_ORIGINS
+        value: "*"           # narrow this to your domain once it is live
+      - key: AURA_DATA_DIR
+        value: ./data
+      - key: AURA_USE_CHROMA
+        value: "0"
