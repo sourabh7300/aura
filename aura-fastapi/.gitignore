@@ -1,0 +1,14 @@
+# local virtualenv
+.venv/
+venv/
+
+# runtime data: SQLite db + Chroma index
+data/
+
+# secrets
+.env
+
+# python noise
+__pycache__/
+*.py[cod]
+.pytest_cache/

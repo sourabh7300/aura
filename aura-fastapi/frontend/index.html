@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<meta name="theme-color" content="#05070d" />
+<title>AURA — Personal AI</title>
+<style>
+  /* ---------- design tokens ---------- */
+  :root{
+    --bg:#05070d; --bg2:#080d18;
+    --glass:rgba(16,24,40,.55);
+    --stroke:rgba(120,200,255,.16);
+    --text:#e8f2ff; --muted:#8ba3bd;
+    --cyan:#38e8ff; --green:#4ade80; --amber:#f5b642; --violet:#a78bfa;
+    --accent:var(--cyan);
+    --r:18px;
+    --font:ui-sans-serif,-apple-system,"Segoe UI",Inter,Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; font-family:var(--font); color:var(--text);
+    background:
+      radial-gradient(120% 80% at 50% -10%, #0d1c33 0%, transparent 60%),
+      radial-gradient(90% 60% at 50% 110%, #0a1a24 0%, transparent 55%),
+      var(--bg);
+    overflow:hidden;
+    -webkit-tap-highlight-color:transparent;
+  }
+  /* faint holographic grid + vignette */
+  body::before{
+    content:""; position:fixed; inset:0; pointer-events:none; z-index:0;
+    background-image:
+      linear-gradient(rgba(56,232,255,.045) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(56,232,255,.045) 1px, transparent 1px);
+    background-size:52px 52px;
+    mask-image:radial-gradient(70% 60% at 50% 45%, #000 40%, transparent 100%);
+  }
+  body::after{
+    content:""; position:fixed; inset:0; pointer-events:none; z-index:0;
+    background:radial-gradient(80% 70% at 50% 40%, transparent 40%, rgba(0,0,0,.55) 100%);
+  }
+
+  /* ---------- layout ---------- */
+  .app{position:relative; z-index:1; height:100%; display:flex; flex-direction:column}
+  header.top{
+    display:flex; align-items:center; gap:12px;
+    padding:14px 18px; padding-top:calc(14px + env(safe-area-inset-top));
+  }
+  .brand{font-weight:700; letter-spacing:.32em; font-size:13px; color:var(--text)}
+  .brand span{color:var(--accent); transition:color .4s}
+  .pill{
+    display:inline-flex; align-items:center; gap:7px;
+    padding:6px 12px; border-radius:999px; font-size:11.5px; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--muted);
+    background:var(--glass); border:1px solid var(--stroke); backdrop-filter:blur(14px);
+  }
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent);transition:.4s}
+  .dot.off{background:#ff5d5d;box-shadow:0 0 10px #ff5d5d}
+  .spacer{flex:1}
+
+  /* orb stage */
+  .stage{position:relative; flex:1; min-height:0}
+  canvas#orb{position:absolute; inset:0; width:100%; height:100%; pointer-events:none}
+
+  /* transcript — a quiet overlay, never a chat-app wall of boxes */
+  .transcript{
+    position:absolute; left:0; right:0; bottom:0; top:0;
+    display:flex; flex-direction:column; justify-content:flex-end;
+    padding:0 max(16px,4vw) 8px; gap:10px; overflow-y:auto;
+    pointer-events:none;
+  }
+  .transcript > *{pointer-events:auto}
+  .msg{max-width:min(680px,86%); font-size:15px; line-height:1.6; padding:10px 14px; border-radius:16px;
+       backdrop-filter:blur(16px); border:1px solid var(--stroke); animation:rise .28s ease-out}
+  .msg.user{align-self:flex-end; background:rgba(56,232,255,.10); color:#dff6ff}
+  .msg.aura{align-self:flex-start; background:var(--glass); color:var(--text)}
+  .msg.sys{align-self:center; font-size:12px; color:var(--muted); background:transparent; border-color:transparent}
+  .msg .meta{display:block; margin-top:6px; font-size:10.5px; letter-spacing:.1em; color:var(--muted); text-transform:uppercase}
+  @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+  /* ---------- controls ---------- */
+  .controls{
+    padding:10px max(14px,4vw) calc(14px + env(safe-area-inset-bottom));
+    display:flex; flex-direction:column; gap:12px;
+  }
+  .composer{
+    display:flex; align-items:center; gap:8px;
+    background:var(--glass); border:1px solid var(--stroke); border-radius:999px;
+    padding:8px 8px 8px 18px; backdrop-filter:blur(18px);
+    box-shadow:0 10px 40px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.04);
+  }
+  .composer input{
+    flex:1; min-width:0; background:none; border:0; outline:0; color:var(--text);
+    font:400 16px/1.4 var(--font); padding:8px 0;
+  }
+  .composer input::placeholder{color:#5f728a}
+  .iconbtn{
+    width:40px;height:40px;border-radius:50%; display:grid; place-items:center;
+    background:rgba(255,255,255,.05); border:1px solid var(--stroke); color:var(--text);
+    cursor:pointer; transition:transform .15s, background .2s, color .2s, border-color .2s;
+    flex:none;
+  }
+  .iconbtn:hover{transform:translateY(-1px); background:rgba(56,232,255,.12)}
+  .iconbtn:active{transform:scale(.95)}
+  .iconbtn[aria-pressed="true"]{background:rgba(56,232,255,.18); border-color:rgba(56,232,255,.5); color:#bff4ff}
+  .iconbtn.send{background:linear-gradient(135deg,var(--accent),#1ea7ff); color:#03121a; border:0; font-weight:700}
+  .iconbtn svg{width:18px;height:18px;display:block}
+  .toolrow{display:flex; gap:10px; align-items:center; justify-content:center; flex-wrap:wrap}
+  .ghost{
+    display:inline-flex; align-items:center; gap:8px; padding:8px 14px; border-radius:999px;
+    background:rgba(255,255,255,.04); border:1px solid var(--stroke); color:var(--muted);
+    font:500 12px/1 var(--font); letter-spacing:.06em; cursor:pointer; backdrop-filter:blur(12px);
+  }
+  .ghost:hover{color:var(--text); border-color:rgba(56,232,255,.4)}
+  .ghost[aria-pressed="true"]{color:#bff4ff; border-color:rgba(56,232,255,.5); background:rgba(56,232,255,.12)}
+
+  /* ---------- memory drawer ---------- */
+  .drawer{
+    position:fixed; inset:0; z-index:20; display:none; justify-content:flex-end;
+    background:rgba(2,6,12,.55); backdrop-filter:blur(6px);
+  }
+  .drawer.open{display:flex}
+  .panel{
+    width:min(430px,92vw); height:100%; overflow:auto;
+    background:linear-gradient(180deg, rgba(12,20,34,.96), rgba(8,13,22,.98));
+    border-left:1px solid var(--stroke); padding:18px; padding-bottom:calc(18px + env(safe-area-inset-bottom));
+  }
+  .panel h2{margin:0 0 4px; font-size:15px; letter-spacing:.18em; text-transform:uppercase; color:var(--muted)}
+  .panel .sub{font-size:12px;color:#6f88a3;margin-bottom:14px}
+  .searchrow{display:flex; gap:8px; margin-bottom:14px}
+  .searchrow input{
+    flex:1; background:rgba(255,255,255,.05); border:1px solid var(--stroke); border-radius:12px;
+    padding:10px 12px; color:var(--text); font:400 14px var(--font); outline:none;
+  }
+  .mem{border:1px solid var(--stroke); border-radius:14px; padding:10px 12px; margin-bottom:8px; background:rgba(255,255,255,.03)}
+  .mem p{margin:0; font-size:13.5px; line-height:1.5}
+  .mem small{display:block;margin-top:6px;color:#6f88a3;font-size:11px;letter-spacing:.05em}
+  .close{align-self:flex-start;margin-bottom:10px}
+
+  /* toast */
+  .toast{
+    position:fixed; left:50%; bottom:96px; transform:translate(-50%,20px);
+    background:rgba(255,90,90,.16); border:1px solid rgba(255,90,90,.45); color:#ffd5d5;
+    padding:10px 16px; border-radius:12px; font-size:13px; opacity:0; pointer-events:none;
+    transition:.25s; z-index:30; max-width:86vw; text-align:center;
+  }
+  .toast.show{opacity:1; transform:translate(-50%,0)}
+
+  @media (max-width:640px){
+    .brand{font-size:12px; letter-spacing:.24em}
+    .msg{max-width:92%; font-size:14.5px}
+    .composer{padding-left:14px}
+  }
+  @media (prefers-reduced-motion:reduce){
+    .msg{animation:none}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="brand">A U R <span>A</span></div>
+    <div class="pill"><span class="dot" id="linkDot"></span><span id="stateLabel">Idle</span></div>
+    <div class="spacer"></div>
+    <button class="ghost" id="voiceToggle" aria-pressed="false" title="Speak replies aloud">🔊 Voice</button>
+  </header>
+
+  <div class="stage">
+    <canvas id="orb"></canvas>
+    <div class="transcript" id="transcript" aria-live="polite"></div>
+  </div>
+
+  <div class="controls">
+    <form class="composer" id="composer" autocomplete="off">
+      <input id="input" placeholder="Ask AURA anything…" aria-label="Message AURA" maxlength="4000" />
+      <button class="iconbtn" type="button" id="micBtn" aria-label="Toggle microphone" aria-pressed="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+          <path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3z"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>
+        </svg>
+      </button>
+      <button class="iconbtn send" type="submit" aria-label="Send">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 12l16-8-6 8 6 8-16-8z"/>
+        </svg>
+      </button>
+    </form>
+
+    <div class="toolrow">
+      <button class="ghost" id="camBtn" aria-pressed="false" title="Share camera frames (1 fps)">📷 Camera</button>
+      <button class="ghost" id="memoryBtn" title="Open the memory log">🧠 Memory</button>
+      <button class="ghost" id="clearBtn" title="Clear the transcript">✕ Clear</button>
+    </div>
+  </div>
+</div>
+
+<!-- memory drawer -->
+<div class="drawer" id="drawer">
+  <aside class="panel" role="dialog" aria-label="Memory log">
+    <button class="ghost close" id="drawerClose">✕ Close</button>
+    <h2>Memory log</h2>
+    <div class="sub" id="memSub">Everything AURA remembers about you</div>
+    <div class="searchrow">
+      <input id="memQuery" placeholder="Search memories…" />
+      <button class="ghost" id="memSearch">Search</button>
+    </div>
+    <div id="memList"></div>
+  </aside>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<video id="cam" playsinline muted style="display:none"></video>
+
+<script>
+"use strict";
+/* ============================================================================
+   AURA frontend — three jobs only:
+     1. draw the reactor orb and map assistant state -> visual state
+     2. move audio (mic) and vision (camera frames) over one WebSocket
+     3. render the transcript progressively as chunks arrive
+   No frameworks, no build step: this file is the whole client.
+   ========================================================================== */
+
+const $ = (sel, root = document) => root.querySelector(sel);
+const USER_ID = (() => {
+  try {
+    const existing = localStorage.getItem("aura_user_id");
+    if (existing) return existing;
+    const fresh = "u_" + Math.random().toString(36).slice(2, 10);
+    localStorage.setItem("aura_user_id", fresh);
+    return fresh;
+  } catch { return "default"; }
+})();
+
+const STATES = {
+  idle:      { label: "Idle",      color: "#38e8ff", spin: 0.35, pulse: 0.28, ring: 1 },
+  listening: { label: "Listening", color: "#4ade80", spin: 0.85, pulse: 0.55, ring: 1.15 },
+  thinking:  { label: "Thinking",  color: "#f5b642", spin: 1.9,  pulse: 0.75, ring: 1.3 },
+  speaking:  { label: "Speaking",  color: "#a78bfa", spin: 1.15, pulse: 1.0,  ring: 1.45 },
+};
+
+/* ------------------------------------------------------------------ orb ---- */
+class Orb {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext("2d", { alpha: true });
+    this.state = "idle";
+    this.target = STATES.idle;
+    this.current = { ...STATES.idle, r: 0, g: 232, b: 255 };
+    this.t = 0;
+    this.last = performance.now();
+    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.points = [];
+    this._buildPoints();
+    this._resize();
+    addEventListener("resize", () => this._resize());
+    addEventListener("orientationchange", () => setTimeout(() => this._resize(), 120));
+    this._loop = this._loop.bind(this);
+    requestAnimationFrame(this._loop);
+  }
+
+  _buildPoints() {
+    // Fibonacci sphere: even coverage without random clumping
+    const mobile = innerWidth < 768;
+    const n = mobile ? 520 : 900;
+    for (let i = 0; i < n; i++) {
+      const y = 1 - (i / (n - 1)) * 2;
+      const r = Math.sqrt(Math.max(0, 1 - y * y));
+      const theta = i * Math.PI * (3 - Math.sqrt(5));
+      this.points.push({ x: Math.cos(theta) * r, y, z: Math.sin(theta) * r, seed: Math.random() });
+    }
+  }
+
+  _resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.dpr = dpr;
+    const w = this.canvas.clientWidth || innerWidth;
+    const h = this.canvas.clientHeight || innerHeight;
+    this.canvas.width = Math.floor(w * dpr);
+    this.canvas.height = Math.floor(h * dpr);
+    this.w = w; this.h = h;
+  }
+
+  setState(name) {
+    if (!STATES[name]) return;
+    this.state = name;
+    this.target = STATES[name];
+    document.documentElement.style.setProperty("--accent", STATES[name].color);
+    const label = $("#stateLabel");
+    if (label) label.textContent = STATES[name].label;
+  }
+
+  _hexToRgb(hex) {
+    const v = hex.replace("#", "");
+    return [parseInt(v.slice(0, 2), 16), parseInt(v.slice(2, 4), 16), parseInt(v.slice(4, 6), 16)];
+  }
+
+  _loop(now) {
+    requestAnimationFrame(this._loop);
+    if (document.hidden) return;               // phones: no work while backgrounded
+    const dt = Math.min(0.05, (now - this.last) / 1000);
+    this.last = now;
+    this.t += dt * this.current.spin;
+
+    // ease colour + motion toward the active state so transitions feel physical
+    const [tr, tg, tb] = this._hexToRgb(this.target.color);
+    const k = 1 - Math.pow(0.001, dt);
+    this.current.r += (tr - this.current.r) * k;
+    this.current.g += (tg - this.current.g) * k;
+    this.current.b += (tb - this.current.b) * k;
+    this.current.spin += (this.target.spin - this.current.spin) * k;
+    this.current.pulse += (this.target.pulse - this.current.pulse) * k;
+    this.current.ring += (this.target.ring - this.current.ring) * k;
+
+    this._draw();
+  }
+
+  _draw() {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const { w, h, dpr, current: c } = this;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+
+    const cx = w / 2;
+    const cy = h * 0.46;
+    const base = Math.min(w, h) * 0.19;
+    const pulse = 1 + Math.sin(this.t * 1.6) * 0.03 * c.pulse;
+    const R = base * pulse;
+    const rgb = `${c.r | 0},${c.g | 0},${c.b | 0}`;
+
+    // core glow
+    const glow = ctx.createRadialGradient(cx, cy, R * 0.1, cx, cy, R * 2.4);
+    glow.addColorStop(0, `rgba(${rgb},0.55)`);
+    glow.addColorStop(0.35, `rgba(${rgb},0.14)`);
+    glow.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(cx, cy, R * 2.4, 0, Math.PI * 2); ctx.fill();
+
+    // holographic rings (tilted ellipses, counter-rotating)
+    for (let i = 0; i < 3; i++) {
+      const tilt = 0.16 + i * 0.1;
+      const rr = R * (1.25 + i * 0.22) * c.ring;
+      const angle = this.t * (0.6 + i * 0.35) * (i % 2 ? -1 : 1);
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(angle * 0.25);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, rr, rr * tilt, angle, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(${rgb},${0.34 - i * 0.07})`;
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // particle shell (depth-sorted projection)
+    const cos = Math.cos(this.t * 0.6), sin = Math.sin(this.t * 0.6);
+    const cosY = Math.cos(this.t * 0.21), sinY = Math.sin(this.t * 0.21);
+    for (const p of this.points) {
+      // rotate Y then X
+      const x1 = p.x * cosY - p.z * sinY;
+      const z1 = p.x * sinY + p.z * cosY;
+      const y1 = p.y * cos - z1 * sin;
+      const z2 = p.y * sin + z1 * cos;
+
+      const scale = 1.9 / (2.4 + z2);            // perspective
+      const px = cx + x1 * R * scale;
+      const py = cy + y1 * R * scale;
+      const depth = (z2 + 1) / 2;                 // 0 far … 1 near
+      const alpha = 0.14 + depth * 0.62;
+      const size = 0.7 + depth * 1.25 + p.seed * 0.3;
+      ctx.fillStyle = `rgba(${rgb},${alpha})`;
+      ctx.beginPath(); ctx.arc(px, py, size, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // inner core
+    const core = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 0.55);
+    core.addColorStop(0, `rgba(255,255,255,${0.5 * c.pulse})`);
+    core.addColorStop(0.5, `rgba(${rgb},0.35)`);
+    core.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = core;
+    ctx.beginPath(); ctx.arc(cx, cy, R * 0.55, 0, Math.PI * 2); ctx.fill();
+
+    // speaking waveform ring
+    if (this.state === "speaking") {
+      ctx.beginPath();
+      for (let a = 0; a <= Math.PI * 2; a += 0.08) {
+        const wobble = 1 + Math.sin(a * 7 + this.t * 6) * 0.06;
+        const rr = R * 1.12 * wobble;
+        const x = cx + Math.cos(a) * rr;
+        const y = cy + Math.sin(a) * rr;
+        a === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      ctx.strokeStyle = `rgba(${rgb},0.5)`;
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+    }
+  }
+}
+
+const orb = new Orb($("#orb"));
+
+/* ------------------------------------------------------------- transcript --- */
+const transcript = $("#transcript");
+let liveBubble = null;   // the assistant bubble currently streaming
+
+function addMessage(text, who = "aura", meta = "") {
+  const el = document.createElement("div");
+  el.className = "msg " + who;
+  el.textContent = text;
+  if (meta) {
+    const small = document.createElement("span");
+    small.className = "meta";
+    small.textContent = meta;
+    el.appendChild(small);
+  }
+  transcript.appendChild(el);
+  transcript.scrollTop = transcript.scrollHeight;
+  return el;
+}
+
+function streamBubble() {
+  if (!liveBubble) liveBubble = addMessage("", "aura");
+  return liveBubble;
+}
+
+function finishBubble(meta) {
+  if (!liveBubble) return;
+  if (meta) {
+    const small = document.createElement("span");
+    small.className = "meta";
+    small.textContent = meta;
+    liveBubble.appendChild(small);
+  }
+  transcript.scrollTop = transcript.scrollHeight;
+  liveBubble = null;
+}
+
+function toast(message) {
+  const el = $("#toast");
+  el.textContent = message;
+  el.classList.add("show");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => el.classList.remove("show"), 3200);
+}
+
+/* --------------------------------------------------------------- transport - */
+class AuraSocket {
+  constructor() {
+    this.ws = null;
+    this.retries = 0;
+    this.queue = [];
+    this.speaking = false;
+    this.audioCtx = null;
+  }
+
+  url() {
+    const proto = location.protocol === "https:" ? "wss" : "ws";
+    return `${proto}://${location.host}/ws/stream`;
+  }
+
+  connect() {
+    if (this.ws && (this.ws.readyState === 0 || this.ws.readyState === 1)) return;
+    const ws = new WebSocket(this.url());
+    ws.binaryType = "arraybuffer";
+    this.ws = ws;
+
+    ws.onopen = () => {
+      this.retries = 0;
+      setLink(true);
+      this.send({ type: "hello", user_id: USER_ID });
+      while (this.queue.length) ws.send(this.queue.shift());
+    };
+
+    ws.onmessage = (event) => this.handle(JSON.parse(event.data));
+
+    ws.onclose = () => {
+      setLink(false);
+      const delay = Math.min(15000, 600 * Math.pow(2, this.retries++));
+      setTimeout(() => this.connect(), delay);       // exponential backoff, capped
+    };
+
+    ws.onerror = () => { try { ws.close(); } catch {} };
+  }
+
+  send(payload) {
+    const ws = this.ws;
+    if (!ws || ws.readyState !== 1) { this.queue.push(JSON.stringify(payload)); return; }
+    ws.send(JSON.stringify(payload));
+  }
+
+  sendBinary(buffer) {
+    const ws = this.ws;
+    if (ws && ws.readyState === 1) ws.send(buffer);
+  }
+
+  handle(msg) {
+    switch (msg.type) {
+      case "ready":
+        setLink(true);
+        break;
+      case "state":
+        orb.setState(msg.name);
+        if (msg.name === "listening") { liveBubble = null; }
+        break;
+      case "transcript":
+        addMessage(msg.text, "user");
+        break;
+      case "delta":
+        streamBubble().textContent += msg.text;
+        transcript.scrollTop = transcript.scrollHeight;
+        break;
+      case "done": {
+        finishBubble(`${msg.provider || "aura"} · ${msg.latency_ms || 0} ms`);
+        if (voiceOn) speak(liveBubble ? liveBubble.textContent : transcript.lastElementChild.textContent);
+        break;
+      }
+      case "audio":
+        playAudio(msg.data, msg.mime);
+        break;
+      case "error":
+        toast(msg.message);
+        break;
+      case "pong":
+        break;
+      default:
+        break;
+    }
+  }
+
+  /* server-side TTS audio (optional): decode base64 and play */
+  playAudio(base64, mime = "audio/mpeg") {
+    try {
+      const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+      const blob = new Blob([bytes], { type: mime });
+      const audio = new Audio(URL.createObjectURL(blob));
+      audio.play().catch(() => {});
+    } catch { /* the browser voice still works */ }
+  }
+}
+
+const socket = new AuraSocket();
+
+function setLink(up) {
+  const dot = $("#linkDot");
+  if (dot) dot.classList.toggle("off", !up);
+  if (!up) $("#stateLabel").textContent = "Reconnecting";
+}
+
+/* ------------------------------------------------------------------- voice - */
+let voiceOn = false;
+$("#voiceToggle").addEventListener("click", (e) => {
+  voiceOn = !voiceOn;
+  e.currentTarget.setAttribute("aria-pressed", String(voiceOn));
+  if (!voiceOn && window.speechSynthesis) speechSynthesis.cancel();
+});
+
+function speak(text) {
+  if (!text || !window.speechSynthesis) return;
+  const utter = new SpeechSynthesisUtterance(text.slice(0, 1200));
+  utter.rate = 1.02;
+  utter.pitch = 1.0;
+  utter.lang = /[\u0900-\u097F]/.test(text) ? "hi-IN" : "en-IN";
+  speechSynthesis.cancel();
+  speechSynthesis.speak(utter);
+}
+
+/* ---------------------------------------------------------------- composer - */
+$("#composer").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const input = $("#input");
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = "";
+  addMessage(text, "user");
+  liveBubble = null;
+  orb.setState("thinking");
+  socket.send({ type: "text", text, use_vision: cameraOn });
+});
+
+/* --------------------------------------------------------------------- mic - */
+let mediaRecorder = null;
+let micStream = null;
+let camStream = null;
+let cameraOn = false;
+
+$("#micBtn").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  if (mediaRecorder && mediaRecorder.state === "recording") {
+    mediaRecorder.stop();
+    btn.setAttribute("aria-pressed", "false");
+    orb.setState("idle");
+    return;
+  }
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+  } catch (err) {
+    toast("Microphone blocked: " + err.message);
+    return;
+  }
+  const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/webm";
+  mediaRecorder = new MediaRecorder(micStream, { mimeType: mime, audioBitsPerSecond: 48000 });
+
+  mediaRecorder.ondataavailable = async (event) => {
+    if (!event.data || !event.data.size) return;
+    const buffer = await event.data.arrayBuffer();
+    socket.sendBinary(buffer);                    // raw chunk, no base64 tax
+  };
+  mediaRecorder.onstop = () => {
+    socket.send({ type: "audio_end", mime });
+    micStream?.getTracks().forEach((t) => t.stop());
+    micStream = null;
+    btn.setAttribute("aria-pressed", "false");
+    orb.setState("thinking");
+  };
+
+  mediaRecorder.start(250);                       // 250 ms slices keep latency low
+  btn.setAttribute("aria-pressed", "true");
+  orb.setState("listening");
+});
+
+/* ------------------------------------------------------------------ camera - */
+$("#camBtn").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  if (cameraOn) {
+    stopCamera();
+    btn.setAttribute("aria-pressed", "false");
+    return;
+  }
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: "user" } });
+  } catch (err) {
+    toast("Camera blocked: " + err.message);
+    return;
+  }
+  const video = $("#cam");
+  video.srcObject = camStream;
+  await video.play().catch(() => {});
+  cameraOn = true;
+  btn.setAttribute("aria-pressed", "true");
+  startFramePump();
+});
+
+function stopCamera() {
+  cameraOn = false;
+  camStream?.getTracks().forEach((t) => t.stop());
+  camStream = null;
+  clearInterval(stopCamera._timer);
+}
+
+/* one JPEG per second — enough for the model to see context, cheap on data */
+function startFramePump() {
+  const video = $("#cam");
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  clearInterval(stopCamera._timer);
+  stopCamera._timer = setInterval(() => {
+    if (!cameraOn || video.readyState < 2) return;
+    canvas.width = 320; canvas.height = 240;       // downscale: vision, not photography
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const data = canvas.toDataURL("image/jpeg", 0.62).split(",")[1];
+    socket.send({ type: "video", data, mime: "image/jpeg" });
+  }, 1000);
+}
+
+/* ------------------------------------------------------------------ memory - */
+const drawer = $("#drawer");
+$("#memoryBtn").addEventListener("click", async () => {
+  drawer.classList.add("open");
+  await loadRecent();
+});
+$("#drawerClose").addEventListener("click", () => drawer.classList.remove("open"));
+drawer.addEventListener("click", (e) => { if (e.target === drawer) drawer.classList.remove("open"); });
+
+function renderMemories(rows, sub) {
+  const list = $("#memList");
+  list.innerHTML = "";
+  $("#memSub").textContent = sub;
+  if (!rows.length) {
+    list.innerHTML = '<div class="mem"><p>Nothing remembered yet.</p></div>';
+    return;
+  }
+  for (const row of rows) {
+    const el = document.createElement("div");
+    el.className = "mem";
+    const when = new Date((row.created_at || 0) * 1000).toLocaleString();
+    const score = row.score != null ? ` · score ${row.score}` : "";
+    el.innerHTML = `<p></p><small>${when}${score}</small>`;
+    el.querySelector("p").textContent = row.text;
+    list.appendChild(el);
+  }
+}
+
+async function loadRecent() {
+  try {
+    const res = await fetch(`/v1/memory/recent?user_id=${encodeURIComponent(USER_ID)}&limit=40`);
+    const data = await res.json();
+    renderMemories(data.memories || [], `${data.count || 0} memories`);
+  } catch (err) {
+    toast("Memory unavailable: " + err.message);
+  }
+}
+
+$("#memSearch").addEventListener("click", async () => {
+  const q = $("#memQuery").value.trim();
+  if (!q) return loadRecent();
+  try {
+    const res = await fetch(`/v1/memory/search?user_id=${encodeURIComponent(USER_ID)}&q=${encodeURIComponent(q)}&top_k=8`);
+    const data = await res.json();
+    renderMemories(data.results || [], `results for “${q}”`);
+  } catch (err) {
+    toast("Search failed: " + err.message);
+  }
+});
+
+$("#memQuery").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#memSearch").click(); });
+
+/* ------------------------------------------------------------------- misc -- */
+$("#clearBtn").addEventListener("click", () => {
+  transcript.innerHTML = "";
+  liveBubble = null;
+});
+
+socket.connect();
+</script>
+</body>
+</html>

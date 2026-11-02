@@ -1,0 +1,11 @@
+# AURA — FastAPI backend
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.30
+httpx>=0.27
+aiosqlite>=0.20
+pydantic>=2.7
+python-dotenv>=1.0
+
+# MODULE 1 vector index. Optional: without it memory.py falls back to a SQLite
+# cosine index so the service still boots and still searches.
+chromadb>=0.5
