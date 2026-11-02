@@ -240,6 +240,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.memory = memory
     app.state.provider = provider
 
+    # A plain "pip install uvicorn" ships no WebSocket implementation: the socket
+    # then answers 404 with only a warning buried in the log. Say it at boot.
+    try:
+        import websockets  # noqa: F401
+    except Exception:
+        try:
+            import wsproto  # noqa: F401
+        except Exception:
+            print(
+                "[aura] WARNING: no WebSocket library installed - /ws/stream will 404. "
+                "Install uvicorn[standard] (or websockets) to enable the realtime lane.",
+                flush=True,
+            )
+
     try:
         yield
     finally:

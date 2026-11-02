@@ -48,7 +48,7 @@
     display:flex; align-items:center; gap:12px;
     padding:14px 18px; padding-top:calc(14px + env(safe-area-inset-top));
   }
-  .brand{font-weight:700; letter-spacing:.32em; font-size:13px; color:var(--text)}
+  .brand{font-weight:700; letter-spacing:.32em; font-size:13px; color:var(--text); white-space:nowrap}
   .brand span{color:var(--accent); transition:color .4s}
   .pill{
     display:inline-flex; align-items:center; gap:7px;
@@ -149,9 +149,20 @@
   .toast.show{opacity:1; transform:translate(-50%,0)}
 
   @media (max-width:640px){
-    .brand{font-size:12px; letter-spacing:.24em}
+    .brand{font-size:12px; letter-spacing:.2em}
     .msg{max-width:92%; font-size:14.5px}
     .composer{padding-left:14px}
+  }
+  /* very narrow screens: the header has three things to fit, so the voice label
+     collapses to its icon and the three tool buttons share one row */
+  @media (max-width:430px){
+    header.top{padding:12px 12px; gap:8px}
+    .brand{font-size:11px; letter-spacing:.16em}
+    .pill{padding:5px 9px; font-size:10.5px; letter-spacing:.1em}
+    .pill .dot{width:6px;height:6px}
+    #voiceToggle .lbl{display:none}
+    .toolrow{gap:8px; flex-wrap:nowrap}
+    .toolrow .ghost{padding:8px 10px; font-size:11.5px; gap:5px; flex:1 1 0; justify-content:center}
   }
   @media (prefers-reduced-motion:reduce){
     .msg{animation:none}
@@ -164,7 +175,7 @@
     <div class="brand">A U R <span>A</span></div>
     <div class="pill"><span class="dot" id="linkDot"></span><span id="stateLabel">Idle</span></div>
     <div class="spacer"></div>
-    <button class="ghost" id="voiceToggle" aria-pressed="false" title="Speak replies aloud">🔊 Voice</button>
+    <button class="ghost" id="voiceToggle" aria-pressed="false" title="Speak replies aloud">🔊 <span class="lbl">Voice</span></button>
   </header>
 
   <div class="stage">
