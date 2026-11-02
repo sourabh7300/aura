@@ -327,7 +327,7 @@ function mkDeps(over) {
     const ap2 = auto.createAutopilot(d2);
     await ap2.tick({});
     const r2 = await ap2.tick({});
-    ok("daily cycle budget is enforced", r2.skipped === "daily cycle budget reached (1)", r2.skipped);
+    ok("daily cycle budget is enforced", r2.skipped === "daily cycle budget reached (1/1)", r2.skipped);
     const r2f = await ap2.tick({ force: true });
     ok("admin force overrides the budget", r2f.ok === true && !r2f.skipped);
 
