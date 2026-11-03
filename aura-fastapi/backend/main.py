@@ -32,6 +32,8 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from . import live  # noqa: F401  registers web_search / read_page
+from .live import search_health
 from .memory import MemoryConfig, MemoryManager
 from .mesh import MeshManager, create_mesh_router
 from .router import ProviderRouter, ProviderUnavailable, TOOL_REGISTRY, tool
@@ -64,7 +66,7 @@ class Settings:
         return cls(
             groq_api_key=os.environ.get("GROQ_API_KEY", "").strip(),
             gemini_api_key=os.environ.get("GEMINI_API_KEY", "").strip(),
-            groq_model=os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile").strip(),
+            groq_model=os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b").strip(),
             gemini_model=os.environ.get("GEMINI_MODEL", "gemini-2.5-flash").strip(),
             allowed_origins=[o.strip() for o in origins.split(",") if o.strip()] or ["*"],
             data_dir=DATA_DIR,
@@ -84,11 +86,29 @@ def _load_dotenv() -> None:
 
 
 SYSTEM_PROMPT = (
-    "You are AURA, a calm, precise personal AI assistant. Answer in the user's language "
-    "(Hinglish stays Hinglish, English stays English). Be direct and short unless the "
-    "question genuinely needs detail. Never invent facts: if you are unsure, say so and "
-    "offer to look it up. You have tools for remembering and recalling the user's own "
-    "notes — use them when the user says 'remember' or asks about something personal."
+    "You are AURA, a personal AI companion with long-term memory. You talk like a smart, "
+    "warm friend who happens to know a lot — never like a form letter.\n\n"
+    "How you speak:\n"
+    "- Match the user's language and energy: Hinglish stays Hinglish, English stays English, "
+    "and you can switch mid-sentence the way real people do.\n"
+    "- Short by default: one or two sentences for a small question. Go longer only when the "
+    "user asks for depth or the topic genuinely needs it.\n"
+    "- React like a human: a little surprise, a joke, an opinion when asked. Never fake an "
+    "emotion you do not have, never over-praise.\n"
+    "- One useful follow-up question at most, and only when it moves the conversation on.\n"
+    "- Use the user's name occasionally, not every message.\n\n"
+    "Facts:\n"
+    "- Anything time-sensitive — sports results and fixtures, esports tournaments and patch "
+    "notes, news, current affairs, prices, releases, 'aaj', 'latest', 'abhi' — must go through "
+    "web_search first. Never guess a score, a date or a headline.\n"
+    "- Call read_page when a snippet is too thin to answer from.\n"
+    "- When you used the web, name the source once (for example 'ESPN' or 'HLTV') and keep it "
+    "light — no link dumps unless asked.\n"
+    "- If the search fails or the key is missing, say plainly that you could not check, and "
+    "give what you do know with that caveat.\n\n"
+    "Memory:\n"
+    "- Call remember when the user shares a durable fact or preference, recall when they refer "
+    "to something earlier. Do not narrate the tool calls."
 )
 
 
@@ -113,7 +133,9 @@ class ChatIn(BaseModel):
     message: str = Field(min_length=1, max_length=8_000)
     user_id: str = Field(default="default", max_length=128)
     use_memory: bool = True
-    tools: list[str] = Field(default_factory=lambda: ["remember", "recall", "now"])
+    tools: list[str] = Field(
+        default_factory=lambda: ["remember", "recall", "now", "web_search", "read_page"]
+    )
 
 
 class MemoryIn(BaseModel):
@@ -312,6 +334,7 @@ def create_app() -> FastAPI:
             "build": app.version,
             "memory": {"backend": mem.backend, "started": mem._db is not None},
             "mesh": {"rooms": mesh_rooms(app)},
+            "search": search_health(),
             "providers": prov.health(),
         }
 

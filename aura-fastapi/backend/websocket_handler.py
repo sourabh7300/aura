@@ -182,7 +182,7 @@ def create_stream_router(
                     result: ChatResult = await provider.chat(
                         system=system,
                         messages=[{"role": "user", "content": user_text}],
-                        tools=("remember", "recall", "now"),
+                        tools=("remember", "recall", "now", "web_search", "read_page"),
                         max_tokens=700,
                     )
 
@@ -229,11 +229,11 @@ def create_stream_router(
                         pass
 
                 except ProviderUnavailable as exc:
-                    await send({"type": "error", "message": f"no model available: {exc}"})
+                    await send({"type": "error", "message": f"no model available: {redact(exc)}"})
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:  # noqa: BLE001 - one bad turn must not kill the socket
-                    await send({"type": "error", "message": f"{type(exc).__name__}: {exc}"})
+                    await send({"type": "error", "message": f"{type(exc).__name__}: {redact(exc)}"})
                 finally:
                     try:
                         await send_state("idle")
@@ -301,7 +301,7 @@ def create_stream_router(
                         try:
                             heard = await transcriber(clip, session.audio_mime)
                         except Exception as exc:  # noqa: BLE001
-                            await send({"type": "error", "message": f"stt failed: {exc}"})
+                            await send({"type": "error", "message": f"stt failed: {redact(exc)}"})
                             await send_state("idle")
                             return
                         if not heard:

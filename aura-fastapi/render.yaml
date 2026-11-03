@@ -25,6 +25,8 @@ services:
         sync: false          # asked once in the Render UI, never stored in git
       - key: GEMINI_API_KEY
         sync: false
+      - key: TAVILY_API_KEY
+        sync: false          # live sports / esports / news search
       - key: ALLOWED_ORIGINS
         value: "*"           # narrow this to your domain once it is live
       - key: AURA_DATA_DIR

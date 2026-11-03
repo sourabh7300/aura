@@ -10,6 +10,7 @@ aura-fastapi/
 │   ├── memory.py            MODULE 1  SQLite + vector memory, recency decay
 │   ├── router.py            MODULE 2  Groq → Gemini failover + tool loop
 │   ├── websocket_handler.py MODULE 3  /ws/stream audio + vision
+│   ├── live.py              MODULE 2b web search + page reading (key bank)
 │   ├── mesh.py              MESH      device relay (rooms, commands, acks)
 │   └── __init__.py          package exports
 ├── frontend/
@@ -18,6 +19,7 @@ aura-fastapi/
 ├── tests/router_check.py    routing, failover and the tool guardrail
 ├── tests/api_check.py       REST + websocket behaviour, static UI
 ├── tests/mesh_check.py      MESH relay: join, command, ack, kick, close
+├── tests/live_check.py      search key bank, search/extract, secret redaction
 ├── requirements.txt
 └── .env.example
 ```
@@ -44,6 +46,7 @@ python tests/smoke.py       # memory: persistence, user scoping, decay ordering
 python tests/router_check.py  # routing, failover, tool guardrail
 python tests/api_check.py     # REST + websocket, static UI
 python tests/mesh_check.py    # MESH relay end to end
+python tests/live_check.py    # search key bank, live search, redaction
 ```
 
 ## MODULE 1 — memory
@@ -66,10 +69,14 @@ python tests/mesh_check.py    # MESH relay end to end
 
 ## MODULE 2 — routing
 
-* Primary `groq:llama-3.3-70b-versatile`, failover `gemini:gemini-2.5-flash`.
+* Primary `groq:openai/gpt-oss-120b`, failover `gemini:gemini-2.5-flash`.
 * Model ids retire silently, so Groq requests walk a chain
-  (`llama-3.3-70b-versatile` -> `llama-3.1-8b-instant` -> `gpt-oss-20b` -> `gpt-oss-120b`
-  -> `qwen3.8-27b`) and only then fail over to Gemini.
+  (`gpt-oss-120b` -> `gpt-oss-20b` -> `qwen3.8-27b` -> `allam-2-7b`) and only then
+  fail over to Gemini. The old default, `llama-3.3-70b-versatile`, is already
+  retired — it survives only as a 404 the chain skips.
+* Provider errors are passed through `redact()` before they reach a client: httpx
+  puts the request URL in its exception text, and both Groq and Google
+  authenticate with a query parameter, so raw errors leak keys.
 * **429, 5xx, timeouts and connection errors fail over** (with a 45 s cooldown so
   a burst doesn't each pay a failed round-trip). A 4xx that isn't 429 is a
   config bug — it is raised, not hidden behind a failover that would also fail.
@@ -102,6 +109,26 @@ docstring. Key behaviours:
 Server-side TTS is optional: pass `synthesizer=` to `create_stream_router`.
 Without it the browser speaks the answer with `speechSynthesis`.
 
+## Live information
+
+Anything time-bound — a score, a fixture, an esports bracket, a patch note,
+today's news — cannot come from training data. Two tools cover it:
+
+| tool | backing | notes |
+| --- | --- | --- |
+| `web_search(query, topic, days, max_results)` | Tavily `/search` | news topic by default, `include_answer` for a one-line answer |
+| `read_page(url)` | Tavily `/extract`, plain fetch fallback | trimmed to 4 k characters |
+
+Keys stay server-side and up to ten can be supplied (`TAVILY_API_KEY`,
+`TAVILY_API_KEY_2` … or comma lists). They are spent round-robin; a 429 cools a
+key for a minute and a rejected key is parked for an hour, so an exhausted key
+degrades the tool instead of breaking it. `/health` reports `configured`, key
+count and cooldown counts — never key material.
+
+The persona is tuned for this: it searches before answering anything live, names
+the source once, keeps replies short, and reacts like a person rather than a
+form letter.
+
 ## MODULE 4 — UI
 
 One `index.html`, no build step, no dependencies. The layout follows the
@@ -124,6 +151,12 @@ with a toast instead of being silently dropped.
 The profile is local: signing in stores a name and a stable id in
 `localStorage`, and memories plus MESH rooms are keyed to that id. There is no
 cloud account in this build, and the sign-in sheet says so.
+
+## Theme
+
+The palette is the original AURA holographic one: near-black `#05070e`, a cyan
+core (`#5ce1ff`) and ice text. The orb keeps a lit, pulsing centre — a plain dot
+cloud reads as a dim smudge on a phone screen at arm's length.
 
 ## Mobile
 

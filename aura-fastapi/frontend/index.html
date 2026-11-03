@@ -3,21 +3,21 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<meta name="theme-color" content="#05070c" />
+<meta name="theme-color" content="#05070e" />
 <title>AURA — holographic assistant</title>
 <style>
   :root{
-    --bg:#05070c;
-    --bg-soft:#0a0d14;
-    --panel:#10141d;
-    --panel-2:#141926;
+    --bg:#05070e;
+    --bg-soft:#080b14;
+    --panel:#0b101c;
+    --panel-2:#101827;
     --line:rgba(255,255,255,.08);
     --line-strong:rgba(255,255,255,.14);
-    --text:#eef1f7;
-    --muted:#8a93a8;
-    --dim:#5f6879;
-    --accent:#7c9cff;
-    --accent-2:#a78bfa;
+    --text:#e8ecf8;
+    --muted:#8fa3c4;
+    --dim:#5e6b92;
+    --accent:#5ce1ff;
+    --accent-2:#7cebff;
     --good:#4ade80;
     --warn:#fbbf24;
     --bad:#f87171;
@@ -34,8 +34,8 @@
   body::before{ /* one static wash instead of a repainting gradient */
     content:"";position:fixed;inset:0;pointer-events:none;
     background:
-      radial-gradient(1100px 620px at 50% -12%, rgba(124,156,255,.14), transparent 62%),
-      radial-gradient(760px 520px at 88% 108%, rgba(167,139,250,.10), transparent 60%);
+      radial-gradient(1100px 620px at 50% -12%, rgba(92,225,255,.14), transparent 62%),
+      radial-gradient(760px 520px at 88% 108%, rgba(124,235,255,.10), transparent 60%);
   }
   .grid{ /* plain, cheap grid — masked full-screen grids are a mobile paint tax */
     position:fixed;inset:0;pointer-events:none;opacity:.32;
@@ -57,7 +57,7 @@
   .brand .mark{
     width:11px;height:11px;border-radius:50%;
     background:linear-gradient(135deg,var(--accent),var(--accent-2));
-    box-shadow:0 0 14px rgba(124,156,255,.75);flex:none;
+    box-shadow:0 0 14px rgba(92,225,255,.75);flex:none;
   }
   .brand b{font-size:15px;letter-spacing:.24em;font-weight:600}
   .brand .tag{
@@ -78,7 +78,7 @@
   .signin:hover{background:rgba(255,255,255,.09);border-color:var(--line-strong)}
   .signin .avatar{
     width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:700;
-    background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#08101f;
+    background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#03121a;
   }
   .signin .label{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
@@ -101,7 +101,7 @@
     margin:0;font-size:clamp(26px,6vw,42px);line-height:1.15;font-weight:600;letter-spacing:-.02em;
   }
   .hero h1 .grad{
-    background:linear-gradient(100deg,#c9d6ff,#8fa8ff 45%,#bda6ff);
+    background:linear-gradient(100deg,#dff6ff,#5ce1ff 45%,#9ff0ff);
     -webkit-background-clip:text;background-clip:text;color:transparent;
   }
   .hero p{margin:10px auto 0;color:var(--muted);font-size:14.5px;max-width:48ch}
@@ -122,8 +122,8 @@
   @keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
   .msg.aura{align-self:flex-start;background:var(--panel);border:1px solid var(--line);border-bottom-left-radius:6px}
   .msg.user{
-    align-self:flex-end;background:linear-gradient(135deg,rgba(124,156,255,.22),rgba(167,139,250,.18));
-    border:1px solid rgba(124,156,255,.28);border-bottom-right-radius:6px;
+    align-self:flex-end;background:linear-gradient(135deg,rgba(92,225,255,.22),rgba(124,235,255,.18));
+    border:1px solid rgba(92,225,255,.28);border-bottom-right-radius:6px;
   }
   .msg .meta{display:block;margin-top:6px;font-size:11px;color:var(--dim)}
 
@@ -133,9 +133,9 @@
   .stage.chatting .chips{display:none}
   .sug{
     display:flex;align-items:center;gap:7px;padding:9px 13px;border-radius:999px;font-size:13px;
-    color:#cdd4e4;border:1px solid var(--line);background:rgba(255,255,255,.035);transition:.18s;
+    color:#c9dcf0;border:1px solid var(--line);background:rgba(255,255,255,.035);transition:.18s;
   }
-  .sug:hover{background:rgba(124,156,255,.12);border-color:rgba(124,156,255,.34);color:#fff}
+  .sug:hover{background:rgba(92,225,255,.12);border-color:rgba(92,225,255,.34);color:#fff}
   .sug svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round}
 
   /* ------------------------------------------------------------------- dock */
@@ -159,14 +159,14 @@
     background:var(--panel);border:1px solid var(--line-strong);
     box-shadow:0 12px 40px rgba(0,0,0,.45);transition:border-color .2s,box-shadow .2s;
   }
-  .composer:focus-within{border-color:rgba(124,156,255,.55);box-shadow:0 12px 40px rgba(0,0,0,.45),0 0 0 3px rgba(124,156,255,.12)}
+  .composer:focus-within{border-color:rgba(92,225,255,.55);box-shadow:0 12px 40px rgba(0,0,0,.45),0 0 0 3px rgba(92,225,255,.12)}
   .cbtn{
     width:38px;height:38px;border-radius:14px;display:grid;place-items:center;flex:none;
-    color:#aab2c6;transition:.16s;
+    color:#9db4cd;transition:.16s;
   }
   .cbtn:hover{background:rgba(255,255,255,.07);color:#fff}
   .cbtn svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
-  .cbtn[aria-pressed="true"]{background:rgba(124,156,255,.2);color:#cdd8ff}
+  .cbtn[aria-pressed="true"]{background:rgba(92,225,255,.2);color:#cdf5ff}
   .cbtn.rec{background:rgba(248,113,113,.2);color:#ffd7d7}
   #input{
     flex:1;min-height:38px;max-height:150px;padding:9px 4px;border:0;background:none;outline:none;
@@ -175,9 +175,9 @@
   #input::placeholder{color:var(--dim)}
   .send{
     width:38px;height:38px;border-radius:14px;display:grid;place-items:center;flex:none;
-    background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#07101f;transition:.18s;
+    background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#03121a;transition:.18s;
   }
-  .send:disabled{opacity:.35;background:#2a3040;color:#8d96a9;cursor:not-allowed}
+  .send:disabled{opacity:.35;background:#1a2532;color:#6e7f96;cursor:not-allowed}
   .send svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
   .dock-meta{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:8px;font-size:11px;color:var(--dim)}
   .dot{width:6px;height:6px;border-radius:50%;background:var(--good);box-shadow:0 0 8px rgba(74,222,128,.7)}
@@ -212,38 +212,38 @@
   .switch{position:relative;width:44px;height:26px;flex:none}
   .switch input{position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer}
   .switch span{
-    position:absolute;inset:0;border-radius:999px;background:#232a3a;transition:.2s;pointer-events:none;
+    position:absolute;inset:0;border-radius:999px;background:#182433;transition:.2s;pointer-events:none;
   }
   .switch span::after{
     content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;
-    background:#8d96a9;transition:.2s;
+    background:#6e7f96;transition:.2s;
   }
-  .switch input:checked + span{background:rgba(124,156,255,.45)}
-  .switch input:checked + span::after{transform:translateX(18px);background:#dfe7ff}
+  .switch input:checked + span{background:rgba(92,225,255,.45)}
+  .switch input:checked + span::after{transform:translateX(18px);background:#dffaff}
   .field{
     width:100%;padding:11px 13px;border-radius:12px;border:1px solid var(--line);
     background:var(--panel);outline:none;font-size:14px;transition:.18s;
   }
-  .field:focus{border-color:rgba(124,156,255,.55)}
+  .field:focus{border-color:rgba(92,225,255,.55)}
   .btn{
     display:inline-flex;align-items:center;justify-content:center;gap:8px;
     padding:11px 16px;border-radius:12px;font-size:13.5px;font-weight:500;
     border:1px solid var(--line);background:rgba(255,255,255,.05);transition:.18s;
   }
   .btn:hover{background:rgba(255,255,255,.1)}
-  .btn.primary{background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#07101f;border:0;font-weight:600}
+  .btn.primary{background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#03121a;border:0;font-weight:600}
   .btn.primary:hover{filter:brightness(1.08)}
   .btn.block{width:100%;margin-top:10px}
   .btn.danger{color:#ffb4b4;border-color:rgba(248,113,113,.35)}
   .acct{display:flex;align-items:center;gap:12px;padding:14px;border-radius:16px;background:var(--panel);border:1px solid var(--line);margin-top:10px}
   .acct .avatar{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:17px;
-    background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#08101f;flex:none}
+    background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#03121a;flex:none}
   .acct .who{min-width:0}
   .acct .who b{display:block;font-size:14.5px}
   .acct .who small{display:block;color:var(--muted);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .code{
     font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:30px;letter-spacing:.34em;
-    text-align:center;padding:16px 0 14px;color:#dbe4ff;
+    text-align:center;padding:16px 0 14px;color:#d7f4ff;
   }
   .dev{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line)}
   .dev .who{flex:1;min-width:0}
@@ -266,7 +266,7 @@
   .meshbanner{
     position:fixed;left:50%;top:70px;transform:translateX(-50%);z-index:50;display:none;
     align-items:center;gap:8px;padding:8px 14px;border-radius:999px;font-size:12px;
-    background:rgba(124,156,255,.16);border:1px solid rgba(124,156,255,.35);color:#dbe4ff;
+    background:rgba(92,225,255,.16);border:1px solid rgba(92,225,255,.35);color:#d7f4ff;
   }
   .meshbanner.show{display:flex}
   #toast{
@@ -285,8 +285,8 @@
   @media (max-width:768px){
     /* backdrop-filter re-blurs the animated orb behind every panel each frame:
        that, not the canvas, was the real jank. Solid fills instead. */
-    .composer{background:#0e121a;box-shadow:0 8px 28px rgba(0,0,0,.5)}
-    .topbar{background:linear-gradient(to bottom,#05070c 62%,rgba(5,7,12,.86))}
+    .composer{background:#0a0f1a;box-shadow:0 8px 28px rgba(0,0,0,.5)}
+    .topbar{background:linear-gradient(to bottom,#05070e 62%,rgba(5,7,12,.86))}
     .sheet .panel{
       top:auto;left:0;right:0;width:auto;height:90dvh;border-left:0;
       border-radius:22px 22px 0 0;border-top:1px solid var(--line-strong);
@@ -340,17 +340,21 @@
   <div class="transcript" id="transcript" role="log" aria-live="polite"></div>
 
   <div class="chips" id="chips">
-    <button class="sug" data-say="Will it rain in Delhi tonight?">
-      <svg viewBox="0 0 24 24"><path d="M18 10a4 4 0 0 0-7.7-1.4A3.5 3.5 0 1 0 7 16h10a3 3 0 0 0 1-6Z"/></svg>
-      Weather
+    <button class="sug" data-say="Aaj sports me kya chal raha hai? Latest scores aur upcoming matches batao.">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14 0 18M12 3c-3 3.5-3 14 0 18"/></svg>
+      Sports
     </button>
-    <button class="sug" data-say="Remember that I ship on Fridays and remind me why.">
+    <button class="sug" data-say="Esports ki latest news kya hai — kaunsa tournament chal raha hai aur kaun jeet raha hai?">
+      <svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="10" rx="5"/><path d="M7 12h3M8.5 10.5v3M15 12h.01M17.5 12h.01"/></svg>
+      Esports
+    </button>
+    <button class="sug" data-say="Aaj ki top news kya hai? Teen points me short me batao.">
+      <svg viewBox="0 0 24 24"><path d="M4 5h13v14H4zM17 9h3v8a2 2 0 0 1-3 2M7 8h7M7 12h7M7 16h4"/></svg>
+      Top news
+    </button>
+    <button class="sug" data-say="Yaad rakho ki main Friday ko ship karta hoon.">
       <svg viewBox="0 0 24 24"><path d="M12 3v18M5 8h14M5 16h14"/></svg>
-      Remember this
-    </button>
-    <button class="sug" data-say="What did we talk about yesterday?">
-      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-      What did we discuss?
+      Remember
     </button>
   </div>
 </main>
@@ -720,14 +724,25 @@ class Orb {
     const R = Math.min(w, h) * 0.34 * (this.state === "thinking" ? 1.02 : 1);
     const tint = this.tint;
 
-    /* core glow — one radial fill, cached colour stops */
-    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 1.25);
-    grad.addColorStop(0, `rgba(${tint.r},${tint.g},${tint.b},0.20)`);
-    grad.addColorStop(0.55, `rgba(${tint.r},${tint.g},${tint.b},0.05)`);
+    /* halo — one radial fill, cached colour stops */
+    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 1.35);
+    grad.addColorStop(0, `rgba(${tint.r},${tint.g},${tint.b},0.26)`);
+    grad.addColorStop(0.5, `rgba(${tint.r},${tint.g},${tint.b},0.07)`);
     grad.addColorStop(1, "rgba(0,0,0,0)");
     ctx.fillStyle = grad;
     ctx.beginPath();
-    ctx.arc(cx, cy, R * 1.25, 0, Math.PI * 2);
+    ctx.arc(cx, cy, R * 1.35, 0, Math.PI * 2);
+    ctx.fill();
+
+    /* the glowing core: this is what makes it read as a hologram, not a dot cloud */
+    const pulse = 1 + 0.045 * Math.sin(t * 2.1);
+    const core = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 0.7 * pulse);
+    core.addColorStop(0, "rgba(214,250,255,0.60)");
+    core.addColorStop(0.32, `rgba(${tint.r},${tint.g},${tint.b},0.30)`);
+    core.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = core;
+    ctx.beginPath();
+    ctx.arc(cx, cy, R * 0.7 * pulse, 0, Math.PI * 2);
     ctx.fill();
 
     const cosA = Math.cos(t * 0.22 * speed), sinA = Math.sin(t * 0.22 * speed);
@@ -745,7 +760,7 @@ class Orb {
       const scale = 0.55 + depth * 0.75;
       const px = cx + x * R * scale;
       const py = cy + y * R * scale;
-      const alpha = 0.10 + depth * 0.62;
+      const alpha = 0.12 + depth * 0.66;
       const size = p.s * (0.7 + depth * 1.1);
 
       ctx.fillStyle = `rgba(${tint.r},${tint.g},${tint.b},${alpha.toFixed(3)})`;
@@ -971,7 +986,7 @@ function renderAttachments() {
     } else {
       const icon = document.createElement("span");
       icon.className = "thumb";
-      icon.style.cssText = "display:grid;place-items:center;background:rgba(124,156,255,.16);color:#c3d0ff;font-size:10px;font-weight:700";
+      icon.style.cssText = "display:grid;place-items:center;background:rgba(92,225,255,.16);color:#c3d0ff;font-size:10px;font-weight:700";
       icon.textContent = (file.name.split(".").pop() || "txt").slice(0, 3).toUpperCase();
       chip.appendChild(icon);
     }

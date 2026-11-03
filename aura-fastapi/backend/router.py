@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import re
 import json
 import time
 from dataclasses import dataclass, field
@@ -112,6 +113,44 @@ class ProviderError(RuntimeError):
 
 class ProviderUnavailable(ProviderError):
     """Every configured provider refused or failed — surface this as HTTP 503."""
+
+# --------------------------------------------------------------------------- #
+# Secret hygiene
+#
+# Provider SDK errors are not safe to forward: httpx puts the whole request URL
+# in the exception text, and Google/Groq authenticate with a query parameter.
+# Everything that leaves this module passes through `redact` first.
+# --------------------------------------------------------------------------- #
+
+_SECRET_PATTERNS = (
+    (re.compile(r"(?i)([?&]key=)[^&\s\"']+"), lambda m: m.group(1) + "***"),
+    (re.compile(r"gsk_[A-Za-z0-9]{8,}"), "***"),
+    (re.compile(r"AIza[0-9A-Za-z_\-]{8,}"), "***"),
+    (re.compile(r"tvly-[A-Za-z0-9_\-]{8,}"), "***"),
+    (re.compile(r"(?i)(bearer\s+)[A-Za-z0-9._\-]{8,}"), lambda m: m.group(1) + "***"),
+)
+
+
+def redact(text: object, limit: int = 280) -> str:
+    """Strip credentials and trim, so an error can be shown to the user safely."""
+    out = str(text or "")
+    for pattern, replacement in _SECRET_PATTERNS:
+        out = pattern.sub(replacement, out)
+    out = " ".join(out.split())
+    return out[:limit]
+
+
+def _response_snippet(exc: Exception) -> str:
+    response = getattr(exc, "response", None)
+    if response is not None:
+        try:
+            body = response.text[:200]
+            if body:
+                return body
+        except Exception:  # noqa: BLE001
+            pass
+    return type(exc).__name__ + ": " + str(exc)[:200]
+
 
 
 # --------------------------------------------------------------------------- #
@@ -234,13 +273,12 @@ class ProviderRouter:
         *,
         groq_api_key: str | None = None,
         gemini_api_key: str | None = None,
-        groq_model: str = "llama-3.3-70b-versatile",
+        groq_model: str = "openai/gpt-oss-120b",
         gemini_model: str = "gemini-2.5-flash",
         groq_fallback_models: Sequence[str] = (
-            "llama-3.1-8b-instant",
-            "openai/gpt-oss-20b",
-            "openai/gpt-oss-120b",
+            "openai/gpt-oss-20b",       # same family, cheaper, still tool-calling
             "qwen/qwen3.8-27b",
+            "allam-2-7b",
         ),
         timeout: float = 45.0,
         max_tool_calls: int = MAX_TOOL_CALLS,
@@ -436,7 +474,7 @@ class ProviderRouter:
                     errors.append(f"{name}: rate limited")
                     break  # immediate failover — retrying a 429 only wastes the user's time
                 except _TransientFailure as exc:
-                    errors.append(f"{name}: {exc}")
+                    errors.append(f"{name}: {redact(exc, 160)}")
                     if attempt == 0:
                         await asyncio.sleep(0.25)  # one quick retry for a blip
                         continue
@@ -446,7 +484,9 @@ class ProviderRouter:
                     if status in (401, 403):
                         errors.append(f"{name}: auth rejected ({status})")
                         break
-                    raise ProviderError(f"{name} rejected the request ({status}): {exc}") from exc
+                    raise ProviderError(
+                        f"{name} rejected the request ({status}): {redact(_response_snippet(exc))}"
+                    ) from None
 
         raise ProviderUnavailable("; ".join(errors) or "every provider failed")
 
