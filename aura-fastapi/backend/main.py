@@ -33,6 +33,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .memory import MemoryConfig, MemoryManager
+from .mesh import MeshManager, create_mesh_router
 from .router import ProviderRouter, ProviderUnavailable, TOOL_REGISTRY, tool
 from .websocket_handler import GroqWhisper, create_stream_router
 
@@ -296,6 +297,10 @@ def create_app() -> FastAPI:
     )
     register_tools(memory)  # the websocket router only needs the tool names to exist
 
+    mesh = MeshManager()
+    app.state.mesh = mesh
+    app.include_router(create_mesh_router(mesh))
+
     # ---- REST routes ------------------------------------------------------ #
 
     @app.get("/health")
@@ -306,6 +311,7 @@ def create_app() -> FastAPI:
             "ok": True,
             "build": app.version,
             "memory": {"backend": mem.backend, "started": mem._db is not None},
+            "mesh": {"rooms": mesh_rooms(app)},
             "providers": prov.health(),
         }
 
@@ -438,6 +444,12 @@ def create_app() -> FastAPI:
         )
 
     return app
+
+
+def mesh_rooms(app: FastAPI) -> int:
+    """Number of live MESH rooms (0 until the first owner registers)."""
+    mesh = getattr(app.state, "mesh", None)
+    return len(mesh._rooms) if mesh is not None else 0
 
 
 # Lazy handles used when REST is hit before the lifespan runs (e.g. TestClient

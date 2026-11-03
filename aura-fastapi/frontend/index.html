@@ -1,480 +1,788 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<meta name="theme-color" content="#05070d" />
-<title>AURA — Personal AI</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#05070c" />
+<title>AURA — holographic assistant</title>
 <style>
-  /* ---------- design tokens ---------- */
   :root{
-    --bg:#05070d; --bg2:#080d18;
-    --glass:rgba(16,24,40,.55);
-    --stroke:rgba(120,200,255,.16);
-    --text:#e8f2ff; --muted:#8ba3bd;
-    --cyan:#38e8ff; --green:#4ade80; --amber:#f5b642; --violet:#a78bfa;
-    --accent:var(--cyan);
-    --r:18px;
-    --font:ui-sans-serif,-apple-system,"Segoe UI",Inter,Roboto,sans-serif;
+    --bg:#05070c;
+    --bg-soft:#0a0d14;
+    --panel:#10141d;
+    --panel-2:#141926;
+    --line:rgba(255,255,255,.08);
+    --line-strong:rgba(255,255,255,.14);
+    --text:#eef1f7;
+    --muted:#8a93a8;
+    --dim:#5f6879;
+    --accent:#7c9cff;
+    --accent-2:#a78bfa;
+    --good:#4ade80;
+    --warn:#fbbf24;
+    --bad:#f87171;
+    --radius:22px;
+    --dock-h:0px;
   }
-  *{box-sizing:border-box}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{height:100%}
-  /* dvh tracks the real mobile viewport as the URL bar collapses */
-  @supports (height:100dvh){ html,body{height:100dvh} }
   body{
-    margin:0; font-family:var(--font); color:var(--text);
+    margin:0;background:var(--bg);color:var(--text);
+    font:15px/1.5 "Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;overflow:hidden;
+  }
+  body::before{ /* one static wash instead of a repainting gradient */
+    content:"";position:fixed;inset:0;pointer-events:none;
     background:
-      radial-gradient(120% 80% at 50% -10%, #0d1c33 0%, transparent 60%),
-      radial-gradient(90% 60% at 50% 110%, #0a1a24 0%, transparent 55%),
-      var(--bg);
-    overflow:hidden;
-    -webkit-tap-highlight-color:transparent;
+      radial-gradient(1100px 620px at 50% -12%, rgba(124,156,255,.14), transparent 62%),
+      radial-gradient(760px 520px at 88% 108%, rgba(167,139,250,.10), transparent 60%);
   }
-  /* faint holographic grid + vignette */
-  body::before{
-    content:""; position:fixed; inset:0; pointer-events:none; z-index:0;
-    background-image:
-      linear-gradient(rgba(56,232,255,.045) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(56,232,255,.045) 1px, transparent 1px);
-    background-size:52px 52px;
-    mask-image:radial-gradient(70% 60% at 50% 45%, #000 40%, transparent 100%);
+  .grid{ /* plain, cheap grid — masked full-screen grids are a mobile paint tax */
+    position:fixed;inset:0;pointer-events:none;opacity:.32;
+    background-image:linear-gradient(rgba(255,255,255,.05) 1px,transparent 1px),
+                     linear-gradient(90deg,rgba(255,255,255,.05) 1px,transparent 1px);
+    background-size:56px 56px;
   }
-  body::after{
-    content:""; position:fixed; inset:0; pointer-events:none; z-index:0;
-    background:radial-gradient(80% 70% at 50% 40%, transparent 40%, rgba(0,0,0,.55) 100%);
-  }
+  button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+  input,select,textarea{font:inherit;color:inherit}
 
-  /* ---------- layout ---------- */
-  .app{position:relative; z-index:1; height:100%; display:flex; flex-direction:column}
-  header.top{
-    display:flex; align-items:center; gap:12px;
-    padding:14px 18px; padding-top:calc(14px + env(safe-area-inset-top));
+  /* ------------------------------------------------------------------ top bar */
+  .topbar{
+    position:fixed;top:0;left:0;right:0;z-index:30;height:60px;
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    padding:0 16px;padding-top:env(safe-area-inset-top);
+    background:linear-gradient(to bottom,rgba(5,7,12,.92),rgba(5,7,12,0));
   }
-  .brand{font-weight:700; letter-spacing:.32em; font-size:13px; color:var(--text); white-space:nowrap}
-  .brand span{color:var(--accent); transition:color .4s}
-  .pill{
-    display:inline-flex; align-items:center; gap:7px;
-    padding:6px 12px; border-radius:999px; font-size:11.5px; letter-spacing:.14em;
-    text-transform:uppercase; color:var(--muted);
-    background:var(--glass); border:1px solid var(--stroke); backdrop-filter:blur(14px);
+  .brand{display:flex;align-items:center;gap:9px;min-width:0}
+  .brand .mark{
+    width:11px;height:11px;border-radius:50%;
+    background:linear-gradient(135deg,var(--accent),var(--accent-2));
+    box-shadow:0 0 14px rgba(124,156,255,.75);flex:none;
   }
-  .dot{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent);transition:.4s}
-  .dot.off{background:#ff5d5d;box-shadow:0 0 10px #ff5d5d}
-  .spacer{flex:1}
+  .brand b{font-size:15px;letter-spacing:.24em;font-weight:600}
+  .brand .tag{
+    font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);
+    border:1px solid var(--line);border-radius:999px;padding:3px 8px;white-space:nowrap;
+  }
+  .actions{display:flex;align-items:center;gap:8px;flex:none}
+  .icon-btn{
+    width:38px;height:38px;border-radius:50%;display:grid;place-items:center;
+    border:1px solid var(--line);background:rgba(255,255,255,.03);transition:.18s;
+  }
+  .icon-btn:hover{background:rgba(255,255,255,.08);border-color:var(--line-strong)}
+  .icon-btn svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+  .signin{
+    display:flex;align-items:center;gap:8px;height:38px;padding:0 14px;border-radius:999px;
+    border:1px solid var(--line);background:rgba(255,255,255,.04);font-size:13px;font-weight:500;transition:.18s;
+  }
+  .signin:hover{background:rgba(255,255,255,.09);border-color:var(--line-strong)}
+  .signin .avatar{
+    width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:700;
+    background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#08101f;
+  }
+  .signin .label{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
-  /* orb stage */
-  .stage{position:relative; flex:1; min-height:0}
-  canvas#orb{position:absolute; inset:0; width:100%; height:100%; pointer-events:none}
+  /* -------------------------------------------------------------------- stage */
+  .stage{
+    position:fixed;inset:60px 0 0 0;display:flex;flex-direction:column;align-items:center;
+    padding:0 16px calc(var(--dock-h) + 14px);overflow:hidden;
+  }
+  #orb{
+    position:absolute;left:50%;top:26%;transform:translate(-50%,-50%);
+    width:min(380px,88vw);height:min(380px,88vw);opacity:.7;pointer-events:none;
+    transition:opacity .4s,transform .5s;
+  }
+  .stage.busy #orb{opacity:.8;transform:translate(-50%,-50%) scale(1.04)}
+  .hero{
+    position:relative;text-align:center;margin-top:clamp(24px,10vh,96px);
+    max-width:640px;transition:opacity .35s,transform .35s;
+  }
+  .hero h1{
+    margin:0;font-size:clamp(26px,6vw,42px);line-height:1.15;font-weight:600;letter-spacing:-.02em;
+  }
+  .hero h1 .grad{
+    background:linear-gradient(100deg,#c9d6ff,#8fa8ff 45%,#bda6ff);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .hero p{margin:10px auto 0;color:var(--muted);font-size:14.5px;max-width:48ch}
+  .stage.chatting .hero{opacity:0;transform:translateY(-12px);pointer-events:none;height:0;margin:0;overflow:hidden}
+  .stage.chatting #orb{top:14%;opacity:.34}
 
-  /* transcript — a quiet overlay, never a chat-app wall of boxes */
+  /* --------------------------------------------------------------- transcript */
   .transcript{
-    position:absolute; left:0; right:0; bottom:0; top:0;
-    display:flex; flex-direction:column; justify-content:flex-end;
-    padding:0 max(16px,4vw) 8px; gap:10px; overflow-y:auto;
-    overscroll-behavior:contain; -webkit-overflow-scrolling:touch;
-    pointer-events:none;
+    position:relative;width:100%;max-width:760px;flex:1;min-height:0;margin-top:14px;
+    display:flex;flex-direction:column;gap:10px;overflow-y:auto;overscroll-behavior:contain;
+    padding:4px 2px 10px;scrollbar-width:thin;scroll-behavior:smooth;
   }
-  .transcript > *{pointer-events:auto}
-  .msg{max-width:min(680px,86%); font-size:15px; line-height:1.6; padding:10px 14px; border-radius:16px;
-       backdrop-filter:blur(16px); border:1px solid var(--stroke); animation:rise .28s ease-out}
-  .msg.user{align-self:flex-end; background:rgba(56,232,255,.10); color:#dff6ff}
-  .msg.aura{align-self:flex-start; background:var(--glass); color:var(--text)}
-  .msg.sys{align-self:center; font-size:12px; color:var(--muted); background:transparent; border-color:transparent}
-  .msg .meta{display:block; margin-top:6px; font-size:10.5px; letter-spacing:.1em; color:var(--muted); text-transform:uppercase}
-  @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .transcript:empty{display:none}
+  .msg{
+    max-width:min(86%,620px);padding:11px 14px;border-radius:16px;font-size:14.5px;line-height:1.55;
+    white-space:pre-wrap;word-break:break-word;animation:rise .22s ease-out;
+  }
+  @keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .msg.aura{align-self:flex-start;background:var(--panel);border:1px solid var(--line);border-bottom-left-radius:6px}
+  .msg.user{
+    align-self:flex-end;background:linear-gradient(135deg,rgba(124,156,255,.22),rgba(167,139,250,.18));
+    border:1px solid rgba(124,156,255,.28);border-bottom-right-radius:6px;
+  }
+  .msg .meta{display:block;margin-top:6px;font-size:11px;color:var(--dim)}
 
-  /* ---------- controls ---------- */
-  .controls{
-    padding:10px max(14px,4vw) calc(14px + env(safe-area-inset-bottom));
-    display:flex; flex-direction:column; gap:12px;
+  /* ------------------------------------------------------------------ chips */
+  .chips{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;width:100%;max-width:640px;
+    margin-top:auto;padding-bottom:6px;transition:opacity .3s}
+  .stage.chatting .chips{display:none}
+  .sug{
+    display:flex;align-items:center;gap:7px;padding:9px 13px;border-radius:999px;font-size:13px;
+    color:#cdd4e4;border:1px solid var(--line);background:rgba(255,255,255,.035);transition:.18s;
   }
+  .sug:hover{background:rgba(124,156,255,.12);border-color:rgba(124,156,255,.34);color:#fff}
+  .sug svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round}
+
+  /* ------------------------------------------------------------------- dock */
+  .dock{
+    position:fixed;left:0;right:0;bottom:0;z-index:40;padding:8px 16px calc(12px + env(safe-area-inset-bottom));
+    background:linear-gradient(to top,rgba(5,7,12,.97) 55%,rgba(5,7,12,0));
+  }
+  .dock-inner{max-width:760px;margin:0 auto}
+  .attachments{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+  .attachments:empty{display:none}
+  .file{
+    display:flex;align-items:center;gap:8px;padding:6px 8px 6px 10px;border-radius:12px;
+    background:var(--panel-2);border:1px solid var(--line);font-size:12px;max-width:240px;
+  }
+  .file .thumb{width:22px;height:22px;border-radius:6px;object-fit:cover;flex:none}
+  .file .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .file .x{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;color:var(--muted);flex:none}
+  .file .x:hover{background:rgba(255,255,255,.1);color:#fff}
   .composer{
-    display:flex; align-items:center; gap:8px;
-    background:var(--glass); border:1px solid var(--stroke); border-radius:999px;
-    padding:8px 8px 8px 18px; backdrop-filter:blur(18px);
-    box-shadow:0 10px 40px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.04);
+    display:flex;align-items:flex-end;gap:6px;padding:6px;border-radius:var(--radius);
+    background:var(--panel);border:1px solid var(--line-strong);
+    box-shadow:0 12px 40px rgba(0,0,0,.45);transition:border-color .2s,box-shadow .2s;
   }
-  .composer input{
-    flex:1; min-width:0; background:none; border:0; outline:0; color:var(--text);
-    font:400 16px/1.4 var(--font); padding:8px 0;
+  .composer:focus-within{border-color:rgba(124,156,255,.55);box-shadow:0 12px 40px rgba(0,0,0,.45),0 0 0 3px rgba(124,156,255,.12)}
+  .cbtn{
+    width:38px;height:38px;border-radius:14px;display:grid;place-items:center;flex:none;
+    color:#aab2c6;transition:.16s;
   }
-  .composer input::placeholder{color:#5f728a}
-  .iconbtn{
-    width:40px;height:40px;border-radius:50%; display:grid; place-items:center;
-    background:rgba(255,255,255,.05); border:1px solid var(--stroke); color:var(--text);
-    cursor:pointer; transition:transform .15s, background .2s, color .2s, border-color .2s;
-    flex:none;
+  .cbtn:hover{background:rgba(255,255,255,.07);color:#fff}
+  .cbtn svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+  .cbtn[aria-pressed="true"]{background:rgba(124,156,255,.2);color:#cdd8ff}
+  .cbtn.rec{background:rgba(248,113,113,.2);color:#ffd7d7}
+  #input{
+    flex:1;min-height:38px;max-height:150px;padding:9px 4px;border:0;background:none;outline:none;
+    resize:none;line-height:1.4;font-size:15px;
   }
-  .iconbtn:hover{transform:translateY(-1px); background:rgba(56,232,255,.12)}
-  .iconbtn:active{transform:scale(.95)}
-  .iconbtn[aria-pressed="true"]{background:rgba(56,232,255,.18); border-color:rgba(56,232,255,.5); color:#bff4ff}
-  .iconbtn.send{background:linear-gradient(135deg,var(--accent),#1ea7ff); color:#03121a; border:0; font-weight:700}
-  .iconbtn svg{width:18px;height:18px;display:block}
-  .toolrow{display:flex; gap:10px; align-items:center; justify-content:center; flex-wrap:wrap}
-  .ghost{
-    display:inline-flex; align-items:center; gap:8px; padding:8px 14px; border-radius:999px;
-    background:rgba(255,255,255,.04); border:1px solid var(--stroke); color:var(--muted);
-    font:500 12px/1 var(--font); letter-spacing:.06em; cursor:pointer; backdrop-filter:blur(12px);
+  #input::placeholder{color:var(--dim)}
+  .send{
+    width:38px;height:38px;border-radius:14px;display:grid;place-items:center;flex:none;
+    background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#07101f;transition:.18s;
   }
-  .ghost:hover{color:var(--text); border-color:rgba(56,232,255,.4)}
-  .ghost[aria-pressed="true"]{color:#bff4ff; border-color:rgba(56,232,255,.5); background:rgba(56,232,255,.12)}
+  .send:disabled{opacity:.35;background:#2a3040;color:#8d96a9;cursor:not-allowed}
+  .send svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .dock-meta{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:8px;font-size:11px;color:var(--dim)}
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--good);box-shadow:0 0 8px rgba(74,222,128,.7)}
+  .dot.off{background:var(--warn);box-shadow:0 0 8px rgba(251,191,36,.6)}
+  .dock-meta .sep{opacity:.4}
 
-  /* ---------- memory drawer ---------- */
-  .drawer{
-    position:fixed; inset:0; z-index:20; display:none; justify-content:flex-end;
-    background:rgba(2,6,12,.55); backdrop-filter:blur(6px);
-  }
-  .drawer.open{display:flex}
+  /* ------------------------------------------------------------------ sheets */
+  .sheet{position:fixed;inset:0;z-index:60;display:none}
+  .sheet.open{display:block}
+  .scrim{position:absolute;inset:0;background:rgba(2,4,8,.62)}
   .panel{
-    width:min(430px,92vw); height:100%; overflow:auto;
-    background:linear-gradient(180deg, rgba(12,20,34,.96), rgba(8,13,22,.98));
-    border-left:1px solid var(--stroke); padding:18px; padding-bottom:calc(18px + env(safe-area-inset-bottom));
+    position:absolute;top:0;right:0;bottom:0;width:min(430px,100%);display:flex;flex-direction:column;
+    background:var(--bg-soft);border-left:1px solid var(--line);
+    transform:translateX(100%);transition:transform .26s cubic-bezier(.4,0,.2,1);
   }
-  .panel h2{margin:0 0 4px; font-size:15px; letter-spacing:.18em; text-transform:uppercase; color:var(--muted)}
-  .panel .sub{font-size:12px;color:#6f88a3;margin-bottom:14px}
-  .searchrow{display:flex; gap:8px; margin-bottom:14px}
-  .searchrow input{
-    flex:1; background:rgba(255,255,255,.05); border:1px solid var(--stroke); border-radius:12px;
-    padding:10px 12px; color:var(--text); font:400 14px var(--font); outline:none;
+  .sheet.open .panel{transform:none}
+  .panel-head{
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    padding:18px 18px 14px;border-bottom:1px solid var(--line);
   }
-  .mem{border:1px solid var(--stroke); border-radius:14px; padding:10px 12px; margin-bottom:8px; background:rgba(255,255,255,.03)}
-  .mem p{margin:0; font-size:13.5px; line-height:1.5}
-  .mem small{display:block;margin-top:6px;color:#6f88a3;font-size:11px;letter-spacing:.05em}
-  .close{align-self:flex-start;margin-bottom:10px}
+  .panel-head h2{margin:0;font-size:16px;font-weight:600;letter-spacing:-.01em}
+  .panel-body{flex:1;overflow-y:auto;overscroll-behavior:contain;padding:6px 18px 28px}
+  .section{margin-top:18px}
+  .section h3{
+    margin:0 0 4px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);font-weight:600;
+  }
+  .row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:13px 0;border-bottom:1px solid var(--line)}
+  .row:last-child{border-bottom:0}
+  .row .txt{min-width:0}
+  .row .txt b{display:block;font-size:14px;font-weight:500}
+  .row .txt small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+  .switch{position:relative;width:44px;height:26px;flex:none}
+  .switch input{position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer}
+  .switch span{
+    position:absolute;inset:0;border-radius:999px;background:#232a3a;transition:.2s;pointer-events:none;
+  }
+  .switch span::after{
+    content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;
+    background:#8d96a9;transition:.2s;
+  }
+  .switch input:checked + span{background:rgba(124,156,255,.45)}
+  .switch input:checked + span::after{transform:translateX(18px);background:#dfe7ff}
+  .field{
+    width:100%;padding:11px 13px;border-radius:12px;border:1px solid var(--line);
+    background:var(--panel);outline:none;font-size:14px;transition:.18s;
+  }
+  .field:focus{border-color:rgba(124,156,255,.55)}
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    padding:11px 16px;border-radius:12px;font-size:13.5px;font-weight:500;
+    border:1px solid var(--line);background:rgba(255,255,255,.05);transition:.18s;
+  }
+  .btn:hover{background:rgba(255,255,255,.1)}
+  .btn.primary{background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#07101f;border:0;font-weight:600}
+  .btn.primary:hover{filter:brightness(1.08)}
+  .btn.block{width:100%;margin-top:10px}
+  .btn.danger{color:#ffb4b4;border-color:rgba(248,113,113,.35)}
+  .acct{display:flex;align-items:center;gap:12px;padding:14px;border-radius:16px;background:var(--panel);border:1px solid var(--line);margin-top:10px}
+  .acct .avatar{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:17px;
+    background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#08101f;flex:none}
+  .acct .who{min-width:0}
+  .acct .who b{display:block;font-size:14.5px}
+  .acct .who small{display:block;color:var(--muted);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .code{
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:30px;letter-spacing:.34em;
+    text-align:center;padding:16px 0 14px;color:#dbe4ff;
+  }
+  .dev{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line)}
+  .dev .who{flex:1;min-width:0}
+  .dev b{display:block;font-size:13.5px;font-weight:500}
+  .dev small{color:var(--muted);font-size:11.5px}
+  .pill{font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:3px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+  .pill.live{color:#b8ffd4;border-color:rgba(74,222,128,.4);background:rgba(74,222,128,.12)}
+  .empty{color:var(--muted);font-size:13px;padding:14px 0}
+  .cmdrow{display:flex;gap:8px;margin-top:10px}
+  .cmdrow select{width:118px;flex:none}
+  .results{margin-top:10px;display:flex;flex-direction:column;gap:6px;max-height:150px;overflow-y:auto}
+  .res{font-size:12px;color:var(--muted);display:flex;gap:8px}
+  .res b{color:#cfd7e8;font-weight:500}
+  .hint{font-size:12px;color:var(--muted);line-height:1.5;margin:8px 0 0}
+  .mem{padding:11px 0;border-bottom:1px solid var(--line)}
+  .mem p{margin:0;font-size:13.5px;line-height:1.5;white-space:pre-wrap}
+  .mem small{color:var(--dim);font-size:11px}
 
-  /* toast */
-  .toast{
-    position:fixed; left:50%; bottom:96px; transform:translate(-50%,20px);
-    background:rgba(255,90,90,.16); border:1px solid rgba(255,90,90,.45); color:#ffd5d5;
-    padding:10px 16px; border-radius:12px; font-size:13px; opacity:0; pointer-events:none;
-    transition:.25s; z-index:30; max-width:86vw; text-align:center;
+  /* mesh device banner + toast */
+  .meshbanner{
+    position:fixed;left:50%;top:70px;transform:translateX(-50%);z-index:50;display:none;
+    align-items:center;gap:8px;padding:8px 14px;border-radius:999px;font-size:12px;
+    background:rgba(124,156,255,.16);border:1px solid rgba(124,156,255,.35);color:#dbe4ff;
   }
-  .toast.show{opacity:1; transform:translate(-50%,0)}
+  .meshbanner.show{display:flex}
+  #toast{
+    position:fixed;left:50%;bottom:calc(var(--dock-h) + 22px);transform:translate(-50%,16px);
+    z-index:70;max-width:min(92vw,420px);padding:11px 16px;border-radius:14px;font-size:13px;
+    background:#1a2030;border:1px solid var(--line-strong);box-shadow:0 12px 32px rgba(0,0,0,.5);
+    opacity:0;pointer-events:none;transition:.24s;
+  }
+  #toast.show{opacity:1;transform:translate(-50%,0)}
+  #cam{position:fixed;right:16px;bottom:calc(var(--dock-h) + 16px);width:96px;height:72px;border-radius:12px;
+    object-fit:cover;border:1px solid var(--line-strong);z-index:35;display:none;background:#000}
+  #cam.on{display:block}
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 
-  @media (max-width:640px){
-    .brand{font-size:12px; letter-spacing:.2em}
-    .msg{max-width:92%; font-size:14.5px}
-    .composer{padding-left:14px}
+  /* ---------------------------------------------------------------- phones -- */
+  @media (max-width:768px){
+    /* backdrop-filter re-blurs the animated orb behind every panel each frame:
+       that, not the canvas, was the real jank. Solid fills instead. */
+    .composer{background:#0e121a;box-shadow:0 8px 28px rgba(0,0,0,.5)}
+    .topbar{background:linear-gradient(to bottom,#05070c 62%,rgba(5,7,12,.86))}
+    .sheet .panel{
+      top:auto;left:0;right:0;width:auto;height:90dvh;border-left:0;
+      border-radius:22px 22px 0 0;border-top:1px solid var(--line-strong);
+      transform:translateY(100%);
+    }
+    .sheet .panel::before{
+      content:"";position:absolute;top:8px;left:50%;transform:translateX(-50%);
+      width:38px;height:4px;border-radius:99px;background:rgba(255,255,255,.16);
+    }
+    .panel-head{padding-top:22px}
+    .msg{max-width:90%}
+    .chips{justify-content:flex-start;overflow-x:auto;flex-wrap:nowrap;scrollbar-width:none;padding-bottom:4px}
+    .chips::-webkit-scrollbar{display:none}
+    .sug{flex:none}
+    #orb{width:78vw;height:78vw;top:24%}
+    .dock{padding-left:12px;padding-right:12px}
+    .cbtn,.send{width:36px;height:36px;border-radius:12px}
+    .brand .tag{display:none}
   }
-  /* very narrow screens: the header has three things to fit, so the voice label
-     collapses to its icon and the three tool buttons share one row */
-  @media (max-width:430px){
-    header.top{padding:12px 12px; gap:8px}
-    .brand{font-size:11px; letter-spacing:.16em}
-    .pill{padding:5px 9px; font-size:10.5px; letter-spacing:.1em}
-    .pill .dot{width:6px;height:6px}
-    #voiceToggle .lbl{display:none}
-    .toolrow{gap:8px; flex-wrap:nowrap}
-    .toolrow .ghost{padding:8px 10px; font-size:11.5px; gap:5px; flex:1 1 0; justify-content:center}
-    .toolrow .ghost .lbl{display:none}
-  }
-
-  /* ---------- phones: the compositor is the bottleneck, not the canvas ----------
-     backdrop-filter on every panel forces the GPU to re-blur the animated orb
-     behind it on each frame, and a masked full-screen grid repaints too. Both
-     are swapped for cheap translucent fills; the look survives, the jank does
-     not. Measured on the orb itself: ~1.2 ms per frame, so the blur was the cost. */
-  @media (max-width:767px){
-    body::before{mask-image:none; background-size:64px 64px; opacity:.55}
-    header.top,.pill,.composer,.ghost,.mem,.searchrow input{backdrop-filter:none}
-    .pill{background:rgba(14,22,36,.82)}
-    .composer{background:rgba(14,22,36,.9); box-shadow:0 8px 24px rgba(0,0,0,.5)}
-    .ghost{background:rgba(255,255,255,.06)}
-    .msg{backdrop-filter:none}
-    .msg.aura{background:rgba(16,24,40,.9)}
-
-    /* the transcript keeps its own scroll area instead of repainting the stage */
-    .transcript{max-height:46dvh; overflow-y:auto; padding-bottom:6px}
-    .transcript::after{content:""; position:sticky; bottom:0; height:18px; margin-top:-18px}
-
-    .controls{padding:8px 12px calc(10px + env(safe-area-inset-bottom)); gap:9px}
-    .composer{padding:6px 6px 6px 16px}
-    .composer input{font-size:16px}
-    .iconbtn{width:38px;height:38px}
-    .msg{padding:9px 12px; font-size:14.5px}
-  }
-  @media (prefers-reduced-motion:reduce){
-    .msg{animation:none}
-  }
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
-<div class="app">
-  <header class="top">
-    <div class="brand">A U R <span>A</span></div>
-    <div class="pill"><span class="dot" id="linkDot"></span><span id="stateLabel">Idle</span></div>
-    <div class="spacer"></div>
-    <button class="ghost" id="voiceToggle" aria-pressed="false" title="Speak replies aloud">🔊 <span class="lbl">Voice</span></button>
-  </header>
+<div class="grid"></div>
 
-  <div class="stage">
-    <canvas id="orb"></canvas>
-    <div class="transcript" id="transcript" aria-live="polite"></div>
+<header class="topbar">
+  <div class="brand">
+    <span class="mark"></span>
+    <b>AURA</b>
+    <span class="tag">holographic</span>
   </div>
+  <div class="actions">
+    <button class="signin" id="signInBtn">
+      <span class="avatar" id="avatar">G</span>
+      <span class="label" id="signInLabel">Sign in</span>
+    </button>
+    <button class="icon-btn" id="settingsBtn" aria-label="Settings">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.56V21a2 2 0 0 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 3.6 15a1.7 1.7 0 0 0-1.56-1H2a2 2 0 0 1 0-4h.09A1.7 1.7 0 0 0 3.65 8.9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 8 4.54a1.7 1.7 0 0 0 1-1.56V3a2 2 0 0 1 4 0v.09a1.7 1.7 0 0 0 1 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V10a1.7 1.7 0 0 0 1.56 1H21a2 2 0 0 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1Z"/></svg>
+    </button>
+  </div>
+</header>
 
-  <div class="controls">
+<main class="stage" id="stage">
+  <canvas id="orb" width="720" height="720" aria-hidden="true"></canvas>
+
+  <section class="hero" id="hero">
+    <h1>Hello, <span class="grad" id="heroName">there</span></h1>
+    <p>Ask anything, drop a file, or just say it out loud.</p>
+  </section>
+
+  <div class="transcript" id="transcript" role="log" aria-live="polite"></div>
+
+  <div class="chips" id="chips">
+    <button class="sug" data-say="Will it rain in Delhi tonight?">
+      <svg viewBox="0 0 24 24"><path d="M18 10a4 4 0 0 0-7.7-1.4A3.5 3.5 0 1 0 7 16h10a3 3 0 0 0 1-6Z"/></svg>
+      Weather
+    </button>
+    <button class="sug" data-say="Remember that I ship on Fridays and remind me why.">
+      <svg viewBox="0 0 24 24"><path d="M12 3v18M5 8h14M5 16h14"/></svg>
+      Remember this
+    </button>
+    <button class="sug" data-say="What did we talk about yesterday?">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      What did we discuss?
+    </button>
+  </div>
+</main>
+
+<footer class="dock" id="dock">
+  <div class="dock-inner">
+    <div class="attachments" id="attachments"></div>
     <form class="composer" id="composer" autocomplete="off">
-      <input id="input" placeholder="Ask AURA anything…" aria-label="Message AURA" maxlength="4000" />
-      <button class="iconbtn" type="button" id="micBtn" aria-label="Toggle microphone" aria-pressed="false">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-          <path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3z"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>
-        </svg>
+      <button type="button" class="cbtn" id="attachBtn" title="Attach a file" aria-label="Attach a file">
+        <svg viewBox="0 0 24 24"><path d="M21.4 11.1 12.3 20a5.5 5.5 0 0 1-7.8-7.8l8.5-8.5a3.7 3.7 0 0 1 5.2 5.2l-8.5 8.5a1.8 1.8 0 0 1-2.6-2.6l7.8-7.8"/></svg>
       </button>
-      <button class="iconbtn send" type="submit" aria-label="Send">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M4 12l16-8-6 8 6 8-16-8z"/>
-        </svg>
+      <textarea id="input" rows="1" placeholder="Message AURA…" aria-label="Message"></textarea>
+      <button type="button" class="cbtn" id="micBtn" title="Speak" aria-pressed="false" aria-label="Speak">
+        <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+      </button>
+      <button type="submit" class="send" id="sendBtn" disabled aria-label="Send">
+        <svg viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
       </button>
     </form>
-
-    <div class="toolrow">
-      <button class="ghost" id="camBtn" aria-pressed="false" title="Share camera frames (1 fps)">📷 Camera</button>
-      <button class="ghost" id="memoryBtn" title="Open the memory log">🧠 Memory</button>
-      <button class="ghost" id="clearBtn" title="Clear the transcript">✕ Clear</button>
+    <div class="dock-meta">
+      <span class="dot" id="linkDot"></span>
+      <span id="stateLabel">Connecting</span>
+      <span class="sep">·</span>
+      <span id="providerLabel">aura</span>
     </div>
   </div>
-</div>
+</footer>
 
-<!-- memory drawer -->
-<div class="drawer" id="drawer">
-  <aside class="panel" role="dialog" aria-label="Memory log">
-    <button class="ghost close" id="drawerClose">✕ Close</button>
-    <h2>Memory log</h2>
-    <div class="sub" id="memSub">Everything AURA remembers about you</div>
-    <div class="searchrow">
-      <input id="memQuery" placeholder="Search memories…" />
-      <button class="ghost" id="memSearch">Search</button>
+<input type="file" id="filePicker" multiple class="sr" accept="image/*,text/*,.md,.json,.csv,.log,.py,.js,.ts,.html,.css,.yml,.yaml" />
+<video id="cam" playsinline muted></video>
+<div id="toast" role="status"></div>
+<div class="meshbanner" id="meshBanner"><span class="dot"></span><span id="meshBannerText">MESH device connected</span></div>
+
+<!-- ------------------------------------------------------------------ settings -->
+<div class="sheet" id="settingsSheet">
+  <div class="scrim" data-close="settingsSheet"></div>
+  <aside class="panel" role="dialog" aria-label="Settings">
+    <div class="panel-head">
+      <h2>Settings</h2>
+      <button class="icon-btn" data-close="settingsSheet" aria-label="Close">
+        <svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
     </div>
-    <div id="memList"></div>
+    <div class="panel-body">
+      <div class="section">
+        <h3>Account</h3>
+        <div class="acct">
+          <div class="avatar" id="acctAvatar">G</div>
+          <div class="who">
+            <b id="acctName">Guest</b>
+            <small id="acctId">local profile</small>
+          </div>
+        </div>
+        <button class="btn block" id="acctEditBtn">Edit profile</button>
+      </div>
+
+      <div class="section">
+        <h3>Voice</h3>
+        <div class="row">
+          <div class="txt"><b>Speak replies</b><small>Read answers out loud</small></div>
+          <label class="switch"><input type="checkbox" id="optVoice"><span></span></label>
+        </div>
+        <div class="row">
+          <div class="txt"><b>Camera</b><small>Let AURA see what you show it</small></div>
+          <label class="switch"><input type="checkbox" id="optCamera"><span></span></label>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3>Memory</h3>
+        <div class="row">
+          <div class="txt"><b>What AURA remembers</b><small id="memCount">Tap to open</small></div>
+          <button class="btn" id="openMemoryBtn">Open</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3>Mesh</h3>
+        <div class="row">
+          <div class="txt"><b>Enable MESH</b><small>Control other devices with a 6-digit code</small></div>
+          <label class="switch"><input type="checkbox" id="optMesh"><span></span></label>
+        </div>
+        <button class="btn block" id="openMeshBtn">Open MESH panel</button>
+      </div>
+
+      <div class="section">
+        <h3>Conversation</h3>
+        <div class="row">
+          <div class="txt"><b>Clear chat</b><small>Only this screen, memory is kept</small></div>
+          <button class="btn" id="clearBtn">Clear</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3>About</h3>
+        <div class="row">
+          <div class="txt"><b>AURA</b><small id="aboutLine">holographic assistant</small></div>
+          <span class="pill">v2</span>
+        </div>
+      </div>
+    </div>
   </aside>
 </div>
 
-<div class="toast" id="toast"></div>
+<!-- ------------------------------------------------------------------- memory -->
+<div class="sheet" id="memorySheet">
+  <div class="scrim" data-close="memorySheet"></div>
+  <aside class="panel" role="dialog" aria-label="Memory">
+    <div class="panel-head">
+      <h2>Memory</h2>
+      <button class="icon-btn" data-close="memorySheet" aria-label="Close">
+        <svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="panel-body">
+      <div class="cmdrow">
+        <input class="field" id="memQuery" placeholder="Search memory…" />
+        <button class="btn" id="memSearch">Find</button>
+      </div>
+      <p class="hint" id="memSub"></p>
+      <div id="memList"></div>
+    </div>
+  </aside>
+</div>
 
-<video id="cam" playsinline muted style="display:none"></video>
+<!-- --------------------------------------------------------------------- mesh -->
+<div class="sheet" id="meshSheet">
+  <div class="scrim" data-close="meshSheet"></div>
+  <aside class="panel" role="dialog" aria-label="Mesh">
+    <div class="panel-head">
+      <h2>MESH</h2>
+      <button class="icon-btn" data-close="meshSheet" aria-label="Close">
+        <svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="panel-body">
+      <p class="hint">Show this code on the other device, or open the invite link there. Commands reach the device instantly.</p>
+      <div class="code" id="meshCode">— — — — — —</div>
+      <div class="cmdrow">
+        <button class="btn" id="meshCopy" style="flex:1">Copy invite link</button>
+        <button class="btn" id="meshConnect">Start</button>
+      </div>
+      <div class="section">
+        <h3>Devices <span id="meshCount"></span></h3>
+        <div id="meshDevices"><p class="empty">No device joined yet.</p></div>
+      </div>
+      <div class="section">
+        <h3>Send a command</h3>
+        <div class="cmdrow">
+          <select class="field" id="meshKind">
+            <option value="toast">Toast</option>
+            <option value="say">Speak</option>
+            <option value="vibrate">Vibrate</option>
+            <option value="ping">Ping</option>
+            <option value="open">Open link</option>
+          </select>
+          <input class="field" id="meshPayload" placeholder="Text or URL" />
+        </div>
+        <button class="btn primary block" id="meshSend">Send to all devices</button>
+        <div class="results" id="meshResults"></div>
+      </div>
+      <button class="btn danger block" id="meshStop">Disconnect MESH</button>
+    </div>
+  </aside>
+</div>
+
+<!-- ---------------------------------------------------------------- sign in -->
+<div class="sheet" id="signInSheet">
+  <div class="scrim" data-close="signInSheet"></div>
+  <aside class="panel" role="dialog" aria-label="Sign in">
+    <div class="panel-head">
+      <h2>Your profile</h2>
+      <button class="icon-btn" data-close="signInSheet" aria-label="Close">
+        <svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="panel-body">
+      <p class="hint">Pick the name AURA should use. Your memories and MESH rooms stay tied to this profile on this device — there is no cloud account in this build yet.</p>
+      <label class="hint" for="nameInput" style="display:block;margin-top:16px">Display name</label>
+      <input class="field" id="nameInput" placeholder="e.g. Sourabh" maxlength="32" style="margin-top:6px" />
+      <button class="btn primary block" id="profileSave">Continue</button>
+      <button class="btn block" id="profileOut">Sign out</button>
+    </div>
+  </aside>
+</div>
 
 <script>
-"use strict";
-/* ============================================================================
-   AURA frontend — three jobs only:
-     1. draw the reactor orb and map assistant state -> visual state
-     2. move audio (mic) and vision (camera frames) over one WebSocket
-     3. render the transcript progressively as chunks arrive
-   No frameworks, no build step: this file is the whole client.
-   ========================================================================== */
+/* ===========================================================================
+   AURA — module 4, the holographic UI.
+   Everything is one page on purpose: the WebSocket session, the canvas orb, the
+   sheets and MESH share the same state, and a bundler would only add a build
+   step to a 40 KB document.
+   ======================================================================== */
 
 const $ = (sel, root = document) => root.querySelector(sel);
-const USER_ID = (() => {
-  try {
-    const existing = localStorage.getItem("aura_user_id");
-    if (existing) return existing;
-    const fresh = "u_" + Math.random().toString(36).slice(2, 10);
-    localStorage.setItem("aura_user_id", fresh);
-    return fresh;
-  } catch { return "default"; }
-})();
+const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+const isPhone = () => matchMedia("(max-width: 768px)").matches;
 
-const STATES = {
-  idle:      { label: "Idle",      color: "#38e8ff", spin: 0.35, pulse: 0.28, ring: 1 },
-  listening: { label: "Listening", color: "#4ade80", spin: 0.85, pulse: 0.55, ring: 1.15 },
-  thinking:  { label: "Thinking",  color: "#f5b642", spin: 1.9,  pulse: 0.75, ring: 1.3 },
-  speaking:  { label: "Speaking",  color: "#a78bfa", spin: 1.15, pulse: 1.0,  ring: 1.45 },
+/* ----------------------------------------------------------------- store ---- */
+const store = {
+  get(key, fallback) {
+    try { const raw = localStorage.getItem("aura." + key); return raw === null ? fallback : JSON.parse(raw); }
+    catch { return fallback; }
+  },
+  set(key, value) {
+    try { localStorage.setItem("aura." + key, JSON.stringify(value)); } catch { /* private mode */ }
+  },
 };
 
-/* ------------------------------------------------------------------ orb ---- */
+const PROFILE = (() => {
+  const saved = store.get("profile", null);
+  if (saved && saved.id) return saved;
+  const id = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now());
+  // persist immediately: a fresh id on every load would orphan memories and MESH rooms
+  const fresh = { id, name: "" };
+  store.set("profile", fresh);
+  return fresh;
+})();
+const USER_ID = PROFILE.id;               // memories are keyed by this id, never by name
+const DEVICE_ID = store.get("device", null) || (() => {
+  const id = "dev-" + Math.random().toString(36).slice(2, 10);
+  store.set("device", id);
+  return id;
+})();
+
+function saveProfile(patch) {
+  Object.assign(PROFILE, patch);
+  store.set("profile", PROFILE);
+  paintProfile();
+}
+
+function paintProfile() {
+  const name = (PROFILE.name || "").trim();
+  $("#heroName").textContent = name || "there";
+  $("#signInLabel").textContent = name || "Sign in";
+  $("#avatar").textContent = (name[0] || "G").toUpperCase();
+  $("#acctAvatar").textContent = (name[0] || "G").toUpperCase();
+  $("#acctName").textContent = name || "Guest";
+  $("#acctId").textContent = "id " + PROFILE.id.slice(0, 8);
+  $("#nameInput").value = name;
+}
+paintProfile();
+
+/* ------------------------------------------------------------------ sheets -- */
+function openSheet(id) {
+  const el = $("#" + id);
+  if (!el) return;
+  el.classList.add("open");
+  document.body.style.overflow = "hidden";
+}
+function closeSheet(id) {
+  const el = $("#" + id);
+  if (!el) return;
+  el.classList.remove("open");
+  if (!$$(".sheet.open").length) document.body.style.overflow = "";
+}
+$$("[data-close]").forEach((el) => el.addEventListener("click", () => closeSheet(el.dataset.close)));
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") $$(".sheet.open").forEach((s) => closeSheet(s.id));
+});
+
+$("#settingsBtn").addEventListener("click", () => openSheet("settingsSheet"));
+$("#signInBtn").addEventListener("click", () => openSheet("signInSheet"));
+$("#acctEditBtn").addEventListener("click", () => { closeSheet("settingsSheet"); openSheet("signInSheet"); });
+$("#profileSave").addEventListener("click", () => {
+  const name = $("#nameInput").value.trim().slice(0, 32);
+  saveProfile({ name });
+  closeSheet("signInSheet");
+  toast(name ? "Signed in as " + name : "Profile cleared");
+});
+$("#profileOut").addEventListener("click", () => {
+  saveProfile({ name: "" });
+  closeSheet("signInSheet");
+  toast("Signed out on this device");
+});
+
+/* -------------------------------------------------------------------- toast -- */
+function toast(message) {
+  const el = $("#toast");
+  el.textContent = message;
+  el.classList.add("show");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => el.classList.remove("show"), 3200);
+}
+
+/* ======================================================================= ORB */
+/* A ring of points projected in 3D. Two rings of dots, a soft core and a state
+   tint: cheap enough for a phone at 30 fps, still looks like a hologram. */
 class Orb {
   constructor(canvas) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d", { alpha: true });
     this.state = "idle";
-    this.target = STATES.idle;
-    this.current = { ...STATES.idle, r: 0, g: 232, b: 255 };
     this.t = 0;
-    this.last = performance.now();
-    this.isPhone = Math.min(innerWidth, innerHeight) < 768;
-    this.dpr = Math.min(window.devicePixelRatio || 1, this.isPhone ? 1.5 : 2);
-    this.points = [];
-    this._glow = null;      // cached gradients: rebuilding them every frame allocates
-    this._core = null;      // a new CanvasGradient 60 times a second
-    this._glowKey = "";
-    this._coreKey = "";
-    this._lastDraw = 0;
-    this._buildPoints();
-    this._resize();
-    addEventListener("resize", () => this._resize());
-    addEventListener("orientationchange", () => setTimeout(() => this._resize(), 120));
-    // iOS reports a new height only after the URL bar settles
-    try {
-      if (window.visualViewport) visualViewport.addEventListener("resize", () => setTimeout(() => this._resize(), 80));
-    } catch {}
-    document.addEventListener("visibilitychange", () => { this.last = performance.now(); });
-    this._loop = this._loop.bind(this);
-    requestAnimationFrame(this._loop);
+    this.raf = 0;
+    this.last = 0;
+    this.tint = { r: 124, g: 156, b: 255 };
+
+    const phone = isPhone();
+    this.dpr = Math.min(devicePixelRatio || 1, phone ? 1.5 : 2);
+    this.fps = phone ? 30 : 60;
+    this.count = phone ? 340 : 900;          // 900 points on a phone buys nothing
+    this.points = this.makePoints(this.count);
+
+    this.resize();
+    addEventListener("resize", () => this.resize(), { passive: true });
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) this.stop(); else this.start();
+    });
+    if (!matchMedia("(prefers-reduced-motion: reduce)").matches) this.start();
   }
 
-  _buildPoints() {
-    // Fibonacci sphere: even coverage without random clumping
-    const mobile = innerWidth < 768;
-    const n = mobile ? 340 : 900;   // a phone cannot show 900 distinct dots anyway
+  makePoints(n) {
+    const pts = [];
+    const golden = Math.PI * (3 - Math.sqrt(5));
     for (let i = 0; i < n; i++) {
       const y = 1 - (i / (n - 1)) * 2;
       const r = Math.sqrt(Math.max(0, 1 - y * y));
-      const theta = i * Math.PI * (3 - Math.sqrt(5));
-      this.points.push({ x: Math.cos(theta) * r, y, z: Math.sin(theta) * r, seed: Math.random() });
+      const a = golden * i;
+      pts.push({ x: Math.cos(a) * r, y, z: Math.sin(a) * r, s: 0.6 + Math.random() * 0.8 });
     }
+    return pts;
   }
 
-  _resize() {
-    // 1.5 on phones: the canvas covers the whole screen, so DPR 3->2 doubles the
-    // fill cost for detail nobody can see through the glow.
-    const isPhone = Math.min(innerWidth, innerHeight) < 768;
-    const dpr = Math.min(window.devicePixelRatio || 1, isPhone ? 1.5 : 2);
-    this.dpr = dpr;
-    const w = this.canvas.clientWidth || innerWidth;
-    const h = this.canvas.clientHeight || innerHeight;
-    this.canvas.width = Math.floor(w * dpr);
-    this.canvas.height = Math.floor(h * dpr);
+  resize() {
+    const rect = this.canvas.getBoundingClientRect();
+    const w = Math.max(1, rect.width), h = Math.max(1, rect.height);
+    this.canvas.width = Math.round(w * this.dpr);
+    this.canvas.height = Math.round(h * this.dpr);
+    this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     this.w = w; this.h = h;
+    this.draw(0);                            // paint once even when paused
   }
 
   setState(name) {
-    if (!STATES[name]) return;
-    this.state = name;
-    this.target = STATES[name];
-    document.documentElement.style.setProperty("--accent", STATES[name].color);
-    const label = $("#stateLabel");
-    if (label) label.textContent = STATES[name].label;
+    this.state = name || "idle";
+    $("#stage").classList.toggle("busy", this.state !== "idle");
+    const labels = { idle: "Ready", thinking: "Thinking", listening: "Listening", speaking: "Speaking" };
+    $("#stateLabel").textContent = labels[this.state] || "Ready";
   }
 
-  _hexToRgb(hex) {
-    const v = hex.replace("#", "");
-    return [parseInt(v.slice(0, 2), 16), parseInt(v.slice(2, 4), 16), parseInt(v.slice(4, 6), 16)];
+  start() {
+    if (this.raf) return;
+    const step = (now) => {
+      this.raf = requestAnimationFrame(step);
+      const minGap = 1000 / this.fps;
+      if (now - this.last < minGap - 1) return;
+      this.last = now;
+      this.t += 0.016;
+      this.draw(this.t);
+    };
+    this.raf = requestAnimationFrame(step);
   }
 
-  _loop(now) {
-    requestAnimationFrame(this._loop);
-    if (document.hidden) return;               // phones: no work while backgrounded
-    // phones: 30 fps ceiling. Visually identical for a slow glow, half the paint.
-    if (this.isPhone && now - this._lastDraw < 33) return;
-    this._lastDraw = now;
-    const dt = Math.min(0.05, (now - this.last) / 1000);
-    this.last = now;
-    this.t += dt * this.current.spin;
-
-    // ease colour + motion toward the active state so transitions feel physical
-    const [tr, tg, tb] = this._hexToRgb(this.target.color);
-    const k = 1 - Math.pow(0.001, dt);
-    this.current.r += (tr - this.current.r) * k;
-    this.current.g += (tg - this.current.g) * k;
-    this.current.b += (tb - this.current.b) * k;
-    this.current.spin += (this.target.spin - this.current.spin) * k;
-    this.current.pulse += (this.target.pulse - this.current.pulse) * k;
-    this.current.ring += (this.target.ring - this.current.ring) * k;
-
-    this._draw();
+  stop() {
+    cancelAnimationFrame(this.raf);
+    this.raf = 0;
   }
 
-  _draw() {
-    const ctx = this.ctx;
-    if (!ctx) return;
-    const { w, h, dpr, current: c } = this;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  draw(t) {
+    const { ctx, w, h } = this;
+    if (!w || !h) return;
     ctx.clearRect(0, 0, w, h);
 
-    const cx = w / 2;
-    const cy = h * 0.46;
-    const base = Math.min(w, h) * 0.19;
-    const pulse = 1 + Math.sin(this.t * 1.6) * 0.03 * c.pulse;
-    const R = base * pulse;
-    const rgb = `${c.r | 0},${c.g | 0},${c.b | 0}`;
+    const speed = this.state === "thinking" ? 1.9 : this.state === "listening" ? 1.35 : 1;
+    const cx = w / 2, cy = h / 2;
+    const R = Math.min(w, h) * 0.34 * (this.state === "thinking" ? 1.02 : 1);
+    const tint = this.tint;
 
-    // core glow (cached: only rebuild when the colour or radius really changed)
-    const glowKey = `${rgb}|${Math.round(R)}|${Math.round(cx)},${Math.round(cy)}`;
-    if (glowKey !== this._glowKey) {
-      const glow = ctx.createRadialGradient(cx, cy, R * 0.1, cx, cy, R * 2.4);
-      glow.addColorStop(0, `rgba(${rgb},0.55)`);
-      glow.addColorStop(0.35, `rgba(${rgb},0.14)`);
-      glow.addColorStop(1, "rgba(0,0,0,0)");
-      this._glow = glow;
-      this._glowKey = glowKey;
-    }
-    ctx.fillStyle = this._glow;
-    ctx.beginPath(); ctx.arc(cx, cy, R * 2.4, 0, Math.PI * 2); ctx.fill();
+    /* core glow — one radial fill, cached colour stops */
+    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 1.25);
+    grad.addColorStop(0, `rgba(${tint.r},${tint.g},${tint.b},0.20)`);
+    grad.addColorStop(0.55, `rgba(${tint.r},${tint.g},${tint.b},0.05)`);
+    grad.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(cx, cy, R * 1.25, 0, Math.PI * 2);
+    ctx.fill();
 
-    // holographic rings (tilted ellipses, counter-rotating)
-    for (let i = 0; i < 3; i++) {
-      const tilt = 0.16 + i * 0.1;
-      const rr = R * (1.25 + i * 0.22) * c.ring;
-      const angle = this.t * (0.6 + i * 0.35) * (i % 2 ? -1 : 1);
-      ctx.save();
-      ctx.translate(cx, cy);
-      ctx.rotate(angle * 0.25);
-      ctx.beginPath();
-      ctx.ellipse(0, 0, rr, rr * tilt, angle, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(${rgb},${0.34 - i * 0.07})`;
-      ctx.lineWidth = 1.2;
-      ctx.stroke();
-      ctx.restore();
-    }
+    const cosA = Math.cos(t * 0.22 * speed), sinA = Math.sin(t * 0.22 * speed);
+    const cosB = Math.cos(t * 0.13 * speed), sinB = Math.sin(t * 0.13 * speed);
 
-    // particle shell (depth-sorted projection)
-    const cos = Math.cos(this.t * 0.6), sin = Math.sin(this.t * 0.6);
-    const cosY = Math.cos(this.t * 0.21), sinY = Math.sin(this.t * 0.21);
-    for (const p of this.points) {
-      // rotate Y then X
-      const x1 = p.x * cosY - p.z * sinY;
-      const z1 = p.x * sinY + p.z * cosY;
-      const y1 = p.y * cos - z1 * sin;
-      const z2 = p.y * sin + z1 * cos;
+    for (let i = 0; i < this.points.length; i++) {
+      const p = this.points[i];
+      /* rotate y, then x */
+      let x = p.x * cosA - p.z * sinA;
+      let z = p.x * sinA + p.z * cosA;
+      let y = p.y * cosB - z * sinB;
+      z = p.y * sinB + z * cosB;
 
-      const scale = 1.9 / (2.4 + z2);            // perspective
-      const px = cx + x1 * R * scale;
-      const py = cy + y1 * R * scale;
-      const depth = (z2 + 1) / 2;                 // 0 far … 1 near
-      const alpha = 0.14 + depth * 0.62;
-      const size = 0.7 + depth * 1.25 + p.seed * 0.3;
-      ctx.fillStyle = `rgba(${rgb},${alpha})`;
-      ctx.beginPath(); ctx.arc(px, py, size, 0, Math.PI * 2); ctx.fill();
+      const depth = (z + 1) / 2;             // 0 far … 1 near
+      const scale = 0.55 + depth * 0.75;
+      const px = cx + x * R * scale;
+      const py = cy + y * R * scale;
+      const alpha = 0.10 + depth * 0.62;
+      const size = p.s * (0.7 + depth * 1.1);
+
+      ctx.fillStyle = `rgba(${tint.r},${tint.g},${tint.b},${alpha.toFixed(3)})`;
+      ctx.fillRect(px, py, size, size);
     }
 
-    // inner core (cached like the glow)
-    const coreKey = `${rgb}|${Math.round(R)}|${c.pulse.toFixed(2)}`;
-    if (coreKey !== this._coreKey) {
-      const core = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 0.55);
-      core.addColorStop(0, `rgba(255,255,255,${0.5 * c.pulse})`);
-      core.addColorStop(0.5, `rgba(${rgb},0.35)`);
-      core.addColorStop(1, "rgba(0,0,0,0)");
-      this._core = core;
-      this._coreKey = coreKey;
+    /* orbit ring — a single stroke */
+    ctx.beginPath();
+    const rr = R * 1.14;
+    for (let a = 0; a <= 64; a++) {
+      const ang = (a / 64) * Math.PI * 2;
+      const x = cx + Math.cos(ang) * rr;
+      const y = cy + Math.sin(ang) * rr * 0.34;
+      a === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
     }
-    ctx.fillStyle = this._core;
-    ctx.beginPath(); ctx.arc(cx, cy, R * 0.55, 0, Math.PI * 2); ctx.fill();
-
-    // speaking waveform ring
-    if (this.state === "speaking") {
-      ctx.beginPath();
-      for (let a = 0; a <= Math.PI * 2; a += 0.08) {
-        const wobble = 1 + Math.sin(a * 7 + this.t * 6) * 0.06;
-        const rr = R * 1.12 * wobble;
-        const x = cx + Math.cos(a) * rr;
-        const y = cy + Math.sin(a) * rr;
-        a === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-      }
-      ctx.closePath();
-      ctx.strokeStyle = `rgba(${rgb},0.5)`;
-      ctx.lineWidth = 1.4;
-      ctx.stroke();
-    }
+    ctx.closePath();
+    ctx.strokeStyle = `rgba(${tint.r},${tint.g},${tint.b},0.22)`;
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
   }
 }
 
 const orb = new Orb($("#orb"));
+orb.setState("idle");
 
-/* ------------------------------------------------------------- transcript --- */
+/* ================================================================ transcript = */
 const transcript = $("#transcript");
-let liveBubble = null;   // the assistant bubble currently streaming
+const stage = $("#stage");
+let liveBubble = null;
+
+function enterChat() {
+  if (stage.classList.contains("chatting")) return;
+  stage.classList.add("chatting");
+}
 
 function addMessage(text, who = "aura", meta = "") {
+  enterChat();
   const el = document.createElement("div");
   el.className = "msg " + who;
   el.textContent = text;
@@ -506,29 +814,17 @@ function finishBubble(meta) {
   liveBubble = null;
 }
 
-function toast(message) {
-  const el = $("#toast");
-  el.textContent = message;
-  el.classList.add("show");
-  clearTimeout(toast._t);
-  toast._t = setTimeout(() => el.classList.remove("show"), 3200);
-}
-
-/* --------------------------------------------------------------- transport - */
+/* ================================================================= transport */
 class AuraSocket {
   constructor() {
     this.ws = null;
     this.retries = 0;
     this.queue = [];
-    this.speaking = false;
-    this.audioCtx = null;
   }
-
   url() {
     const proto = location.protocol === "https:" ? "wss" : "ws";
     return `${proto}://${location.host}/ws/stream`;
   }
-
   connect() {
     if (this.ws && (this.ws.readyState === 0 || this.ws.readyState === 1)) return;
     const ws = new WebSocket(this.url());
@@ -541,29 +837,27 @@ class AuraSocket {
       this.send({ type: "hello", user_id: USER_ID });
       while (this.queue.length) ws.send(this.queue.shift());
     };
-
-    ws.onmessage = (event) => this.handle(JSON.parse(event.data));
-
+    ws.onmessage = (event) => {
+      let msg;
+      try { msg = JSON.parse(event.data); } catch { return; }
+      this.handle(msg);
+    };
     ws.onclose = () => {
       setLink(false);
       const delay = Math.min(15000, 600 * Math.pow(2, this.retries++));
-      setTimeout(() => this.connect(), delay);       // exponential backoff, capped
+      setTimeout(() => this.connect(), delay);
     };
-
     ws.onerror = () => { try { ws.close(); } catch {} };
   }
-
   send(payload) {
     const ws = this.ws;
     if (!ws || ws.readyState !== 1) { this.queue.push(JSON.stringify(payload)); return; }
     ws.send(JSON.stringify(payload));
   }
-
   sendBinary(buffer) {
     const ws = this.ws;
     if (ws && ws.readyState === 1) ws.send(buffer);
   }
-
   handle(msg) {
     switch (msg.type) {
       case "ready":
@@ -571,7 +865,7 @@ class AuraSocket {
         break;
       case "state":
         orb.setState(msg.name);
-        if (msg.name === "listening") { liveBubble = null; }
+        if (msg.name === "listening") liveBubble = null;
         break;
       case "transcript":
         addMessage(msg.text, "user");
@@ -581,29 +875,28 @@ class AuraSocket {
         transcript.scrollTop = transcript.scrollHeight;
         break;
       case "done": {
+        const bubble = liveBubble;
         finishBubble(`${msg.provider || "aura"} · ${msg.latency_ms || 0} ms`);
-        if (voiceOn) speak(liveBubble ? liveBubble.textContent : transcript.lastElementChild.textContent);
+        if (msg.provider) $("#providerLabel").textContent = msg.provider;
+        if (cfg.voice && bubble) speak(bubble.textContent);
+        orb.setState("idle");
         break;
       }
       case "audio":
         playAudio(msg.data, msg.mime);
         break;
       case "error":
-        toast(msg.message);
-        break;
-      case "pong":
+        toast(msg.message || "Something went wrong");
+        orb.setState("idle");
         break;
       default:
         break;
     }
   }
-
-  /* server-side TTS audio (optional): decode base64 and play */
   playAudio(base64, mime = "audio/mpeg") {
     try {
       const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
-      const blob = new Blob([bytes], { type: mime });
-      const audio = new Audio(URL.createObjectURL(blob));
+      const audio = new Audio(URL.createObjectURL(new Blob([bytes], { type: mime })));
       audio.play().catch(() => {});
     } catch { /* the browser voice still works */ }
   }
@@ -612,17 +905,38 @@ class AuraSocket {
 const socket = new AuraSocket();
 
 function setLink(up) {
-  const dot = $("#linkDot");
-  if (dot) dot.classList.toggle("off", !up);
+  $("#linkDot").classList.toggle("off", !up);
   if (!up) $("#stateLabel").textContent = "Reconnecting";
 }
 
-/* ------------------------------------------------------------------- voice - */
-let voiceOn = false;
-$("#voiceToggle").addEventListener("click", (e) => {
-  voiceOn = !voiceOn;
-  e.currentTarget.setAttribute("aria-pressed", String(voiceOn));
-  if (!voiceOn && window.speechSynthesis) speechSynthesis.cancel();
+/* ==================================================================== config */
+const cfg = {
+  voice: store.get("voice", false),
+  camera: store.get("camera", false),
+  mesh: store.get("mesh", false),
+};
+
+function paintConfig() {
+  $("#optVoice").checked = cfg.voice;
+  $("#optCamera").checked = cfg.camera;
+  $("#optMesh").checked = cfg.mesh;
+}
+paintConfig();
+
+$("#optVoice").addEventListener("change", (e) => {
+  cfg.voice = e.target.checked;
+  store.set("voice", cfg.voice);
+  if (!cfg.voice && window.speechSynthesis) speechSynthesis.cancel();
+});
+$("#optCamera").addEventListener("change", (e) => {
+  cfg.camera = e.target.checked;
+  store.set("camera", cfg.camera);
+  if (cfg.camera) startCamera(); else stopCamera();
+});
+$("#optMesh").addEventListener("change", (e) => {
+  cfg.mesh = e.target.checked;
+  store.set("mesh", cfg.mesh);
+  if (cfg.mesh) beginMesh(); else stopMesh();
 });
 
 function speak(text) {
@@ -635,31 +949,153 @@ function speak(text) {
   speechSynthesis.speak(utter);
 }
 
-/* ---------------------------------------------------------------- composer - */
-$("#composer").addEventListener("submit", (e) => {
-  e.preventDefault();
-  const input = $("#input");
-  const text = input.value.trim();
-  if (!text) return;
-  input.value = "";
-  addMessage(text, "user");
-  liveBubble = null;
-  orb.setState("thinking");
-  socket.send({ type: "text", text, use_vision: cameraOn });
+/* =============================================================== attachments */
+/* The picker shows real chips with a thumbnail and a name, and the content is
+   actually sent: text files are inlined into the prompt, images go through the
+   vision frame. A 20 MB PDF is refused instead of being silently dropped. */
+const MAX_TEXT = 20000;
+const pending = [];
+
+function renderAttachments() {
+  const row = $("#attachments");
+  row.innerHTML = "";
+  for (const file of pending) {
+    const chip = document.createElement("div");
+    chip.className = "file";
+    if (file.kind === "image") {
+      const img = document.createElement("img");
+      img.className = "thumb";
+      img.src = file.dataUrl;
+      img.alt = "";
+      chip.appendChild(img);
+    } else {
+      const icon = document.createElement("span");
+      icon.className = "thumb";
+      icon.style.cssText = "display:grid;place-items:center;background:rgba(124,156,255,.16);color:#c3d0ff;font-size:10px;font-weight:700";
+      icon.textContent = (file.name.split(".").pop() || "txt").slice(0, 3).toUpperCase();
+      chip.appendChild(icon);
+    }
+    const name = document.createElement("span");
+    name.className = "nm";
+    name.textContent = file.name;
+    chip.appendChild(name);
+
+    const x = document.createElement("button");
+    x.className = "x";
+    x.type = "button";
+    x.setAttribute("aria-label", "Remove " + file.name);
+    x.textContent = "×";
+    x.addEventListener("click", () => {
+      const i = pending.indexOf(file);
+      if (i >= 0) pending.splice(i, 1);
+      renderAttachments();
+    });
+    chip.appendChild(x);
+    row.appendChild(chip);
+  }
+  $("#sendBtn").disabled = !$("#input").value.trim() && !pending.length;
+}
+
+$("#attachBtn").addEventListener("click", () => $("#filePicker").click());
+
+$("#filePicker").addEventListener("change", async (e) => {
+  const files = Array.from(e.target.files || []);
+  e.target.value = "";
+  for (const file of files) {
+    if (pending.length >= 3) { toast("Up to 3 files at a time"); break; }
+    if (file.size > 8 * 1024 * 1024) { toast(file.name + " is too large (8 MB max)"); continue; }
+    const isImage = file.type.startsWith("image/");
+    if (isImage) {
+      const dataUrl = await readAsDataURL(file);
+      pending.push({ name: file.name, kind: "image", dataUrl, mime: file.type });
+    } else if (file.type.startsWith("text/") || /\.(md|json|csv|log|py|js|ts|html|css|ya?ml|txt)$/i.test(file.name)) {
+      const text = (await readAsText(file)).slice(0, MAX_TEXT);
+      pending.push({ name: file.name, kind: "text", content: text });
+    } else {
+      toast("Only text files and images for now — " + file.name + " was skipped");
+    }
+  }
+  renderAttachments();
 });
 
-/* --------------------------------------------------------------------- mic - */
+function readAsText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(file);
+  });
+}
+function readAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+/* ================================================================== composer */
+const input = $("#input");
+
+function autosize() {
+  input.style.height = "auto";
+  input.style.height = Math.min(150, input.scrollHeight) + "px";
+}
+input.addEventListener("input", () => {
+  autosize();
+  $("#sendBtn").disabled = !input.value.trim() && !pending.length;
+});
+input.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey && !isPhone()) { e.preventDefault(); submit(); }
+});
+
+$("#composer").addEventListener("submit", (e) => { e.preventDefault(); submit(); });
+$$("#chips .sug").forEach((btn) => btn.addEventListener("click", () => {
+  input.value = btn.dataset.say;
+  submit();
+}));
+
+function submit() {
+  const typed = input.value.trim();
+  if (!typed && !pending.length) return;
+
+  const images = pending.filter((f) => f.kind === "image");
+  const texts = pending.filter((f) => f.kind === "text");
+
+  let prompt = typed;
+  if (texts.length) {
+    const blocks = texts.map((f) => `File: ${f.name}\n"""\n${f.content}\n"""`).join("\n\n");
+    prompt = (prompt ? prompt + "\n\n" : "") + blocks;
+  }
+  if (!prompt && images.length) prompt = "What do you see in this image?";
+
+  const shown = typed || (pending.length ? "Sent " + pending.map((f) => f.name).join(", ") : "");
+  addMessage(shown, "user");
+  input.value = "";
+  autosize();
+  $("#sendBtn").disabled = true;
+  liveBubble = null;
+  orb.setState("thinking");
+
+  if (images.length) {
+    const data = images[0].dataUrl.split(",")[1] || "";
+    socket.send({ type: "video", data, mime: images[0].mime || "image/jpeg" });
+  }
+  socket.send({ type: "text", text: prompt, use_vision: images.length > 0 });
+
+  pending.length = 0;
+  renderAttachments();
+}
+
+/* ==================================================================== voice/ */
 let mediaRecorder = null;
 let micStream = null;
-let camStream = null;
-let cameraOn = false;
 
 $("#micBtn").addEventListener("click", async (e) => {
   const btn = e.currentTarget;
   if (mediaRecorder && mediaRecorder.state === "recording") {
     mediaRecorder.stop();
-    btn.setAttribute("aria-pressed", "false");
-    orb.setState("idle");
     return;
   }
   try {
@@ -673,90 +1109,89 @@ $("#micBtn").addEventListener("click", async (e) => {
 
   mediaRecorder.ondataavailable = async (event) => {
     if (!event.data || !event.data.size) return;
-    const buffer = await event.data.arrayBuffer();
-    socket.sendBinary(buffer);                    // raw chunk, no base64 tax
+    socket.sendBinary(await event.data.arrayBuffer());   // raw chunk, no base64 tax
   };
   mediaRecorder.onstop = () => {
     socket.send({ type: "audio_end", mime });
     micStream?.getTracks().forEach((t) => t.stop());
     micStream = null;
     btn.setAttribute("aria-pressed", "false");
+    btn.classList.remove("rec");
     orb.setState("thinking");
   };
 
-  mediaRecorder.start(250);                       // 250 ms slices keep latency low
+  mediaRecorder.start(250);
   btn.setAttribute("aria-pressed", "true");
+  btn.classList.add("rec");
   orb.setState("listening");
 });
 
-/* ------------------------------------------------------------------ camera - */
-$("#camBtn").addEventListener("click", async (e) => {
-  const btn = e.currentTarget;
-  if (cameraOn) {
-    stopCamera();
-    btn.setAttribute("aria-pressed", "false");
-    return;
-  }
+/* ===================================================================== camera */
+let camStream = null;
+
+async function startCamera() {
+  if (camStream) return;
   try {
     camStream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: "user" } });
   } catch (err) {
     toast("Camera blocked: " + err.message);
+    cfg.camera = false;
+    store.set("camera", false);
+    paintConfig();
     return;
   }
   const video = $("#cam");
   video.srcObject = camStream;
+  video.classList.add("on");
   await video.play().catch(() => {});
-  cameraOn = true;
-  btn.setAttribute("aria-pressed", "true");
   startFramePump();
-});
+}
 
 function stopCamera() {
-  cameraOn = false;
   camStream?.getTracks().forEach((t) => t.stop());
   camStream = null;
   clearInterval(stopCamera._timer);
+  const video = $("#cam");
+  video.classList.remove("on");
+  video.srcObject = null;
 }
 
-/* one JPEG per second — enough for the model to see context, cheap on data */
+/* one JPEG a second — enough context for the model, cheap on data */
 function startFramePump() {
   const video = $("#cam");
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");
   clearInterval(stopCamera._timer);
   stopCamera._timer = setInterval(() => {
-    if (!cameraOn || video.readyState < 2) return;
-    canvas.width = 320; canvas.height = 240;       // downscale: vision, not photography
+    if (!camStream || video.readyState < 2) return;
+    canvas.width = 320;
+    canvas.height = 240;
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     const data = canvas.toDataURL("image/jpeg", 0.62).split(",")[1];
     socket.send({ type: "video", data, mime: "image/jpeg" });
   }, 1000);
 }
 
-/* ------------------------------------------------------------------ memory - */
-const drawer = $("#drawer");
-$("#memoryBtn").addEventListener("click", async () => {
-  drawer.classList.add("open");
-  await loadRecent();
-});
-$("#drawerClose").addEventListener("click", () => drawer.classList.remove("open"));
-drawer.addEventListener("click", (e) => { if (e.target === drawer) drawer.classList.remove("open"); });
-
+/* ===================================================================== memory */
 function renderMemories(rows, sub) {
   const list = $("#memList");
   list.innerHTML = "";
   $("#memSub").textContent = sub;
+  $("#memCount").textContent = sub;
   if (!rows.length) {
-    list.innerHTML = '<div class="mem"><p>Nothing remembered yet.</p></div>';
+    list.innerHTML = '<p class="empty">Nothing remembered yet. Ask AURA to remember something.</p>';
     return;
   }
   for (const row of rows) {
     const el = document.createElement("div");
     el.className = "mem";
+    const p = document.createElement("p");
+    p.textContent = row.text;
+    const small = document.createElement("small");
     const when = new Date((row.created_at || 0) * 1000).toLocaleString();
-    const score = row.score != null ? ` · score ${row.score}` : "";
-    el.innerHTML = `<p></p><small>${when}${score}</small>`;
-    el.querySelector("p").textContent = row.text;
+    small.textContent = when + (row.score != null ? " · score " + row.score : "");
+    el.appendChild(p);
+    el.appendChild(small);
     list.appendChild(el);
   }
 }
@@ -765,11 +1200,17 @@ async function loadRecent() {
   try {
     const res = await fetch(`/v1/memory/recent?user_id=${encodeURIComponent(USER_ID)}&limit=40`);
     const data = await res.json();
-    renderMemories(data.memories || [], `${data.count || 0} memories`);
+    renderMemories(data.memories || [], (data.count || 0) + " memories");
   } catch (err) {
     toast("Memory unavailable: " + err.message);
   }
 }
+
+$("#openMemoryBtn").addEventListener("click", async () => {
+  closeSheet("settingsSheet");
+  openSheet("memorySheet");
+  await loadRecent();
+});
 
 $("#memSearch").addEventListener("click", async () => {
   const q = $("#memQuery").value.trim();
@@ -782,14 +1223,286 @@ $("#memSearch").addEventListener("click", async () => {
     toast("Search failed: " + err.message);
   }
 });
-
 $("#memQuery").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#memSearch").click(); });
 
-/* ------------------------------------------------------------------- misc -- */
+/* ======================================================================= mesh */
+/* Owner side: a 6-digit room, live device list and targeted commands.
+   Device side: `#mesh=code` joins as a device and executes what it is sent. */
+const mesh = {
+  code: null,
+  seq: 0,
+  timer: 0,
+  devices: [],
+  node: null,           // { code } when this page is the controlled device
+
+  async start() {
+    const res = await fetch("/v1/mesh/register", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ owner: USER_ID }),
+    });
+    if (!res.ok) throw new Error("mesh " + res.status);
+    const data = await res.json();
+    this.code = data.code;
+    $("#meshCode").textContent = data.code;
+    this.pollState();
+    clearInterval(this.timer);
+    this.timer = setInterval(() => this.pollState(), 2500);
+  },
+
+  async pollState() {
+    if (!this.code) return;
+    try {
+      const res = await fetch(
+        `/v1/mesh/state?code=${this.code}&since=${this.seq}`,
+        { headers: { "X-Aura-Owner": USER_ID } }
+      );
+      if (!res.ok) { if (res.status === 404) this.reset(); return; }
+      const data = await res.json();
+      this.devices = data.devices || [];
+      this.seq = data.seq || this.seq;
+      this.paintDevices();
+      if (data.results && data.results.length) this.paintResults(data.results);
+    } catch { /* transient: the next tick retries */ }
+  },
+
+  paintDevices() {
+    const box = $("#meshDevices");
+    $("#meshCount").textContent = this.devices.length ? `(${this.devices.length})` : "";
+    if (!this.devices.length) {
+      box.innerHTML = '<p class="empty">No device joined yet. Open the invite link on the other device.</p>';
+      return;
+    }
+    box.innerHTML = "";
+    for (const device of this.devices) {
+      const row = document.createElement("div");
+      row.className = "dev";
+      const who = document.createElement("div");
+      who.className = "who";
+      const b = document.createElement("b");
+      b.textContent = device.name;
+      const small = document.createElement("small");
+      small.textContent = device.fresh
+        ? "live · " + Math.round(device.seen / 1000) + "s ago"
+        : device.away ? "backgrounded" : "idle";
+      who.appendChild(b);
+      who.appendChild(small);
+
+      const pill = document.createElement("span");
+      pill.className = "pill" + (device.fresh ? " live" : "");
+      pill.textContent = device.fresh ? "live" : "idle";
+
+      const kick = document.createElement("button");
+      kick.className = "btn";
+      kick.textContent = "Remove";
+      kick.style.padding = "6px 10px";
+      kick.addEventListener("click", async () => {
+        await fetch("/v1/mesh/kick", {
+          method: "POST",
+          headers: { "content-type": "application/json", "X-Aura-Owner": USER_ID },
+          body: JSON.stringify({ code: this.code, device_id: device.id }),
+        });
+        this.pollState();
+      });
+
+      row.appendChild(who);
+      row.appendChild(pill);
+      row.appendChild(kick);
+      box.appendChild(row);
+    }
+  },
+
+  paintResults(results) {
+    const box = $("#meshResults");
+    for (const r of results) {
+      const el = document.createElement("div");
+      el.className = "res";
+      const b = document.createElement("b");
+      b.textContent = r.device + ":";
+      const span = document.createElement("span");
+      span.textContent = (r.ok ? "" : "failed · ") + (r.text || "done");
+      el.appendChild(b);
+      el.appendChild(span);
+      box.prepend(el);
+      while (box.children.length > 20) box.lastChild.remove();
+    }
+  },
+
+  async send() {
+    if (!this.code) { toast("Start MESH first"); return; }
+    const kind = $("#meshKind").value;
+    const text = $("#meshPayload").value.trim();
+    if (!text && kind !== "ping" && kind !== "vibrate") { toast("Type something to send"); return; }
+    const payload = kind === "open" ? { url: text } : { text };
+    const res = await fetch("/v1/mesh/command", {
+      method: "POST",
+      headers: { "content-type": "application/json", "X-Aura-Owner": USER_ID },
+      body: JSON.stringify({ code: this.code, kind, payload, targets: [] }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!data.queued) { toast("No device is connected"); return; }
+    toast(`Sent to ${data.queued} device${data.queued > 1 ? "s" : ""}`);
+    $("#meshPayload").value = "";
+  },
+
+  reset() {
+    clearInterval(this.timer);
+    this.timer = 0;
+    this.code = null;
+    $("#meshCode").textContent = "— — — — — —";
+    $("#meshDevices").innerHTML = '<p class="empty">No device joined yet.</p>';
+  },
+
+  async stop() {
+    if (this.code) {
+      await fetch(`/v1/mesh/close?code=${this.code}`, { method: "POST", headers: { "X-Aura-Owner": USER_ID } }).catch(() => {});
+    }
+    this.reset();
+    cfg.mesh = false;
+    store.set("mesh", false);
+    paintConfig();
+  },
+};
+
+async function beginMesh() {
+  try {
+    await mesh.start();
+    openSheet("meshSheet");
+  } catch (err) {
+    toast("Could not start MESH: " + err.message);
+    cfg.mesh = false;
+    store.set("mesh", false);
+    paintConfig();
+  }
+}
+
+function stopMesh() {
+  mesh.stop();
+}
+
+$("#openMeshBtn").addEventListener("click", async () => {
+  closeSheet("settingsSheet");
+  openSheet("meshSheet");
+  if (!mesh.code) await beginMesh();
+});
+$("#meshConnect").addEventListener("click", beginMesh);
+$("#meshSend").addEventListener("click", () => mesh.send());
+$("#meshStop").addEventListener("click", async () => { await mesh.stop(); toast("MESH disconnected"); });
+$("#meshCopy").addEventListener("click", async () => {
+  if (!mesh.code) { toast("Start MESH first"); return; }
+  const link = `${location.origin}/#mesh=${mesh.code}`;
+  try {
+    await navigator.clipboard.writeText(link);
+    toast("Invite link copied");
+  } catch {
+    prompt("Copy this link:", link);
+  }
+});
+
+/* --- device side ----------------------------------------------------------- */
+async function joinAsDevice(code) {
+  const name = (PROFILE.name || "device") + (isPhone() ? " phone" : " browser");
+  const res = await fetch("/v1/mesh/join", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ code, device_id: DEVICE_ID, name, meta: { ua: navigator.platform || "", mobile: isPhone() } }),
+  });
+  if (!res.ok) {
+    $("#meshBannerText").textContent = "MESH " + code + " is closed";
+    $("#meshBanner").classList.add("show");
+    setTimeout(() => $("#meshBanner").classList.remove("show"), 6000);
+    return;
+  }
+  mesh.node = { code, seen: [] };
+  $("#meshBannerText").textContent = "MESH device · room " + code;
+  $("#meshBanner").classList.add("show");
+  devicePoll();
+}
+
+async function devicePoll() {
+  if (!mesh.node) return;
+  try {
+    const res = await fetch("/v1/mesh/poll", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        code: mesh.node.code,
+        device_id: DEVICE_ID,
+        seen: mesh.node.seen,
+        vis: document.visibilityState === "visible",
+      }),
+    });
+    if (res.status === 404) { mesh.node = null; $("#meshBanner").classList.remove("show"); return; }
+    const data = await res.json();
+    for (const cmd of data.commands || []) {
+      mesh.node.seen.push(cmd.id);
+      const ok = await runCommand(cmd);
+      fetch("/v1/mesh/result", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          code: mesh.node.code,
+          device_id: DEVICE_ID,
+          id: cmd.id,
+          ok,
+          text: cmd.kind + " " + (ok ? "done" : "failed"),
+        }),
+      }).catch(() => {});
+    }
+  } catch { /* offline: retry */ }
+  setTimeout(devicePoll, document.visibilityState === "visible" ? 2000 : 8000);
+}
+
+async function runCommand(cmd) {
+  const text = (cmd.payload && cmd.payload.text) || "";
+  try {
+    switch (cmd.kind) {
+      case "toast":
+        toast(text || "AURA ping");
+        break;
+      case "say":
+        speak(text);
+        break;
+      case "vibrate":
+        navigator.vibrate?.([120, 60, 120]);
+        toast("Vibrated");
+        break;
+      case "ping":
+        toast("Ping from AURA");
+        break;
+      case "open":
+        if (cmd.payload && cmd.payload.url) window.open(cmd.payload.url, "_blank", "noopener");
+        break;
+      default:
+        return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/* a device link wins over a stale owner session */
+if (/^#mesh=\d{6}$/.test(location.hash)) joinAsDevice(location.hash.slice(6));
+
+/* ====================================================================== misc */
 $("#clearBtn").addEventListener("click", () => {
   transcript.innerHTML = "";
   liveBubble = null;
+  stage.classList.remove("chatting");
+  orb.setState("idle");
+  closeSheet("settingsSheet");
+  toast("Chat cleared");
 });
+
+/* keep the dock and the orb sized right when the mobile URL bar collapses */
+function measureDock() {
+  const h = $("#dock").getBoundingClientRect().height;
+  document.documentElement.style.setProperty("--dock-h", h + "px");
+}
+measureDock();
+addEventListener("resize", measureDock);
+if (window.visualViewport) window.visualViewport.addEventListener("resize", measureDock);
 
 socket.connect();
 </script>

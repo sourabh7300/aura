@@ -10,10 +10,14 @@ aura-fastapi/
 │   ├── memory.py            MODULE 1  SQLite + vector memory, recency decay
 │   ├── router.py            MODULE 2  Groq → Gemini failover + tool loop
 │   ├── websocket_handler.py MODULE 3  /ws/stream audio + vision
+│   ├── mesh.py              MESH      device relay (rooms, commands, acks)
 │   └── __init__.py          package exports
 ├── frontend/
 │   └── index.html           MODULE 4  holographic UI (single file, no build step)
 ├── tests/smoke.py           runnable checks for the memory engine
+├── tests/router_check.py    routing, failover and the tool guardrail
+├── tests/api_check.py       REST + websocket behaviour, static UI
+├── tests/mesh_check.py      MESH relay: join, command, ack, kick, close
 ├── requirements.txt
 └── .env.example
 ```
@@ -36,7 +40,10 @@ No ChromaDB? Set `AURA_USE_CHROMA=0` (or just skip installing it). `memory.py`
 falls back to a SQLite cosine index automatically, so nothing breaks.
 
 ```bash
-python tests/smoke.py     # memory: persistence, user scoping, decay ordering
+python tests/smoke.py       # memory: persistence, user scoping, decay ordering
+python tests/router_check.py  # routing, failover, tool guardrail
+python tests/api_check.py     # REST + websocket, static UI
+python tests/mesh_check.py    # MESH relay end to end
 ```
 
 ## MODULE 1 — memory
@@ -97,15 +104,26 @@ Without it the browser speaks the answer with `speechSynthesis`.
 
 ## MODULE 4 — UI
 
-Single `index.html`, zero dependencies:
+One `index.html`, no build step, no dependencies. The layout follows the
+messenger pattern people already know:
 
-* canvas reactor orb — Fibonacci particle shell, three counter-rotating rings,
-  depth-sorted perspective, colour/motion eased between `Idle / Listening /
-  Thinking / Speaking`;
-* glassmorphic composer with mic, send, camera, memory and clear controls;
-* transcript streams progressively; memory drawer reads `/v1/memory/recent` and
-  `/v1/memory/search`;
-* mobile-first: DPR capped at 1.5 and 30 fps on phones, reduced-motion respected.
+* wordmark, profile chip and a settings button in a 60 px top bar;
+* a centred greeting over the particle orb, with three suggestion chips;
+* a docked composer — attach, text, mic, send — that grows with the text and
+  keeps its own safe-area padding;
+* sheets for settings, memory, MESH and the profile: a side panel on desktop, a
+  bottom sheet under 768 px.
+
+Attachments are real, not decorative. The paperclip opens the file picker and
+each pick becomes a removable chip with a thumbnail. Text-like files (`.txt`,
+`.md`, `.json`, `.csv`, `.py`, `.js`, code and logs) are inlined into the prompt
+(20 k characters each, 3 files, 8 MB cap); images are sent through the vision
+frame so the model actually sees them; anything else — a PDF, a zip — is refused
+with a toast instead of being silently dropped.
+
+The profile is local: signing in stores a name and a stable id in
+`localStorage`, and memories plus MESH rooms are keyed to that id. There is no
+cloud account in this build, and the sign-in sheet says so.
 
 ## Mobile
 
@@ -121,6 +139,26 @@ The UI is tuned for phones rather than scaled down to them:
   `visualViewport` keep the layout correct while the mobile URL bar collapses;
 * controls collapse into one row of three compact buttons, the voice label
   becomes an icon, and there is no horizontal or vertical overflow at 355-390 px.
+
+## MESH — device relay
+
+`backend/mesh.py` lets one device drive another. The owner taps MESH, gets a
+6-digit room code and sends the invite link (`/#mesh=<code>`) to a phone. From
+then on the owner can push a toast, speak a line, vibrate, ping or open a link on
+that device within a couple of seconds.
+
+| endpoint | caller | purpose |
+| --- | --- | --- |
+| `POST /v1/mesh/register` | owner | allocate (or reuse) a room code |
+| `GET /v1/mesh/state` | owner | devices + acknowledged results |
+| `POST /v1/mesh/command` | owner | queue a command for all or some devices |
+| `POST /v1/mesh/kick`, `/close` | owner | drop a device, release the room |
+| `POST /v1/mesh/join`, `/poll`, `/result`, `/leave` | device | join, pull, acknowledge |
+
+State lives in memory: rooms expire 6 h after the last touch, a silent device is
+dropped after 15 min, commands expire after 2 min. The owner proves itself with
+an `X-Aura-Owner` header (its profile id) rather than a query string, and a
+device acknowledges commands by id, so a retried poll can never run one twice.
 
 ## Deploy
 
