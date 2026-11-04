@@ -224,7 +224,9 @@ deployment kit. Everything needed to run and deploy is inside this repository.
 | `sw.js` | Keep-warm worker — pings the backend every 4 min |
 | `aura.test.js`, `user-profile.test.js`, `voice-regress.test.js`, `syntax-check.js` | Regression suites (pure Node, no browser needed) |
 | `devserver.js` | Local static server for testing `aura.html` |
-| `deploy.js` | One-command deploy: push + portfolio mirror + byte-verify |
+| `standalone/index.html` | The same app as one openable file — no server, no build |
+| `sync-standalone.js` | Regenerates `standalone/index.html` from `aura.html` (deploy runs it first) |
+| `deploy.js` | One-command deploy: sync standalone + push + portfolio mirror + byte-verify |
 
 Current stable baseline: git tag **`v3-squad`** — diff or branch from it for
 future squad upgrades.
@@ -237,8 +239,25 @@ Edit, then run one command from this folder:
 node deploy.js
 ```
 
-It pushes this repo, mirrors the build into the portfolio repository, and
-byte-verifies both live sites.
+It refreshes `standalone/index.html`, pushes this repo, mirrors the build into
+the portfolio repository, and byte-verifies both live sites.
+
+## Dock quick bar
+
+Under the composer there are two buttons on every screen size, because both
+features used to be either a bare icon or hidden in a rail that scrolls off a
+phone:
+
+* **📎 ATTACH** — a sheet with Photo (camera/gallery), PDF & notes (indexed and
+  cited `[file · page]`), and Camera (live scene). Each drives the lane that
+  already existed; there is no second implementation to drift.
+* **📡 MESH** — opens the mesh panel, shows a green dot and reads `MESH ON`
+  while a mesh code is live.
+
+Language mirroring is enforced on every lane, including the secure backend:
+Hinglish in → Hinglish out, Devanagari in → Devanagari out, any world language
+in → that language out. A backend answer that breaks the rule is rewritten
+before it reaches the chat.
 
 ---
 Designed & hand-built by Sourabh Singh · B.Tech CSE (AI, DevOps & Cloud Automation), JECRC University

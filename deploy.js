@@ -56,6 +56,10 @@ if (require.main !== module) {
   console.log("AURA build " + hash + " (" + short(auraSrc) + ") · backend build marker: " + (build || "(none found)"));
 
   /* ---- 1. push the standalone repo ---- */
+  step("0/4 · keeping the standalone folder in step");
+  try { run("node sync-standalone.js", ROOT); }
+  catch (e) { console.log("standalone sync failed — fix it before shipping"); throw e; }
+
   step("1/4 · standalone repo (sourabh7300/aura)");
   run("git add -A", ROOT);
   if (DRY) {
