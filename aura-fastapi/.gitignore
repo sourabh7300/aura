@@ -14,3 +14,7 @@ __pycache__/
 .pytest_cache/
 # local preview launcher (machine-specific key bridging)
 _run_local.py
+
+# local dev server log
+_server.log
+

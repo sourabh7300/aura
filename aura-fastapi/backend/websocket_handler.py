@@ -38,6 +38,8 @@ from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable, Protocol
 
 import httpx
+
+from .router import redact
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from .memory import MemoryManager
@@ -177,20 +179,55 @@ def create_stream_router(
                     except Exception:
                         pass  # memory is an enhancement, never a hard dependency
 
-                    # 2) the model, with memory pinned into the system prompt
+                    # 2) the model, with memory pinned into the system prompt.
+                    # The socket streams: tokens reach the browser as they are
+                    # generated, so the first words appear in well under a second
+                    # instead of after the whole answer is finished.
                     system = system_prompt if not context else f"{system_prompt}\n\n{context}"
-                    result: ChatResult = await provider.chat(
-                        system=system,
-                        messages=[{"role": "user", "content": user_text}],
-                        tools=("remember", "recall", "now", "web_search", "read_page"),
-                        max_tokens=700,
-                    )
+                    tools = ("remember", "recall", "now", "web_search")   # read_page costs 3-5 s per call
+                    messages = [{"role": "user", "content": user_text}]
+                    stream = getattr(provider, "chat_stream", None)
+                    result: ChatResult | None = None
+                    provider_name = "aura"
+                    tool_trace: list = []
+                    latency_ms = 0
 
-                    # 3) stream it back in readable chunks as it is produced
-                    await send_state("speaking")
-                    for chunk in _chunk_for_speech(result.text):
-                        await send({"type": "delta", "text": chunk})
-                        await asyncio.sleep(0)  # yield so video/audio frames keep flowing
+                    if stream is not None:
+                        speaking = False
+                        async for item in stream(
+                            system=system,
+                            messages=messages,
+                            tools=tools,
+                            max_tokens=700,
+                            max_tool_calls=2,   # one search is usually enough; a third costs 3 s
+                        ):
+                            if item.get("type") == "tool":
+                                await send({"type": "tool", "name": item.get("name")})
+                                continue
+                            if item.get("type") == "delta":
+                                if not speaking:
+                                    await send_state("speaking")
+                                    speaking = True
+                                await send({"type": "delta", "text": item["text"]})
+                            else:
+                                result = item["reply"]
+                                provider_name = item.get("provider") or "groq"
+                                tool_trace = item.get("tool_trace") or []
+                                latency_ms = int(item.get("latency_ms") or 0)
+                    else:  # a provider stub without streaming (tests, custom routers)
+                        result = await provider.chat(
+                            system=system, messages=messages, tools=tools, max_tokens=700
+                        )
+                        provider_name = result.provider
+                        tool_trace = list(result.tool_trace)
+                        latency_ms = int((time.perf_counter() - started) * 1000)
+                        await send_state("speaking")
+                        for chunk in _chunk_for_speech(result.text):
+                            await send({"type": "delta", "text": chunk})
+                            await asyncio.sleep(0)
+
+                    if result is None:
+                        raise RuntimeError("the model returned an empty stream")
 
                     if synthesizer is not None and result.text:
                         try:
@@ -208,12 +245,12 @@ def create_stream_router(
                     await send(
                         {
                             "type": "done",
-                            "provider": result.provider,
+                            "provider": provider_name,
                             "model": result.model,
-                            "latency_ms": int((time.perf_counter() - started) * 1000),
+                            "latency_ms": latency_ms or int((time.perf_counter() - started) * 1000),
                             "tools": [
                                 {"name": t.name, "ok": t.ok, "ms": t.duration_ms}
-                                for t in result.tool_trace
+                                for t in tool_trace
                             ],
                         }
                     )
@@ -223,7 +260,7 @@ def create_stream_router(
                         await memory.save_memory(
                             session.user_id,
                             f"User: {user_text}\nAURA: {result.text}",
-                            {"kind": "turn", "provider": result.provider},
+                            {"kind": "turn", "provider": provider_name},
                         )
                     except Exception:
                         pass

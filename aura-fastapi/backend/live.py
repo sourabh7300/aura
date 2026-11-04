@@ -15,63 +15,20 @@ hour, so one exhausted key does not take search down with it.
 
 from __future__ import annotations
 
-import asyncio
 import html
-import os
 import re
 import time
 from typing import Any
 
 import httpx
 
+from .keybank import KeyBank
 from .router import tool
 
 TAVILY_SEARCH = "https://api.tavily.com/search"
 TAVILY_EXTRACT = "https://api.tavily.com/extract"
 SNIPPET_CHARS = 420
 PAGE_CHARS = 4_000
-
-
-class KeyBank:
-    """Round-robin Tavily keys with cooldown, so a dead key is not a dead tool."""
-
-    def __init__(self, keys: list[str]) -> None:
-        self.keys = keys
-        self.cool: dict[str, float] = {}
-        self.dead: dict[str, float] = {}
-        self._tick = 0
-        self._lock = asyncio.Lock()
-
-    @classmethod
-    def from_env(cls) -> "KeyBank":
-        found: list[str] = []
-        for env in ["TAVILY_API_KEY"] + [f"TAVILY_API_KEY_{i}" for i in range(2, 11)]:
-            for key in (os.environ.get(env) or "").split(","):
-                key = key.strip()
-                if key and key not in found:
-                    found.append(key)
-        return cls(found)
-
-    def __bool__(self) -> bool:
-        return bool(self.keys)
-
-    async def pick(self) -> str | None:
-        async with self._lock:
-            now = time.time()
-            live = [k for k in self.keys if self.dead.get(k, 0) < now and self.cool.get(k, 0) < now]
-            if not live:
-                return None
-            key = live[self._tick % len(live)]
-            self._tick = (self._tick + 1) % len(live)
-            return key
-
-    def penalize(self, key: str, status: int) -> None:
-        now = time.time()
-        if status == 429:
-            self.cool[key] = now + 60
-        elif status in (401, 432, 433):
-            self.dead[key] = now + 3600
-
 
 # Filled lazily: Settings.load() reads .env *after* this module is imported, so
 # building the bank at import time would silently miss a key that lives in .env.
@@ -81,8 +38,15 @@ BANK = KeyBank([])
 def bank() -> KeyBank:
     global BANK
     if not BANK.keys:
-        BANK = KeyBank.from_env()
+        BANK = KeyBank.from_env("TAVILY_API_KEY")
     return BANK
+
+
+# Repeat questions ("aaj ka score?") are the norm in a chat and Tavily bills per
+# call, so a short TTL keeps the answer fresh and the second ask instant.
+_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+CACHE_TTL = 240.0
+CACHE_MAX = 64
 
 
 def _clean(text: str, limit: int) -> str:
@@ -91,12 +55,52 @@ def _clean(text: str, limit: int) -> str:
     return text[:limit]
 
 
+_STOP = {
+    "aaj", "aajka", "kya", "hua", "huwa", "hai", "ka", "ki", "ke", "me", "mein", "kaun",
+    "jeeta", "bata", "batao", "ek", "line", "the", "and", "for", "what", "today", "latest",
+    "news", "about", "please", "tell", "me", "of", "in", "on", "is", "was",
+}
+
+
+def _words(text: str) -> set[str]:
+    return {w for w in re.findall(r"\w+", text.lower()) if len(w) > 2 and w not in _STOP}
+
+
+def _fuzzy_hit(topic: str, days: int, max_results: int, query: str) -> dict[str, Any] | None:
+    """Reuse a fresh answer for a merely re-worded query.
+
+    The model rarely repeats a search verbatim — it asks "esports aaj kaun jeeta"
+    and then "who won esports today" — and a second full search is 3-4 s of the
+    user's life. Two overlapping word sets are the same question for our purpose.
+    """
+    words = _words(query)
+    if not words:
+        return None
+    now = time.time()
+    for key, (expiry, payload) in _CACHE.items():
+        if expiry <= now:
+            continue
+        t, d, m, cached_query = key.split("|", 3)
+        if (t, d, m) != (topic, str(days), str(max_results)):
+            continue
+        other = _words(cached_query)
+        if not other:
+            continue
+        overlap = len(words & other) / min(len(words), len(other))
+        if overlap >= 0.6:
+            return payload
+    return None
+
+
 @tool(
     name="web_search",
     description=(
         "Search the live web. Use this for anything time-sensitive: sports results and "
         "fixtures, esports tournaments and patch notes, news, current affairs, prices, "
-        "releases, 'today', 'latest', 'who won'. Never guess live facts."
+        "releases, 'today', 'latest', 'who won'. Never guess live facts. "
+        "Write the query in English and name the thing you are asking about: "
+        "instead of 'esports aaj kaun jeeta' ask 'which team won the CS2/Dota 2 "
+        "tournament final today'. Short vague Hinglish queries return junk."
     ),
     parameters={
         "type": "object",
@@ -120,10 +124,22 @@ async def web_search(
     if not keys:
         return {"ok": False, "error": "web search is not configured (TAVILY_API_KEY missing)"}
 
-    max_results = max(1, min(int(max_results or 5), 8))
+    max_results = max(1, min(int(max_results or 4), 8))
     days = max(1, min(int(days or 7), 30))
+    cache_key = f"{topic}|{days}|{max_results}|{query[:200].lower()}"
+    hit = _CACHE.get(cache_key)
+    if hit and hit[0] > time.time():
+        return {**hit[1], "cached": True}
+    near = _fuzzy_hit(topic, days, max_results, query)
+    if near is not None:
+        _CACHE[cache_key] = (time.time() + CACHE_TTL, near)   # remember the alias too
+        return {**near, "cached": True}
+
     payload = {
         "query": query[:400],
+        # "fast" is ~0.6 s quicker but hands back near-random headlines for a
+        # vague query (it returned a gaming article for "aaj cricket me kya hua"),
+        # so the default stays on "basic" and the answer field does the work.
         "search_depth": "basic",
         "topic": "news" if topic == "news" else "general",
         "max_results": max_results,
@@ -138,7 +154,7 @@ async def web_search(
         if not key:
             return {"ok": False, "error": "search is rate limited right now, try again shortly"}
         try:
-            async with httpx.AsyncClient(timeout=12) as client:
+            async with httpx.AsyncClient(timeout=8) as client:
                 res = await client.post(TAVILY_SEARCH, json={**payload, "api_key": key})
         except Exception as exc:  # noqa: BLE001 - network trouble is a normal outcome
             keys.penalize(key, 429)
@@ -154,12 +170,16 @@ async def web_search(
                 }
                 for r in (data.get("results") or [])[:max_results]
             ]
-            return {
+            out = {
                 "ok": True,
                 "answer": _clean(data.get("answer") or "", 700),
                 "results": results,
                 "queried": query[:200],
             }
+            if len(_CACHE) >= CACHE_MAX:
+                _CACHE.clear()
+            _CACHE[cache_key] = (time.time() + CACHE_TTL, out)
+            return out
         keys.penalize(key, res.status_code)
 
     return {"ok": False, "error": "search providers refused the request"}
@@ -205,13 +225,6 @@ async def read_page(url: str) -> dict[str, Any]:
         return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
 
 
-def search_health() -> dict[str, Any]:
+def search_health() -> dict[str, object]:
     """Masked, count-only status for /health — no key material, ever."""
-    now = time.time()
-    keys = bank()
-    return {
-        "configured": bool(keys),
-        "keys": len(keys.keys),
-        "cooling": sum(1 for until in keys.cool.values() if until > now),
-        "dead": sum(1 for until in keys.dead.values() if until > now),
-    }
+    return {**bank().health(), "cached": len(_CACHE)}

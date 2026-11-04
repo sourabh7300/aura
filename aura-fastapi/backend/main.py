@@ -51,8 +51,8 @@ DATA_DIR = Path(os.environ.get("AURA_DATA_DIR") or (BASE_DIR.parent / "data"))
 
 @dataclass(slots=True)
 class Settings:
-    groq_api_key: str
-    gemini_api_key: str
+    groq_keys: list[str]
+    gemini_keys: list[str]
     groq_model: str
     gemini_model: str
     allowed_origins: list[str]
@@ -64,14 +64,25 @@ class Settings:
         _load_dotenv()
         origins = os.environ.get("ALLOWED_ORIGINS", "*").strip()
         return cls(
-            groq_api_key=os.environ.get("GROQ_API_KEY", "").strip(),
-            gemini_api_key=os.environ.get("GEMINI_API_KEY", "").strip(),
+            groq_keys=_collect_keys("GROQ_API_KEY"),
+            gemini_keys=_collect_keys("GEMINI_API_KEY"),
             groq_model=os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b").strip(),
             gemini_model=os.environ.get("GEMINI_MODEL", "gemini-2.5-flash").strip(),
             allowed_origins=[o.strip() for o in origins.split(",") if o.strip()] or ["*"],
             data_dir=DATA_DIR,
             use_chroma=os.environ.get("AURA_USE_CHROMA", "1") not in ("0", "false", "False"),
         )
+
+
+def _collect_keys(name: str, count: int = 10) -> list[str]:
+    """`NAME`, `NAME_2` … `NAME_10` — comma lists accepted, blank entries dropped."""
+    found: list[str] = []
+    for env in [name] + [f"{name}_{i}" for i in range(2, count + 1)]:
+        for key in (os.environ.get(env) or "").split(","):
+            key = key.strip()
+            if key and key not in found:
+                found.append(key)
+    return found
 
 
 def _load_dotenv() -> None:
@@ -252,8 +263,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await memory.start()
 
     provider = ProviderRouter(
-        groq_api_key=settings.groq_api_key,
-        gemini_api_key=settings.gemini_api_key,
+        groq_api_key=settings.groq_keys,
+        gemini_api_key=settings.gemini_keys,
         groq_model=settings.groq_model,
         gemini_model=settings.gemini_model,
     )
@@ -312,8 +323,8 @@ def create_app() -> FastAPI:
         )
     )
     provider = ProviderRouter(
-        groq_api_key=settings.groq_api_key,
-        gemini_api_key=settings.gemini_api_key,
+        groq_api_key=settings.groq_keys,
+        gemini_api_key=settings.gemini_keys,
         groq_model=settings.groq_model,
         gemini_model=settings.gemini_model,
     )
@@ -443,13 +454,16 @@ def create_app() -> FastAPI:
 
     # ---- realtime lane ---------------------------------------------------- #
 
-    transcriber = GroqWhisper(settings.groq_api_key) if settings.groq_api_key else None
+    # transcription is one call per clip: the first key is plenty there
+    transcriber = GroqWhisper(settings.groq_keys[0]) if settings.groq_keys else None
     app.include_router(
         create_stream_router(
             memory=memory,
             provider=provider,
             transcriber=transcriber,
-            describe_image=make_vision_describer(settings.gemini_api_key, settings.gemini_model),
+            describe_image=make_vision_describer(
+                settings.gemini_keys[0] if settings.gemini_keys else "", settings.gemini_model
+            ),
             system_prompt=SYSTEM_PROMPT,
         )
     )
@@ -495,8 +509,8 @@ def _lazy_memory(settings: Settings) -> MemoryManager:
 def _lazy_provider(settings: Settings) -> ProviderRouter:
     if "provider" not in _LAZY:
         _LAZY["provider"] = ProviderRouter(
-            groq_api_key=settings.groq_api_key,
-            gemini_api_key=settings.gemini_api_key,
+            groq_api_key=settings.groq_keys,
+            gemini_api_key=settings.gemini_keys,
             groq_model=settings.groq_model,
             gemini_model=settings.gemini_model,
         )

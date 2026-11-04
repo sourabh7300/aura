@@ -37,9 +37,11 @@ import re
 import json
 import time
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable, Iterable, Mapping, Sequence
+from typing import Any, AsyncIterator, Awaitable, Callable, Iterable, Mapping, Sequence
 
 import httpx
+
+from .keybank import KeyBank
 
 # --------------------------------------------------------------------------- #
 # Public types
@@ -105,6 +107,18 @@ class ChatResult:
     tool_trace: list[ToolTrace] = field(default_factory=list)
     usage: dict[str, int] = field(default_factory=dict)
     latency_ms: int = 0
+
+
+_GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+
+
+def _split_keys(value: str | Sequence[str] | None) -> list[str]:
+    """Accept a key, a comma list, or an already-split sequence."""
+    if not value:
+        return []
+    if isinstance(value, str):
+        return [k.strip() for k in value.split(",") if k.strip()]
+    return [str(k).strip() for k in value if str(k).strip()]
 
 
 class ProviderError(RuntimeError):
@@ -271,8 +285,8 @@ class ProviderRouter:
     def __init__(
         self,
         *,
-        groq_api_key: str | None = None,
-        gemini_api_key: str | None = None,
+        groq_api_key: str | Sequence[str] | None = None,
+        gemini_api_key: str | Sequence[str] | None = None,
         groq_model: str = "openai/gpt-oss-120b",
         gemini_model: str = "gemini-2.5-flash",
         groq_fallback_models: Sequence[str] = (
@@ -283,8 +297,10 @@ class ProviderRouter:
         timeout: float = 45.0,
         max_tool_calls: int = MAX_TOOL_CALLS,
     ) -> None:
-        self.groq_api_key = (groq_api_key or "").strip()
-        self.gemini_api_key = (gemini_api_key or "").strip()
+        # A bank, not a key: several GROQ_API_KEY / GROQ_API_KEY_2 … values are
+        # spent round-robin, so a capped key is a hiccup instead of an outage.
+        self.groq_bank = KeyBank(_split_keys(groq_api_key))
+        self.gemini_bank = KeyBank(_split_keys(gemini_api_key))
         self.groq_model = groq_model
         self.gemini_model = gemini_model
         # Model ids retire without notice (a 404 on every request). Keep an ordered
@@ -321,10 +337,12 @@ class ProviderRouter:
     def health(self) -> dict[str, Any]:
         now = time.time()
         return {
-            "groq": {"configured": bool(self.groq_api_key), "model": self.groq_model,
+            "groq": {"configured": bool(self.groq_bank), "model": self.groq_model,
+                     "keys": len(self.groq_bank), "key_health": self.groq_bank.health(),
                      "chain": list(self.groq_models),
                      "cooling_for": max(0, int(self._cooling_until.get("groq", 0) - now))},
-            "gemini": {"configured": bool(self.gemini_api_key), "model": self.gemini_model,
+            "gemini": {"configured": bool(self.gemini_bank), "model": self.gemini_model,
+                       "keys": len(self.gemini_bank),
                        "cooling_for": max(0, int(self._cooling_until.get("gemini", 0) - now))},
             "last_provider": self.last_provider,
         }
@@ -493,9 +511,9 @@ class ProviderRouter:
     def _provider_order(self) -> list[str]:
         """Groq first (lower latency), Gemini second; a cooling provider goes last."""
         available: list[str] = []
-        if self.groq_api_key:
+        if self.groq_bank:
             available.append("groq")
-        if self.gemini_api_key:
+        if self.gemini_bank:
             available.append("gemini")
         available.sort(key=lambda n: self._is_cooling(n))
         return available
@@ -509,38 +527,54 @@ class ProviderRouter:
         temperature: float,
         max_tokens: int,
     ) -> _Reply:
+        await self.start()
         assert self._client is not None
+        reply = None
         response = None
-        used_model = self.groq_model
 
         for model in self.groq_models:
-            payload: dict[str, Any] = {
-                "model": model,
-                "messages": list(convo),
-                "temperature": temperature,
-                "max_tokens": max_tokens,
-            }
-            if specs:
-                payload["tools"] = [s.openai_schema() for s in specs]
-                payload["tool_choice"] = "auto"
+            model_retired = False
+            for _ in range(max(1, len(self.groq_bank))):
+                key = await self.groq_bank.pick()
+                if key is None:
+                    raise _RateLimited("every groq key is resting")
 
-            try:
-                candidate = await self._client.post(
-                    "https://api.groq.com/openai/v1/chat/completions",
-                    headers={"Authorization": f"Bearer {self.groq_api_key}"},
-                    json=payload,
-                )
-            except (httpx.TimeoutException, httpx.TransportError) as exc:
-                raise _TransientFailure(f"connection error ({type(exc).__name__})") from exc
+                payload: dict[str, Any] = {
+                    "model": model,
+                    "messages": list(convo),
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                }
+                if specs:
+                    payload["tools"] = [s.openai_schema() for s in specs]
+                    payload["tool_choice"] = "auto"
+                if model.startswith("openai/gpt-oss"):
+                    payload["reasoning_effort"] = "low"
 
-            if candidate.status_code == 404:
-                continue  # retired/unavailable model id: try the next one
-            response = candidate
-            used_model = model
-            break
+                try:
+                    candidate = await self._client.post(
+                        _GROQ_URL, headers={"Authorization": f"Bearer {key}"}, json=payload
+                    )
+                except (httpx.TimeoutException, httpx.TransportError) as exc:
+                    raise _TransientFailure(f"connection error ({type(exc).__name__})") from exc
+
+                if candidate.status_code == 404:
+                    model_retired = True          # dead model id: next model
+                    break
+                if candidate.status_code in (401, 403, 429):
+                    # this key is spent or capped — rest it and try the next one
+                    self.groq_bank.penalize(key, candidate.status_code)
+                    continue
+                response = candidate
+                break
+
+            if model_retired:
+                continue
+            if response is not None:
+                break
 
         if response is None:
-            raise _TransientFailure("every configured groq model is unavailable (404)")
+            raise _RateLimited("every groq key and model refused")
 
         if response.status_code == 429:
             raise _RateLimited("groq 429")
@@ -562,17 +596,218 @@ class ProviderRouter:
                 )
             )
         usage = data.get("usage") or {}
-        return _Reply(
+        reply = _Reply(
             text=str(message.get("content") or ""),
             tool_calls=calls,
             usage={
                 "prompt_tokens": int(usage.get("prompt_tokens") or 0),
                 "completion_tokens": int(usage.get("completion_tokens") or 0),
             },
-            model=used_model,
+            model=str(data.get("model") or ""),
         )
+        return reply
 
-    # -- Gemini ------------------------------------------------------------- #
+    async def _groq_stream(
+        self,
+        convo: Sequence[Message],
+        specs: Sequence[ToolSpec],
+        temperature: float,
+        max_tokens: int,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """One streaming Groq turn.
+
+        Yields `{"type": "delta", "text": ...}` as tokens arrive and finishes with
+        `{"type": "reply", "reply": _Reply}`. Tool calls arrive as fragments keyed
+        by index and are accumulated here, so the caller only sees whole calls.
+        """
+        assert self._client is not None
+        for model in self.groq_models:
+            model_retired = False
+            for _ in range(max(1, len(self.groq_bank))):
+                key = await self.groq_bank.pick()
+                if key is None:
+                    raise _RateLimited("every groq key is resting")
+
+                payload: dict[str, Any] = {
+                    "model": model,
+                    "messages": list(convo),
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                    "stream": True,
+                    "stream_options": {"include_usage": True},
+                }
+                if specs:
+                    payload["tools"] = [s.openai_schema() for s in specs]
+                    payload["tool_choice"] = "auto"
+                # gpt-oss models think before they speak and bill that thinking
+                # against max_tokens: at "high" the reply could be cut to nothing.
+                # "low" cuts ~1.5 s off the first token (measured) with no drop in
+                # answer quality for this workload.
+                if model.startswith("openai/gpt-oss"):
+                    payload["reasoning_effort"] = "low"
+
+                async with self._client.stream(
+                    "POST", _GROQ_URL, headers={"Authorization": f"Bearer {key}"}, json=payload
+                ) as response:
+                    if response.status_code == 404:
+                        model_retired = True
+                        break
+                    if response.status_code in (401, 403, 429):
+                        await response.aread()
+                        self.groq_bank.penalize(key, response.status_code)
+                        continue
+                    if response.status_code >= 500:
+                        await response.aread()
+                        raise _TransientFailure(f"groq {response.status_code}")
+                    if response.status_code >= 400:
+                        body = (await response.aread()).decode("utf-8", "replace")
+                        raise ProviderError(
+                            f"groq rejected the request ({response.status_code}): {redact(body)}"
+                        )
+
+                    text_parts: list[str] = []
+                    calls: dict[int, dict[str, str]] = {}
+                    usage: dict[str, int] = {}
+                    async for line in response.aiter_lines():
+                        if not line or not line.startswith("data:"):
+                            continue
+                        chunk = line[5:].strip()
+                        if chunk == "[DONE]":
+                            break
+                        try:
+                            data = json.loads(chunk)
+                        except json.JSONDecodeError:
+                            continue
+                        if data.get("usage"):
+                            usage = data["usage"]
+                        for choice in data.get("choices") or []:
+                            delta = choice.get("delta") or {}
+                            piece = delta.get("content")
+                            if piece:
+                                text_parts.append(piece)
+                                yield {"type": "delta", "text": piece}
+                            for raw in delta.get("tool_calls") or []:
+                                slot = calls.setdefault(
+                                    int(raw.get("index") or 0), {"id": "", "name": "", "args": ""}
+                                )
+                                if raw.get("id"):
+                                    slot["id"] = str(raw["id"])
+                                fn = raw.get("function") or {}
+                                if fn.get("name"):
+                                    slot["name"] += str(fn["name"])
+                                if fn.get("arguments"):
+                                    slot["args"] += str(fn["arguments"])
+
+                    yield {
+                        "type": "reply",
+                        "reply": _Reply(
+                            text="".join(text_parts),
+                            tool_calls=[
+                                ToolCall(
+                                    id=slot["id"] or f"call_{index}",
+                                    name=slot["name"],
+                                    arguments=_parse_arguments(slot["args"]),
+                                )
+                                for index, slot in sorted(calls.items())
+                                if slot["name"]
+                            ],
+                            usage={
+                                "prompt_tokens": int(usage.get("prompt_tokens") or 0),
+                                "completion_tokens": int(usage.get("completion_tokens") or 0),
+                            },
+                            model=model,
+                        ),
+                    }
+                    return
+            if model_retired:
+                continue
+        raise _RateLimited("every groq key and model refused")
+
+    async def chat_stream(
+        self,
+        *,
+        system: str | None = None,
+        messages: Sequence[Message],
+        tools: Sequence[str] | None = None,
+        temperature: float = 0.7,
+        max_tokens: int = 700,
+        max_tool_calls: int | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Stream a whole turn, tool calls included.
+
+        Groq streams token by token, so the browser can start reading while the
+        model is still talking — the difference between "thinking for six
+        seconds" and "answering immediately". Gemini is not streamed here: it is
+        the failover lane, and a slow-but-correct answer beats a broken stream.
+        """
+        await self.start()          # idempotent: the socket may hit us before the lifespan ran
+        convo: list[Message] = []
+        if system:
+            convo.append({"role": "system", "content": system})
+        convo.extend(messages)
+        specs = [TOOL_REGISTRY[name] for name in (tools or []) if name in TOOL_REGISTRY]
+        trace: list[ToolTrace] = []
+        started = time.perf_counter()
+        used_provider = "groq"
+        budget = self.max_tool_calls if max_tool_calls is None else max(0, max_tool_calls)
+
+        for step in range(budget + 1):
+            reply: _Reply | None = None
+            if self.groq_bank and not self._is_cooling("groq"):
+                try:
+                    async for item in self._groq_stream(
+                        convo, specs if step < budget else [], temperature, max_tokens
+                    ):
+                        if item["type"] in ("delta", "tool"):
+                            yield item          # live token / progress for the UI
+                        else:
+                            reply = item["reply"]
+                    used_provider = "groq"
+                except (_TransientFailure, httpx.TimeoutException, httpx.TransportError):
+                    self._cool("groq")          # a dropped stream is a failover, not a failed turn
+                    reply = None
+            if reply is None:
+                reply, used_provider = await self._call_with_failover(
+                    convo, specs, temperature, max_tokens
+                )
+
+            assert reply is not None
+            if not reply.tool_calls or step >= budget:
+                yield {
+                    "type": "done",
+                    "reply": reply,
+                    "provider": used_provider,
+                    "tool_trace": trace,
+                    "latency_ms": int((time.perf_counter() - started) * 1000),
+                }
+                return
+
+            convo.append(
+                {
+                    "role": "assistant",
+                    "content": reply.text or "",
+                    "tool_calls": [
+                        {
+                            "id": call.id,
+                            "type": "function",
+                            "function": {"name": call.name, "arguments": json.dumps(call.arguments)},
+                        }
+                        for call in reply.tool_calls
+                    ],
+                }
+            )
+            for call in reply.tool_calls:
+                yield {"type": "tool", "name": call.name}   # so the UI can say "searching…"
+                result = await _execute_tool(call)
+                trace.append(result)
+                convo.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": call.id,
+                        "name": call.name,
+                        "content": json.dumps(result.result if result.ok else {"error": result.error})[:4000],
+                    }
+                )
 
     async def _call_gemini(
         self,
@@ -596,15 +831,19 @@ class ProviderRouter:
             f"https://generativelanguage.googleapis.com/v1beta/models/"
             f"{self.gemini_model}:generateContent"
         )
+        key = await self.gemini_bank.pick()
+        if key is None:
+            raise _RateLimited("every gemini key is resting")
         try:
-            response = await self._client.post(
-                url, params={"key": self.gemini_api_key}, json=payload
-            )
+            response = await self._client.post(url, params={"key": key}, json=payload)
         except (httpx.TimeoutException, httpx.TransportError) as exc:
             raise _TransientFailure(f"connection error ({type(exc).__name__})") from exc
 
-        if response.status_code == 429:
-            raise _RateLimited("gemini 429")
+        if response.status_code in (401, 403, 429):
+            self.gemini_bank.penalize(key, response.status_code)
+            if response.status_code == 429:
+                raise _RateLimited("gemini 429")
+            raise _TransientFailure(f"gemini key rejected ({response.status_code})")
         if response.status_code >= 500:
             raise _TransientFailure(f"gemini {response.status_code}")
         response.raise_for_status()

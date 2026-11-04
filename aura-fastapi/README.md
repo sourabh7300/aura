@@ -31,7 +31,7 @@ python -m venv .venv
 # Windows: .venv\Scripts\activate      macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
 
-cp .env.example .env      # add GROQ_API_KEY (and GEMINI_API_KEY for failover/vision)
+cp .env.example .env      # add GROQ_API_KEY (and GEMINI_API_KEY for failover/vision, TAVILY_API_KEY for live info)
 uvicorn backend.main:app --reload --port 8000
 ```
 
@@ -77,6 +77,24 @@ python tests/live_check.py    # search key bank, live search, redaction
 * Provider errors are passed through `redact()` before they reach a client: httpx
   puts the request URL in its exception text, and both Groq and Google
   authenticate with a query parameter, so raw errors leak keys.
+* **Every key you own is used.** `backend/keybank.py` reads `GROQ_API_KEY`,
+  `GROQ_API_KEY_2` … `_10` (and comma lists), hands them out round-robin, cools a
+  rate-limited key for 60 s and parks a rejected one for an hour. Same object
+  backs Gemini and Tavily, so dropping a second key into `.env` is the entire
+  setup — no code change, no restart ordering.
+* **Streaming.** `/ws/stream` talks to Groq over SSE (`_groq_stream`) and forwards
+  each chunk as it arrives, so the first words land in ~1 s instead of after the
+  whole answer. When the model calls a tool the socket also sends
+  `{"type":"tool","name":"web_search"}`, which is what lets the UI say
+  "Searching the web…" instead of spinning silently. Gemini stays non-streamed:
+  it is the failover lane, and a slow-but-correct answer beats a broken stream.
+* **Budgeted tools.** `reasoning_effort` is pinned to `low` for gpt-oss (it
+  otherwise spends 1-8 s thinking before its first token), a turn gets at most
+  two tool rounds, repeated identical calls are dropped, and the last round runs
+  with tools off so the model has to answer with what it already has.
+* Measured on this machine, end to end through the websocket: small talk 1.1-1.3 s,
+  a repeat question 2.0-2.4 s (cached search), a cold live search 4.4-5.5 s — down
+  from 6-9 s before streaming and the tool budget.
 * **429, 5xx, timeouts and connection errors fail over** (with a 45 s cooldown so
   a burst doesn't each pay a failed round-trip). A 4xx that isn't 429 is a
   config bug — it is raised, not hidden behind a failover that would also fail.
@@ -125,6 +143,16 @@ key for a minute and a rejected key is parked for an hour, so an exhausted key
 degrades the tool instead of breaking it. `/health` reports `configured`, key
 count and cooldown counts — never key material.
 
+Search results are cached for four minutes, and a merely re-worded query reuses
+the previous answer when its meaningful words overlap by 60 % — the model rarely
+repeats itself verbatim, and a second full search is 3-4 s of the user's life.
+Depth stays on `basic`: `fast` is ~0.6 s quicker but returns near-random
+headlines for a short Hinglish question. The tool description tells the model to
+phrase queries in English and name the thing ("which team won the CS2 final
+today"), because "esports aaj kaun jeeta" genuinely returns junk. `read_page`
+exists for the REST path but is left out of the websocket turn — fetching a page
+cost 3-5 s and never improved an answer that the snippets already contained.
+
 The persona is tuned for this: it searches before answering anything live, names
 the source once, keeps replies short, and reacts like a person rather than a
 form letter.
@@ -135,11 +163,27 @@ One `index.html`, no build step, no dependencies. The layout follows the
 messenger pattern people already know:
 
 * wordmark, profile chip and a settings button in a 60 px top bar;
-* a centred greeting over the particle orb, with three suggestion chips;
+* a centred greeting over the hologram, with three suggestion chips;
 * a docked composer — attach, text, mic, send — that grows with the text and
   keeps its own safe-area padding;
 * sheets for settings, memory, MESH and the profile: a side panel on desktop, a
   bottom sheet under 768 px.
+
+### The hologram
+
+The core is the same renderer as the portfolio, ported rather than re-invented: a
+Fibonacci particle sphere (560 points on desktop, 180 on a phone), a latitude
+wireframe whose back half is hidden for depth, three orbit rings with travelling
+ticks, a lit nucleus with an anamorphic streak and ghost points, and a starfield
+on desktop. It has four states — idle drifts, thinking shimmers, listening throws
+shockwaves, speaking sends a waveform ring out — and the browser voice flips it to
+speaking via `utter.onstart`/`onend`.
+
+None of it is WebGL. It is one 2D canvas with everything pre-computed once, a
+device-pixel-ratio cap of 1.25 (phones) / 1.5 (desktop), a frame governor that
+skips to 30 fps on phones and 60 on desktop, and a loop that stops entirely on a
+hidden tab. A full frame costs ~0.4 ms on this machine, i.e. roughly 40× the 60 fps
+budget, so the animation never competes with typing or streaming text.
 
 Attachments are real, not decorative. The paperclip opens the file picker and
 each pick becomes a removable chip with a thumbnail. Text-like files (`.txt`,

@@ -640,24 +640,47 @@ function toast(message) {
   toast._t = setTimeout(() => el.classList.remove("show"), 3200);
 }
 
-/* ======================================================================= ORB */
-/* A ring of points projected in 3D. Two rings of dots, a soft core and a state
-   tint: cheap enough for a phone at 30 fps, still looks like a hologram. */
+/* ================================================================ HOLOGRAM */
+/* The portfolio core, ported to this page: a Fibonacci particle sphere with a
+   latitude wireframe, three orbit rings with orbiting ticks, a lit nucleus with
+   an anamorphic flare, and state-driven motion (thinking drifts, listening
+   pulses shockwaves, speaking sends a waveform ring out).
+
+   Why this does not lag: one 2D canvas, no WebGL context, no per-frame canvas
+   resize, particles are pre-computed once, the frame loop skips ahead to a
+   fixed 30 fps on phones and 60 on desktop, work stops entirely on a hidden
+   tab, and the particle count scales with the screen (180 vs 560). */
+const CYAN = "103,232,249";
+const PERSP = 3.2;
+const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
+
+const ORB_STATES = {
+  idle:      { rot: 1.0, pulse: 0.55, ring: 1.00, tint: "148,224,255" },
+  thinking:  { rot: 2.6, pulse: 1.00, ring: 1.20, tint: "148,224,255" },
+  listening: { rot: 1.9, pulse: 1.20, ring: 1.35, tint: "176,242,255" },
+  speaking:  { rot: 1.5, pulse: 1.05, ring: 1.15, tint: "198,248,255" },
+};
+
 class Orb {
   constructor(canvas) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d", { alpha: true });
     this.state = "idle";
     this.t = 0;
+    this.rot = 0;
+    this.heart = 0;
+    this.wave = 0;
+    this.amp = 0;
+    this.ampTarget = 0;
     this.raf = 0;
     this.last = 0;
-    this.tint = { r: 92, g: 225, b: 255 };   // holographic cyan, same as the CSS accent
 
     const phone = isPhone();
-    this.dpr = Math.min(devicePixelRatio || 1, phone ? 1.5 : 2);
+    this.dpr = Math.min(window.devicePixelRatio || 1, phone ? 1.25 : 1.5);
     this.fps = phone ? 30 : 60;
-    this.count = phone ? 340 : 900;          // 900 points on a phone buys nothing
-    this.points = this.makePoints(this.count);
+    this.count = phone ? 180 : 560;   /* the phone budget is the whole trick */
+    this.stars = phone ? 0 : 36;
+    this.build();
 
     this.resize();
     addEventListener("resize", () => this.resize(), { passive: true });
@@ -667,124 +690,236 @@ class Orb {
     if (!matchMedia("(prefers-reduced-motion: reduce)").matches) this.start();
   }
 
-  makePoints(n) {
-    const pts = [];
+  build() {
+    const n = this.count;
     const golden = Math.PI * (3 - Math.sqrt(5));
+    this.pts = [];
     for (let i = 0; i < n; i++) {
-      const y = 1 - (i / (n - 1)) * 2;
+      const y = 1 - (2 * (i + 0.5)) / n;
       const r = Math.sqrt(Math.max(0, 1 - y * y));
-      const a = golden * i;
-      pts.push({ x: Math.cos(a) * r, y, z: Math.sin(a) * r, s: 0.6 + Math.random() * 0.8 });
+      const phi = i * golden;
+      this.pts.push({ x: Math.cos(phi) * r, y, z: Math.sin(phi) * r });
     }
-    return pts;
+    this.sky = [];
+    for (let i = 0; i < this.stars; i++) {
+      this.sky.push({
+        x: Math.random(), y: Math.random() * 0.9,
+        r: Math.random() * 1.2 + 0.3,
+        tw: Math.random() * 6.28, ts: 0.5 + Math.random() * 1.5,
+      });
+    }
   }
 
   resize() {
     const rect = this.canvas.getBoundingClientRect();
-    const w = Math.max(1, rect.width), h = Math.max(1, rect.height);
+    const w = Math.max(1, rect.width);
+    const h = Math.max(1, rect.height);
     this.canvas.width = Math.round(w * this.dpr);
     this.canvas.height = Math.round(h * this.dpr);
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     this.w = w; this.h = h;
-    this.draw(0);                            // paint once even when paused
+    this.cx = w / 2; this.cy = h / 2;
+    this.R = Math.min(w, h) * 0.27;
+    this.draw(0, 0.016);
   }
 
   setState(name) {
-    this.state = name || "idle";
-    $("#stage").classList.toggle("busy", this.state !== "idle");
-    const labels = { idle: "Ready", thinking: "Thinking", listening: "Listening", speaking: "Speaking" };
-    $("#stateLabel").textContent = labels[this.state] || "Ready";
+    this.state = ORB_STATES[name] ? name : "idle";
+    this.ampTarget = name === "speaking" ? 1 : 0;
+    const stage = $("#stage");
+    if (stage) stage.dataset.state = this.state;
   }
 
   start() {
     if (this.raf) return;
     const step = (now) => {
       this.raf = requestAnimationFrame(step);
-      const minGap = 1000 / this.fps;
-      if (now - this.last < minGap - 1) return;
+      const gap = 1000 / this.fps;
+      if (now - this.last < gap - 1.5) return;   /* frame skip = biggest single win */
+      const dt = Math.min((now - this.last) / 1000, 0.05);
       this.last = now;
       this.t += 0.016;
-      this.draw(this.t);
+      this.draw(this.t, dt);
     };
     this.raf = requestAnimationFrame(step);
   }
 
   stop() {
-    cancelAnimationFrame(this.raf);
+    if (this.raf) cancelAnimationFrame(this.raf);
     this.raf = 0;
   }
 
-  draw(t) {
-    const { ctx, w, h } = this;
+  draw(t, dt) {
+    const ctx = this.ctx;
+    const w = this.w, h = this.h, cx = this.cx, cy = this.cy, R = this.R;
     if (!w || !h) return;
-    ctx.clearRect(0, 0, w, h);
+    const s = ORB_STATES[this.state] || ORB_STATES.idle;
 
-    const speed = this.state === "thinking" ? 1.9 : this.state === "listening" ? 1.35 : 1;
-    const cx = w / 2, cy = h / 2;
-    const R = Math.min(w, h) * 0.34 * (this.state === "thinking" ? 1.02 : 1);
-    const tint = this.tint;
+    this.rot += dt * s.rot * 0.9;
+    this.heart += dt * (this.state === "listening" ? 5.2 : 1.6);
+    this.wave += dt * (this.state === "speaking" ? 9 : 2);
+    this.amp += (this.ampTarget - this.amp) * 0.08;
+    const breathe = 1 + Math.sin(this.heart) * 0.03 * s.pulse;
+    const ca = Math.cos(this.rot), sa = Math.sin(this.rot);
 
-    /* halo — one radial fill, cached colour stops */
-    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 1.35);
-    grad.addColorStop(0, `rgba(${tint.r},${tint.g},${tint.b},0.26)`);
-    grad.addColorStop(0.5, `rgba(${tint.r},${tint.g},${tint.b},0.07)`);
-    grad.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.fillStyle = grad;
+    /* clear in CSS units but sized to the backing store: a stale border of
+       pixels otherwise survives every resize (dpr scaling leaves it outside) */
+    ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+    /* ---- inner glow ---- */
+    const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 1.5 * breathe);
+    glow.addColorStop(0, `rgba(${CYAN},${(0.13 + 0.12 * s.pulse).toFixed(3)})`);
+    glow.addColorStop(0.55, `rgba(${CYAN},${(0.04 + 0.04 * s.pulse).toFixed(3)})`);
+    glow.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = glow;
     ctx.beginPath();
-    ctx.arc(cx, cy, R * 1.35, 0, Math.PI * 2);
+    ctx.arc(cx, cy, R * 1.5 * breathe, 0, 6.2832);
     ctx.fill();
 
-    /* the glowing core: this is what makes it read as a hologram, not a dot cloud */
-    const pulse = 1 + 0.045 * Math.sin(t * 2.1);
-    const core = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 0.7 * pulse);
-    core.addColorStop(0, "rgba(214,250,255,0.60)");
-    core.addColorStop(0.32, `rgba(${tint.r},${tint.g},${tint.b},0.30)`);
-    core.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.fillStyle = core;
+    ctx.save();
+    ctx.translate(cx, cy);
+
+    /* ---- orbit rings + orbiting ticks ---- */
+    for (const [rr, spd, tilt, seg] of [[1.18, 0.9, 0.45, 2], [1.34, -0.6, -0.30, 1], [1.50, 0.35, 0.18, 3]]) {
+      const squash = Math.abs(0.30 + tilt * 0.18);
+      ctx.save();
+      ctx.rotate(t * spd * 0.2);
+      ctx.strokeStyle = `rgba(34,211,238,${(0.24 * s.ring).toFixed(3)})`;
+      ctx.lineWidth = 1.1;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, R * rr, R * rr * squash, tilt, 0, 6.2832);
+      ctx.stroke();
+      ctx.fillStyle = "rgba(148,236,255,.8)";
+      for (let i = 0; i < seg; i++) {
+        const a = t * spd + (i * 6.2832) / seg;
+        ctx.beginPath();
+        ctx.arc(Math.cos(a) * R * rr, Math.sin(a) * R * rr * squash, 1.9, 0, 6.2832);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    /* ---- latitude wireframe (front half only, for depth) ---- */
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = `rgba(${CYAN},${(0.24 + 0.10 * s.pulse).toFixed(3)})`;
+    for (const ly of [-0.52, -0.26, 0, 0.26, 0.52]) {
+      const lr = Math.sqrt(Math.max(0, 1 - ly * ly));
+      ctx.beginPath();
+      let started = false;
+      for (let a = 0; a <= 6.29; a += 0.22) {
+        const x0 = Math.cos(a) * lr;
+        const z0 = Math.sin(a) * lr;
+        const rx = x0 * ca - z0 * sa;
+        const rz = x0 * sa + z0 * ca;
+        if (rz <= 0) { started = false; continue; }
+        const sc = PERSP / (PERSP + rz);
+        const px = rx * R * sc * breathe;
+        const py = ly * R * sc * breathe;
+        if (started) ctx.lineTo(px, py); else ctx.moveTo(px, py);
+        started = true;
+      }
+      ctx.stroke();
+    }
+
+    /* ---- particles ---- */
+    const N = this.pts.length;
+    for (let i = 0; i < N; i++) {
+      const p = this.pts[i];
+      let x = p.x * ca - p.z * sa;
+      let z = p.x * sa + p.z * ca;
+      let y = p.y;
+      if (this.state === "speaking") {
+        const d = 1 + Math.sin(this.wave + y * 7 + i * 0.13) * 0.055 * Math.max(this.amp, 0.2);
+        x *= d; y *= d; z *= d;
+      } else if (this.state === "thinking") {
+        x += Math.sin(this.wave * 3 + i) * 0.012;
+        z += Math.cos(this.wave * 3 + i * 1.7) * 0.012;
+      }
+      const sc = PERSP / (PERSP + z);
+      const px = cx + x * R * sc * breathe;
+      const py = cy + y * R * sc * breathe;
+      const size = clamp(sc * 1.7, 0.4, 2.4);
+      const alpha = clamp((sc - 0.55) * 1.6, 0.06, 0.95) * (0.55 + 0.45 * s.pulse);
+      ctx.fillStyle = `rgba(${s.tint},${alpha.toFixed(3)})`;
+      ctx.beginPath();
+      ctx.arc(px, py, size, 0, 6.2832);
+      ctx.fill();
+    }
+
+    /* ---- nucleus: halo, hot core, streak, ghost points ----
+       already inside the translate(cx, cy) above — a second one put the whole
+       core in the bottom-right corner of the canvas */
+    ctx.save();
+    const nl = 0.5 + 0.5 * Math.sin(this.heart * 1.3);
+    const nr = R * 0.42 + nl * R * 0.08;
+    const ng = ctx.createRadialGradient(0, 0, 0, 0, 0, nr);
+    ng.addColorStop(0, `rgba(200,252,255,${(0.42 + 0.30 * nl).toFixed(3)})`);
+    ng.addColorStop(0.5, `rgba(${CYAN},0.20)`);
+    ng.addColorStop(1, "rgba(103,232,249,0)");
+    ctx.fillStyle = ng;
     ctx.beginPath();
-    ctx.arc(cx, cy, R * 0.7 * pulse, 0, Math.PI * 2);
+    ctx.arc(0, 0, nr, 0, 6.2832);
     ctx.fill();
 
-    const cosA = Math.cos(t * 0.22 * speed), sinA = Math.sin(t * 0.22 * speed);
-    const cosB = Math.cos(t * 0.13 * speed), sinB = Math.sin(t * 0.13 * speed);
-
-    for (let i = 0; i < this.points.length; i++) {
-      const p = this.points[i];
-      /* rotate y, then x */
-      let x = p.x * cosA - p.z * sinA;
-      let z = p.x * sinA + p.z * cosA;
-      let y = p.y * cosB - z * sinB;
-      z = p.y * sinB + z * cosB;
-
-      const depth = (z + 1) / 2;             // 0 far … 1 near
-      const scale = 0.55 + depth * 0.75;
-      const px = cx + x * R * scale;
-      const py = cy + y * R * scale;
-      const alpha = 0.12 + depth * 0.66;
-      const size = p.s * (0.7 + depth * 1.1);
-
-      ctx.fillStyle = `rgba(${tint.r},${tint.g},${tint.b},${alpha.toFixed(3)})`;
-      ctx.fillRect(px, py, size, size);
-    }
-
-    /* orbit ring — a single stroke */
+    ctx.fillStyle = `rgba(232,253,255,${(0.72 + 0.24 * nl).toFixed(3)})`;
     ctx.beginPath();
-    const rr = R * 1.14;
-    for (let a = 0; a <= 64; a++) {
-      const ang = (a / 64) * Math.PI * 2;
-      const x = cx + Math.cos(ang) * rr;
-      const y = cy + Math.sin(ang) * rr * 0.34;
-      a === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    ctx.arc(0, 0, R * 0.055 + nl * R * 0.02, 0, 6.2832);
+    ctx.fill();
+
+    ctx.fillStyle = `rgba(${CYAN},${(0.05 + 0.04 * nl).toFixed(3)})`;
+    ctx.fillRect(-R * 1.7, -1, R * 3.4, 2);
+    for (const g of [[0.38, 2.1, 0.10], [0.62, 1.3, 0.08], [-0.45, 1.7, 0.07]]) {
+      ctx.fillStyle = `rgba(150,238,255,${(g[2] * (0.6 + 0.4 * nl)).toFixed(3)})`;
+      ctx.beginPath();
+      ctx.arc(g[0] * R, 0, g[1], 0, 6.2832);
+      ctx.fill();
     }
-    ctx.closePath();
-    ctx.strokeStyle = `rgba(${tint.r},${tint.g},${tint.b},0.22)`;
-    ctx.lineWidth = 1.2;
-    ctx.stroke();
+
+    /* ---- state flourishes ---- */
+    if (this.state === "listening") {
+      for (let k = 0; k < 3; k++) {
+        const prog = (this.heart * 0.6 + k / 3) % 1;
+        ctx.strokeStyle = `rgba(${CYAN},${(0.42 * (1 - prog)).toFixed(3)})`;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(0, 0, R * (1 + prog * 0.5), 0, 6.2832);
+        ctx.stroke();
+      }
+    } else if (this.state === "speaking") {
+      const amp = Math.max(this.amp, 0.12);
+      ctx.strokeStyle = "rgba(160,240,255,.7)";
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      for (let a = 0; a <= 6.3; a += 0.09) {
+        const rr = R * 1.05 + Math.sin(a * 9 + this.wave * 2.2) * 8 * amp + Math.sin(a * 23 - this.wave * 3.1) * 4 * amp;
+        const x = Math.cos(a) * rr;
+        const y = Math.sin(a) * rr;
+        if (a) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+      }
+      ctx.closePath();
+      ctx.stroke();
+    }
+    ctx.restore();   /* nucleus */
+    ctx.restore();   /* the translate(cx, cy) opened before the rings — without
+                        this the transform accumulates every frame and the whole
+                        hologram drifts into the bottom-right corner */
+
+    /* ---- faint starfield (desktop only) ---- */
+    for (const st of this.sky) {
+      const a = 0.10 + 0.22 * (0.5 + 0.5 * Math.sin(t * st.ts + st.tw));
+      ctx.fillStyle = `rgba(170,220,255,${a.toFixed(3)})`;
+      ctx.fillRect(st.x * w, st.y * h, st.r, st.r);
+    }
   }
 }
 
 const orb = new Orb($("#orb"));
-orb.setState("idle");
+const ORB_LABELS = { idle: "Ready", thinking: "Thinking", listening: "Listening", speaking: "Speaking" };
+function setOrbState(name) {
+  orb.setState(name);
+  const label = $("#stateLabel");
+  if (label && !label.dataset.pinned) label.textContent = ORB_LABELS[orb.state] || "Ready";
+}
 
 /* ================================================================ transcript = */
 const transcript = $("#transcript");
@@ -877,11 +1012,20 @@ class AuraSocket {
     switch (msg.type) {
       case "ready":
         setLink(true);
+        if (!liveBubble) setOrbState("idle");   /* clears the initial "Connecting" */
         break;
       case "state":
-        orb.setState(msg.name);
+        setOrbState(msg.name);
         if (msg.name === "listening") liveBubble = null;
         break;
+      case "tool": {
+        /* the model decided to look something up — say so instead of going quiet */
+        const busy = { now: "Checking the clock", web_search: "Searching the web", read_page: "Reading a page" };
+        const label = $("#stateLabel");
+        if (label) label.textContent = (busy[msg.name] || "Working") + "…";
+        setOrbState("thinking");
+        break;
+      }
       case "transcript":
         addMessage(msg.text, "user");
         break;
@@ -894,7 +1038,7 @@ class AuraSocket {
         finishBubble(`${msg.provider || "aura"} · ${msg.latency_ms || 0} ms`);
         if (msg.provider) $("#providerLabel").textContent = msg.provider;
         if (cfg.voice && bubble) speak(bubble.textContent);
-        orb.setState("idle");
+        setOrbState("idle");
         break;
       }
       case "audio":
@@ -902,7 +1046,7 @@ class AuraSocket {
         break;
       case "error":
         toast(msg.message || "Something went wrong");
-        orb.setState("idle");
+        setOrbState("idle");
         break;
       default:
         break;
@@ -961,6 +1105,8 @@ function speak(text) {
   utter.pitch = 1.0;
   utter.lang = /[\u0900-\u097F]/.test(text) ? "hi-IN" : "en-IN";
   speechSynthesis.cancel();
+  utter.onstart = () => setOrbState("speaking");
+  utter.onend = () => setOrbState("idle");
   speechSynthesis.speak(utter);
 }
 
@@ -1091,7 +1237,7 @@ function submit() {
   autosize();
   $("#sendBtn").disabled = true;
   liveBubble = null;
-  orb.setState("thinking");
+  setOrbState("thinking");
 
   if (images.length) {
     const data = images[0].dataUrl.split(",")[1] || "";
@@ -1132,13 +1278,13 @@ $("#micBtn").addEventListener("click", async (e) => {
     micStream = null;
     btn.setAttribute("aria-pressed", "false");
     btn.classList.remove("rec");
-    orb.setState("thinking");
+    setOrbState("thinking");
   };
 
   mediaRecorder.start(250);
   btn.setAttribute("aria-pressed", "true");
   btn.classList.add("rec");
-  orb.setState("listening");
+  setOrbState("listening");
 });
 
 /* ===================================================================== camera */
@@ -1505,7 +1651,7 @@ $("#clearBtn").addEventListener("click", () => {
   transcript.innerHTML = "";
   liveBubble = null;
   stage.classList.remove("chatting");
-  orb.setState("idle");
+  setOrbState("idle");
   closeSheet("settingsSheet");
   toast("Chat cleared");
 });

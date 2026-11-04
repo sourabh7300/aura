@@ -91,7 +91,11 @@ async def main() -> None:
     check("redact hides bearer tokens", "sk-secret" not in redact("Authorization: Bearer sk-secret123456"))
 
     health = search_health()
-    check("health never exposes key material", set(health) == {"configured", "keys", "cooling", "dead"}, health)
+    check(
+        "health never exposes key material",
+        set(health) == {"configured", "keys", "cooling", "dead", "cached"},
+        health,
+    )
 
     if not os.environ.get("TAVILY_API_KEY"):
         skip("live search", "no TAVILY_API_KEY in env or .env")
@@ -109,6 +113,9 @@ async def main() -> None:
                 first,
             )
         check("no key leaked into the result", "api_key" not in str(result).lower(), result)
+
+        again = await web_search("India cricket next match", topic="news", days=7, max_results=3)
+        check("a repeated query is served from cache", again.get("cached") is True, again.get("cached"))
 
         page = await read_page("https://example.com")
         check("read_page returns text", bool(page.get("ok")) and len(page.get("text", "")) > 40, page)
