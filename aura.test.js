@@ -245,7 +245,9 @@ suite("Voice master switch", () => {
   ok("no record → speaks by default (voice ON out of the box)", makeFn(makeLS(null))() === true);
   ok("VOICE ON → speaks", makeFn(makeLS("granted"))() === true);
   ok("VOICE OFF → total silence", makeFn(makeLS("denied"))() === false);
-  ok("speak() itself refuses when OFF — nothing can bypass", /if\(!synth\|\|!soundOn\|\|!canAutoSpeak\(\)\)\{return\}/.test(src));
+  /* the guard changed shape (the neural lane may speak even when the device has no
+     speechSynthesis) — what must never change is that OFF still refuses at the source */
+  ok("speak() itself refuses when OFF — nothing can bypass", /if\(!soundOn\|\|!canAutoSpeak\(\)\)\{__voiceOffNotice\(\);return\}/.test(src) && /if\(!synth&&!__neuralVoice\)\{return\}/.test(src));
   ok("single VOICE button toggles the switch", /vb\.onclick=\(\)=>\{setVoiceConsent\(!soundOn\)/.test(src));
   ok("typed questions speak too — no session gate inside speak()", (function () {
     const sb = src.match(/function speak\(t\)\{[\s\S]*?\n\}/);
