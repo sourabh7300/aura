@@ -327,7 +327,11 @@ function mkDeps(over) {
     const ap2 = auto.createAutopilot(d2);
     await ap2.tick({});
     const r2 = await ap2.tick({});
-    ok("daily cycle budget is enforced", r2.skipped === "daily cycle budget reached (1/1)", r2.skipped);
+    /* a spent budget is a FREE maintenance cycle now (4 Nov 2026): the sweep, world
+       watch and report still run so the squad never looks dead, but no model call is
+       made, no mission is built, nothing ships and the counter stays at the budget */
+    ok("daily cycle budget is enforced", r2.ok === true && r2.cycle && r2.cycle.budget === "spent" && d2.calls.commit.length === 1 && d2.store.state.cyclesToday === 1, JSON.stringify({ skipped: r2.skipped, budget: r2.cycle && r2.cycle.budget, commits: d2.calls.commit.length, cycles: d2.store.state.cyclesToday }));
+    ok("the spent budget is named in the squad log", (d2.store.state.log || []).some(l => /daily cycle budget reached \(1\/1\)/.test(l.msg || "")), (d2.store.state.log || []).map(l => l.msg).slice(-3).join(" | "));
     const r2f = await ap2.tick({ force: true });
     ok("admin force overrides the budget", r2f.ok === true && !r2f.skipped);
 
@@ -731,7 +735,7 @@ suite("Autonomy clock + source lane — the squad works with nobody watching", (
   /* /health went synchronous (a deploy must never wait on a web search); the probe
      result is cached and served straight from memory, and a warmer keeps it fresh */
   ok("real sources are provable from /health (cached)", srv.indexOf("async function researchProbe") >= 0 && srv.indexOf("research: researchProbeCache") >= 0 && srv.indexOf("300_000") >= 0 && srv.indexOf("setInterval(warmHealth") >= 0);
-  ok("the panel shows the live clock + source lane", ui.indexOf("clock CHALU") >= 0 && ui.indexOf("st.sourceLane") >= 0);
+  ok("the panel shows the live clock + source lane", ui.indexOf("clock RUNNING") >= 0 && ui.indexOf("clock STOPPED") >= 0 && ui.indexOf("st.sourceLane") >= 0);
 
   /* the brain lane: capacity, token diet, honest failure reason */
   ok("the mission call reserves a thin budget, not 16k tokens", /d\.brain\(\[\{ role: "system", content: AUTOPILOT_ENGINEER_PROMPT \}[\s\S]{0,80}\], 4000\)/.test(auto));
