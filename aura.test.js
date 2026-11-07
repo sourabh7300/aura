@@ -300,9 +300,15 @@ suite("Microphone lane (laptop + mobile)", () => {
 suite("System messages stay visible on phones", () => {
   const ps = src.match(/function pushSys\(t\)\{[\s\S]*?\n\}/);
   if (!ps) return skipSuite("  [pushSys]");
-  function run(hidden) {
+  function run(hidden, phone) {
     const toasts = [];
-    const doc = { getElementById: () => ({ getBoundingClientRect: () => ({ width: hidden ? 0 : 300, height: hidden ? 0 : 200 }) }) };
+    /* the phone layout keeps a big log BOX but renders sys text into a collapsed node,
+       so the phone case must toast even though the box measures fine */
+    const doc = {
+      getElementById: () => ({ getBoundingClientRect: () => ({ width: hidden ? 0 : 300, height: hidden ? 0 : 200 }), children: [] }),
+      body: { className: phone ? "m-mobile m-phone" : "theme-deck" },
+      documentElement: { className: phone ? "m-phone" : "" },
+    };
     const style = () => ({ display: hidden ? "none" : "flex" });
     const win = { auraToast: (m, t) => toasts.push(t) };
     new Function("addMsg", "slog", "document", "getComputedStyle", "window", ps[0] + "\npushSys('mic blocked');")(
@@ -311,7 +317,8 @@ suite("System messages stay visible on phones", () => {
     return toasts;
   }
   ok("hidden system log → the message also shows as a toast", run(true).length === 1 && run(true)[0] === "warn");
-  ok("visible system log → no duplicate toast", run(false).length === 0);
+  ok("phone layout → toasts even when the log box measures big", run(false, true).length === 1);
+  ok("desktop with a visible log → no duplicate toast", run(false, false).length === 0);
 });
 
 console.log("\n────────────────────────────");
