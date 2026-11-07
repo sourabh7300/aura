@@ -289,6 +289,8 @@ suite("Microphone lane (laptop + mobile)", () => {
   ok("mic busy in another app is named as such", /busy/.test(problem({ name: "NotReadableError" })));
   ok("unplugged mic stops the take politely", /tr\.onended=function\(\)/.test(av));
   ok("a socket that never opens says so once", /voice server did not answer/.test(av) && /const wsWarn=setTimeout/.test(av));
+  /* a dead socket used to leave busy=true forever → every tap answered "one moment" */
+  ok("a stale transcribing flag cannot lock the mic", /if\(!ws\|\|ws\.readyState!==1\)\{busy=false\}/.test(av));
   /* iPhone Safari has no SpeechRecognition — the VOICE MODE button must still listen */
   const av2 = src.slice(src.indexOf("window.AuraLive=(function(){"), src.indexOf("window.AuraEco=(function(){"));
   const earStart = av2.slice(av2.indexOf("function start(){"), av2.indexOf("function stop(){"));
