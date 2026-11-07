@@ -297,6 +297,23 @@ suite("Microphone lane (laptop + mobile)", () => {
   ok("VOICE MODE without SpeechRecognition hands the mic to the HD lane", /if\(!SR\)\{[\s\S]*AuraVoice\.start\(\)/.test(earStart));
 });
 
+suite("System messages stay visible on phones", () => {
+  const ps = src.match(/function pushSys\(t\)\{[\s\S]*?\n\}/);
+  if (!ps) return skipSuite("  [pushSys]");
+  function run(hidden) {
+    const toasts = [];
+    const doc = { getElementById: () => ({ getBoundingClientRect: () => ({ width: hidden ? 0 : 300, height: hidden ? 0 : 200 }) }) };
+    const style = () => ({ display: hidden ? "none" : "flex" });
+    const win = { auraToast: (m, t) => toasts.push(t) };
+    new Function("addMsg", "slog", "document", "getComputedStyle", "window", ps[0] + "\npushSys('mic blocked');")(
+      () => {}, () => {}, doc, style, win
+    );
+    return toasts;
+  }
+  ok("hidden system log → the message also shows as a toast", run(true).length === 1 && run(true)[0] === "warn");
+  ok("visible system log → no duplicate toast", run(false).length === 0);
+});
+
 console.log("\n────────────────────────────");
 console.log("pass " + pass + " · fail " + fail + " · skipped-suites " + skip);
 process.exit(fail ? 1 : 0);
