@@ -272,6 +272,29 @@ suite("Per-persona voice selection", () => {
   ok("Hindi path returns a Hindi voice", (t(true) || {}).name === undefined); // no hi voice in fake set → null tolerated
 });
 
+suite("Microphone lane (laptop + mobile)", () => {
+  const av = src.slice(src.indexOf("window.AuraVoice=(function(){"), src.indexOf("window.AuraEco=(function(){"));
+  if (!av) return skipSuite("  [HD mic]");
+  /* iOS Safari only unlocks an AudioContext inside the tap: creating it after the
+     getUserMedia await leaves it suspended, the recorder never sends a frame and the
+     user sees a listening mic that catches nothing — with no error anywhere */
+  const ctxAt = av.indexOf("new (window.AudioContext||window.webkitAudioContext)()");
+  const micAt = av.indexOf("stream=await openMic()");
+  ok("audio context is created before the mic is requested (iOS tap rule)", ctxAt > -1 && micAt > -1 && ctxAt < micAt, ctxAt + "/" + micAt);
+  ok("mic request retries without constraints when a phone rejects them", /getUserMedia\(\{audio:true\}\)/.test(av));
+  const mp = av.match(/function micProblem\(e\)\{[\s\S]*?\n  \}/);
+  const problem = new Function("e", mp[0] + "\nreturn micProblem(e);");
+  ok("blocked mic explains the padlock, never a raw error", /padlock/.test(problem({ name: "NotAllowedError" })));
+  ok("no microphone found is named as such", /no microphone found/.test(problem({ name: "NotFoundError" })));
+  ok("mic busy in another app is named as such", /busy/.test(problem({ name: "NotReadableError" })));
+  ok("unplugged mic stops the take politely", /tr\.onended=function\(\)/.test(av));
+  ok("a socket that never opens says so once", /voice server did not answer/.test(av) && /const wsWarn=setTimeout/.test(av));
+  /* iPhone Safari has no SpeechRecognition — the VOICE MODE button must still listen */
+  const av2 = src.slice(src.indexOf("window.AuraLive=(function(){"), src.indexOf("window.AuraEco=(function(){"));
+  const earStart = av2.slice(av2.indexOf("function start(){"), av2.indexOf("function stop(){"));
+  ok("VOICE MODE without SpeechRecognition hands the mic to the HD lane", /if\(!SR\)\{[\s\S]*AuraVoice\.start\(\)/.test(earStart));
+});
+
 console.log("\n────────────────────────────");
 console.log("pass " + pass + " · fail " + fail + " · skipped-suites " + skip);
 process.exit(fail ? 1 : 0);
