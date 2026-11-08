@@ -6,7 +6,7 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Every HTML file must be a complete document
         run: |
           fail=0
@@ -52,7 +52,11 @@ jobs:
             for (const f of files) {
               const text = fs.readFileSync(".github/workflows/" + f, "utf8");
               if (!/^name:/m.test(text) || !/^on:/m.test(text) || !/^jobs:/m.test(text)) { console.log("✗ " + f + " missing name/on/jobs"); bad = 1; }
-              if (text.includes("actions/checkout@v3")) { console.log("✗ " + f + " pins a retired actions/checkout"); bad = 1; }
+              // build the needles at runtime so this step cannot match itself
+              const retired = ["actions/checkout@v" + "3", "actions/checkout@v" + "4"];
+              for (const needle of retired) {
+                if (text.includes(needle)) { console.log("✗ " + f + " pins " + needle + " (Node 20 runtime, deprecated)"); bad = 1; }
+              }
             }
             console.log(files.length + " workflow file(s) checked");
             process.exit(bad);
