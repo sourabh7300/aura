@@ -31,12 +31,22 @@ function slice(srcObj, startSentinel, endSentinel) {
 suite("SW offline app shell", () => {
   ok("shell precache list installs aura.html", /SHELL_ASSETS\s*=\s*\[[\s\S]*'\.\/aura\.html'/.test(sw));
   ok("navigation requests answered cache-first", /isShell/.test(sw) && /caches\.open\(CACHE\)/.test(sw) && /c\.match\('aura\.html'/.test(sw.replace(/c\.match\('\.\/aura\.html'/g, "c.match('aura.html'")));
-  ok("background refresh keeps the shell current", /stale-while-revalidate/.test(sw) || /fetch\('\.\/aura\.html', \{ cache: 'reload' \}\)/.test(sw));
+  /* v4 moved navigations to NETWORK-FIRST (a fresh deploy must win on the next load)
+     while the cached shell still answers when the network is gone. Assert THAT intent,
+     not the retired stale-while-revalidate loop. */
+  ok(
+    "fresh build wins while online, cached shell answers offline",
+    /NAVIGATION — NETWORK-FIRST/.test(sw) &&
+      sw.includes("c.put(new Request('./aura.html')") &&
+      /c\.match\('aura\.html', \{ ignoreSearch: true \}\)/.test(sw),
+    "navigation must fetch the network first, refresh the cached shell, and fall back to it offline"
+  );
   ok("same-origin GETs are runtime-cached", /url\.origin === location\.origin/.test(sw));
   ok("cross-origin network-first with cache fallback", /network-first with cache fallback/.test(sw));
   ok("last-resort offline page for uncached navigations", /offline — shell not cached yet/.test(sw));
   ok("old caches swept on activate", sw.includes("caches.keys()") && sw.includes("caches.delete"));
   ok("cache is versioned", /aura-shell-v\d/.test(sw));
+  ok("install precaches with cache:'reload' (no edge-cached shell)", /cache: 'reload'/.test(sw));
   ok("keep-warm ping preserved", sw.includes("/v1/ping") && sw.includes("240000"));
 });
 

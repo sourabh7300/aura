@@ -1,15 +1,24 @@
 name: Mirror AURA build -> portfolio site
 
 # The portfolio repo (sourabh7300.github.io) serves three copies of this build:
-# /aura.html, /aura/aura.html and /aura/index.html. Until now they were copied by
-# hand (sync-both.cmd), which is exactly how a live site drifts behind the app.
-# This mirrors every approved aura.html push into all three, automatically.
+# /aura.html, /aura/aura.html and /aura/index.html — plus the service worker and
+# manifest that live next to them. Until now they were copied by hand
+# (sync-both.cmd), which is exactly how a live site drifts behind the app.
+# This mirrors every approved push into all of them, automatically.
+#
+# HISTORY (8 Nov 2026): the job used to report SUCCESS while doing nothing whenever
+# PORTFOLIO_TOKEN was missing — the gate step skipped the only step that mattered,
+# so a green run proved nothing. Two repairs: the skip path now checks the live
+# copies and says out loud whether they match, and the mirror path ends by waiting
+# until the published files really carry this build (no more "pushed, therefore done").
 
 on:
   push:
     branches: [main]
     paths:
       - aura.html
+      - sw.js
+      - manifest.webmanifest
   workflow_dispatch:
 
 permissions:
@@ -37,6 +46,23 @@ jobs:
             echo "ok=true" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Without a token, at least report whether the live copies match
+        if: steps.gate.outputs.ok != 'true'
+        run: |
+          set -uo pipefail
+          want=$(sha256sum aura.html | cut -d' ' -f1)
+          drift=0
+          for target in "https://sourabh7300.github.io/aura.html" "https://sourabh7300.github.io/aura/aura.html" "https://sourabh7300.github.io/aura/"; do
+            live=$(curl -fsSL --max-time 60 "$target?cb=$(date -u +%s%N)" | sha256sum | cut -d' ' -f1 || echo none)
+            if [ "$live" = "$want" ]; then
+              echo "✓ $target carries this build"
+            else
+              echo "::warning title=Live copy is behind::$target does not carry the current aura.html — add PORTFOLIO_TOKEN to let this bot mirror it, or run the local deploy."
+              drift=1
+            fi
+          done
+          [ "$drift" = "0" ] && echo "live copies are in step with main" || true
+
       - name: Mirror into all three served paths
         if: steps.gate.outputs.ok == 'true'
         env:
@@ -49,12 +75,37 @@ jobs:
           cp aura.html site/aura.html
           cp aura.html site/aura/aura.html
           cp aura.html site/aura/index.html
+          cp sw.js site/aura/sw.js
+          cp manifest.webmanifest site/aura/manifest.webmanifest
           cd site
           if git diff --quiet; then
             echo "::notice title=Portfolio already in sync::nothing to mirror"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          git add aura.html aura/aura.html aura/index.html
+          git add aura.html aura/aura.html aura/index.html aura/sw.js aura/manifest.webmanifest
           git commit -m "Mirror AURA build $(date -u +%Y-%m-%dT%H:%MZ)"
           git push origin HEAD:main
-          echo "mirrored aura.html into the portfolio repo"
+          echo "mirrored aura.html + sw.js + manifest into the portfolio repo"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+        id: push
+
+      # A push made with a PAT does trigger Pages, but propagation still takes a
+      # minute — so a green run means "the live site serves this exact build", not
+      # merely "git accepted the commit".
+      - name: Published copies must carry this build
+        if: steps.gate.outputs.ok == 'true'
+        run: |
+          set -uo pipefail
+          want=$(sha256sum aura.html | cut -d' ' -f1)
+          for i in $(seq 1 24); do
+            fail=0
+            for target in "https://sourabh7300.github.io/aura.html" "https://sourabh7300.github.io/aura/aura.html" "https://sourabh7300.github.io/aura/"; do
+              live=$(curl -fsSL --max-time 90 "$target?cb=$(date -u +%s%N)" | sha256sum | cut -d' ' -f1 || echo none)
+              [ "$live" = "$want" ] || { echo "[$i] $target still serves ${live:0:12}"; fail=1; }
+            done
+            if [ "$fail" = "0" ]; then echo "✓ all three published paths serve this build"; exit 0; fi
+            sleep 15
+          done
+          echo "::error title=Pages did not pick the mirror up::the commit is in the portfolio repo but the live paths still serve an older build after 6 minutes — check the repo's Pages deployment."
+          exit 1
