@@ -2,6 +2,8 @@ name: Keep-alive — Render backend warm
 on:
   schedule:
     # Every 9 minutes — Render's free tier spins the service down after 15 min idle.
+    # GitHub throttles high-frequency crons (observed: one run every 3-6 hours), so this
+    # lane must make each run COUNT instead of assuming the schedule is honest.
   - cron: "*/9 * * * *"
   workflow_dispatch:
 permissions:
@@ -13,15 +15,28 @@ jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping /health to keep the backend awake
+      - name: Ping /health until the backend answers (cold start can take a minute)
+        # A free-tier instance that has been asleep needs time to boot; one 60s attempt
+        # used to turn that into a red run and an email. Three attempts, and the job only
+        # fails when the service is genuinely down.
         run: |
-          code=$(curl -s -o /tmp/health.json -w '%{http_code}' -m 60 https://aura-backend-jomj.onrender.com/health)
-          echo "GET /health → $code"
-          if [ "$code" = "200" ]; then
-            echo "backend warm:"
-            head -c 300 /tmp/health.json; echo
-          else
-            echo "backend not healthy — payload:"
-            head -c 400 /tmp/health.json || true
+          set -uo pipefail
+          ok=0
+          for attempt in 1 2 3; do
+            code=$(curl -s -o /tmp/health.json -w '%{http_code}' -m 90 https://aura-backend-jomj.onrender.com/health || echo 000)
+            echo "attempt $attempt: GET /health → $code"
+            if [ "$code" = "200" ]; then ok=1; break; fi
+            head -c 300 /tmp/health.json 2>/dev/null; echo
+            sleep 20
+          done
+          if [ "$ok" != "1" ]; then
+            echo "::error title=Backend is down::/health did not answer 200 in three attempts (~4 minutes) — Render service may have crashed, not merely slept."
             exit 1
           fi
+          echo "backend warm:"
+          head -c 400 /tmp/health.json; echo
+          node -e '
+            let j; try { j = require("/tmp/health.json"); } catch (e) { process.exit(0); }
+            const s = j.squad && j.squad.clock;
+            console.log("version:", j.version || "?", "| uptime(s):", Math.round(j.uptime || 0), "| squad clock:", s ? (s.running ? "alive every " + s.everyMinutes + " min" : "DOWN") : "n/a");
+          ' || true
