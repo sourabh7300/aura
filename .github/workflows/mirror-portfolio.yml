@@ -77,13 +77,22 @@ jobs:
           cp aura.html site/aura/index.html
           cp sw.js site/aura/sw.js
           cp manifest.webmanifest site/aura/manifest.webmanifest
+          # the manifest points at these by name, so a missing PNG is a broken install
+          cp manifest.webmanifest site/manifest.webmanifest
+          for icon in icon-192.png icon-512.png apple-touch-icon.png; do
+            [ -f "$icon" ] || { echo "::error::$icon missing from the repo"; exit 1; }
+            cp "$icon" "site/$icon"
+            cp "$icon" "site/aura/$icon"
+          done
           cd site
           if git diff --quiet; then
             echo "::notice title=Portfolio already in sync::nothing to mirror"
             echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          git add aura.html aura/aura.html aura/index.html aura/sw.js aura/manifest.webmanifest
+          git add aura.html aura/aura.html aura/index.html aura/sw.js aura/manifest.webmanifest \
+            manifest.webmanifest icon-192.png icon-512.png apple-touch-icon.png \
+            aura/icon-192.png aura/icon-512.png aura/apple-touch-icon.png
           git commit -m "Mirror AURA build $(date -u +%Y-%m-%dT%H:%MZ)"
           git push origin HEAD:main
           echo "mirrored aura.html + sw.js + manifest into the portfolio repo"
@@ -103,6 +112,10 @@ jobs:
             for target in "https://sourabh7300.github.io/aura.html" "https://sourabh7300.github.io/aura/aura.html" "https://sourabh7300.github.io/aura/"; do
               live=$(curl -fsSL --max-time 90 "$target?cb=$(date -u +%s%N)" | sha256sum | cut -d' ' -f1 || echo none)
               [ "$live" = "$want" ] || { echo "[$i] $target still serves ${live:0:12}"; fail=1; }
+            done
+            for asset in icon-192.png icon-512.png apple-touch-icon.png manifest.webmanifest; do
+              code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 60 "https://sourabh7300.github.io/aura/$asset?cb=$(date -u +%s%N)")
+              [ "$code" = "200" ] || { echo "[$i] aura/$asset → HTTP $code"; fail=1; }
             done
             if [ "$fail" = "0" ]; then echo "✓ all three published paths serve this build"; exit 0; fi
             sleep 15
