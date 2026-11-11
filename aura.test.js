@@ -319,6 +319,24 @@ suite("System messages stay visible on phones", () => {
   ok("telemetry stays quiet (no toast for boot timings)", run(false, "boot 20ms").length === 0);
 });
 
+/* ================= CHAT STAGE CONTRACT (11 Nov 2026 blank-stage bug) =================
+   The v6 shell counted and styled ".bmsg", while the stage renders ".msg user" /
+   ".msg aura". The app therefore believed every chat was empty: it hid #log, so
+   sent messages and replies stayed invisible even though the send path worked.
+   These gates pin the class contract and the "hero only when empty" rule. */
+suite("Chat stage stays visible after a turn (blank-stage regression)", () => {
+  const v6 = (src.match(/<style id="aura-inner-v6-final">([\s\S]*?)<\/style>/) || [])[1] || "";
+  if (!v6) return skipSuite("  [v6 shell]");
+  ok("the stage still renders .msg + cls", /d\.className="msg "\+cls/.test(src));
+  const counts = src.match(/querySelectorAll\("\.msg:not\(\.sys\),\.bmsg:not\(\.sys\)"\)/g) || [];
+  ok("empty state counts the real message class (both call sites)", counts.length >= 2, counts.length + " call site(s)");
+  ok("#log is hidden only for the empty state", /body\[data-empty="1"\] #log\{display:none!important\}/.test(v6));
+  ok("no second, unconditional #log hide in the v6 layer", (v6.match(/#log\{display:none/g) || []).length === 1);
+  ok("welcome hero steps aside once a turn exists", /body\[data-empty="0"\] #stageEmpty\{display:none!important\}/.test(v6));
+  ok("reference type is pinned to .msg.aura", /#log \.msg\.aura\{/.test(v6));
+  ok("reference bubble is pinned to .msg.user", /#log \.msg\.user\{/.test(v6));
+});
+
 console.log("\n────────────────────────────");
 console.log("pass " + pass + " · fail " + fail + " · skipped-suites " + skip);
 process.exit(fail ? 1 : 0);
