@@ -19,7 +19,7 @@ services:
       - key: RATE_LIMIT
         value: "30"
       - key: ALLOW_ORIGINS
-        value: "https://sourabh7300.github.io"
+        value: "https://sourabh7300.github.io,https://anna.partners,https://www.anna.partners"
       - key: SECRET
         sync: false          # optional private gate key — owner tools present it as X-AURA-Key
       # REAL SEARCH (29 Oct 2026): with one of these set, every "latest …" question is

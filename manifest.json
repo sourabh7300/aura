@@ -1,0 +1,45 @@
+{
+  "schema": 4,
+  "system_prompt_addendum": "When the user wants to use AURA or launch the 3D holographic AI assistant, open the main view via open_app_view('main').",
+  "ui": {
+    "bundle": {
+      "format": "static-spa",
+      "entry": "index.html",
+      "external_origins": [
+        "https://aura-backend-jomj.onrender.com",
+        "https://fonts.googleapis.com",
+        "https://fonts.gstatic.com",
+        "https://www.gstatic.com",
+        "https://unpkg.com"
+      ]
+    },
+    "views": [
+      {
+        "name": "main",
+        "title": "AURA — Multimodal AI Assistant",
+        "default": true,
+        "min_size": {
+          "w": 480,
+          "h": 360
+        },
+        "default_size": {
+          "w": 960,
+          "h": 640
+        },
+        "max_size": {
+          "w": 1920,
+          "h": 1200
+        },
+        "single_instance": true
+      }
+    ],
+    "browser_permissions": [
+      "microphone",
+      "camera",
+      "display-capture",
+      "fullscreen",
+      "screen-wake-lock",
+      "geolocation"
+    ]
+  }
+}
