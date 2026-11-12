@@ -186,6 +186,28 @@ async function anna() {
   if (!fs.existsSync(path.join(ROOT, "manifest.json"))) return bad("anna publish", "manifest.json missing");
 
   /* shell:true so the Windows .cmd shim resolves — spawnSync alone reports ENOENT there */
+  /* the server is the source of truth for version order: if the local manifest is behind
+     the last cut, bump it forward first — otherwise every publish collides with
+     "version X already cut" and the whole run dies on the last step. */
+  try{
+    const st = cap("anna-app apps status " + ANNA_SLUG, ROOT);
+    const latest = (st.match(/latest\s*:\s*v?([0-9][0-9.]*)/) || [])[1];
+    if(latest){
+      const mf = path.join(ROOT, "manifest.json");
+      const j = JSON.parse(fs.readFileSync(mf, "utf8"));
+      const cmp = (a, b) => {
+        const A = String(a).split(".").map(Number), B = String(b).split(".").map(Number);
+        for (let i = 0; i < 3; i++) if ((A[i] || 0) !== (B[i] || 0)) return (A[i] || 0) - (B[i] || 0);
+        return 0;
+      };
+      if (cmp(j.version || "0.1.0", latest) < 0) {
+        j.version = latest;
+        fs.writeFileSync(mf, JSON.stringify(j, null, 2) + "\n");
+        ok("anna version synced", (j.version || "?") + " → " + latest);
+      }
+    }
+  }catch(e){}
+
   const publish = spawnSync("anna-app apps publish --bump " + BUMP, { cwd: ROOT, encoding: "utf8", shell: true });
   const out = ((publish.stdout || "") + (publish.stderr || "")).trim();
   const cut = out.match(/cut immutable version ([\w.\-]+)/);
