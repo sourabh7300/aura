@@ -29,7 +29,9 @@ const ROOT = __dirname;
 const PORTFOLIO_REPO = process.env.PORTFOLIO_REPO || "https://github.com/sourabh7300/sourabh7300.github.io.git";
 const PAGES_URLS = ["https://sourabh7300.github.io/aura/aura.html", "https://sourabh7300.github.io/aura.html"];
 const BACKEND = process.env.AURA_BACKEND_URL || "https://aura-backend-jomj.onrender.com";
-const CORS_PROBES = ["https://anna.partners", "https://preview.anna.partners", "https://sourabh7300.github.io"];
+/* "null" is the sandboxed-iframe origin Anna uses for app windows — probing it here
+   catches the exact failure that made the app look dead inside the dashboard. */
+const CORS_PROBES = ["https://anna.partners", "https://preview.anna.partners", "https://sourabh7300.github.io", "null"];
 const ANNA_SLUG = "aura-ai";
 
 const argv = process.argv.slice(2);
