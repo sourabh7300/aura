@@ -183,7 +183,8 @@ async function anna() {
   step("4/5 · Anna app (bundle " + BUMP + " publish)");
   if (!fs.existsSync(path.join(ROOT, "manifest.json"))) return bad("anna publish", "manifest.json missing");
 
-  const publish = spawnSync("anna-app", ["apps", "publish", "--bump", BUMP], { cwd: ROOT, encoding: "utf8" });
+  /* shell:true so the Windows .cmd shim resolves — spawnSync alone reports ENOENT there */
+  const publish = spawnSync("anna-app", ["apps", "publish", "--bump", BUMP], { cwd: ROOT, encoding: "utf8", shell: true });
   const out = ((publish.stdout || "") + (publish.stderr || "")).trim();
   const cut = out.match(/cut immutable version ([\w.\-]+)/);
   if (!cut) {
@@ -193,7 +194,7 @@ async function anna() {
   const version = cut[1];
   ok("anna version cut", "v" + version);
 
-  const sub = spawnSync("anna-app", ["apps", "submit-review", ANNA_SLUG], { cwd: ROOT, encoding: "utf8" });
+  const sub = spawnSync("anna-app", ["apps", "submit-review", ANNA_SLUG], { cwd: ROOT, encoding: "utf8", shell: true });
   const subOut = ((sub.stdout || "") + (sub.stderr || "")).trim();
   /submitted for review/i.test(subOut)
     ? ok("submitted for review", "v" + version)
@@ -204,7 +205,7 @@ async function anna() {
   console.log("  · app status: " + state);
 
   if (state === "approved" || state === "published") {
-    const rel = spawnSync("anna-app", ["apps", "release", version], { cwd: ROOT, encoding: "utf8" });
+    const rel = spawnSync("anna-app", ["apps", "release", version], { cwd: ROOT, encoding: "utf8", shell: true });
     const relOut = ((rel.stdout || "") + (rel.stderr || "")).trim();
     /released|live/i.test(relOut) ? ok("released live", "v" + version) : bad("release", relOut.split("\n").filter(Boolean).pop() || "");
   } else {
