@@ -5,7 +5,7 @@
    code, never a copy. Suites skip (with a note) if a sentinel disappears,
    and fail loudly when the behavior around it regresses. */
 const fs = require("fs"), path = require("path");
-const src = fs.readFileSync(path.join(__dirname, "aura.html"), "utf8");
+const src = fs.readFileSync(path.join(__dirname, "aura-classic.html"), "utf8");
 
 let pass = 0, fail = 0, skip = 0;
 function ok(name, cond, extra) {
@@ -709,7 +709,7 @@ suite("Autonomy clock + source lane — the squad works with nobody watching", (
   let auto = "", ui = "", srv = "", wf = "";
   try { auto = fs.readFileSync(path.join(__dirname, "aura-backend", "autonomy.js"), "utf8"); } catch (e) {}
   try { srv = fs.readFileSync(path.join(__dirname, "aura-backend", "server.js"), "utf8"); } catch (e) {}
-  try { ui = fs.readFileSync(path.join(__dirname, "aura.html"), "utf8"); } catch (e) {}
+  try { ui = fs.readFileSync(path.join(__dirname, "aura-classic.html"), "utf8"); } catch (e) {}
   try { wf = fs.readFileSync(path.join(__dirname, ".github", "workflows", "squad-autopilot.yml"), "utf8"); } catch (e) {}
 
   /* functional: boot() must arm exactly ONE repeating timer, on the engine cadence */

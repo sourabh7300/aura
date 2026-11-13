@@ -6,7 +6,7 @@
    (real programs, zero network), the service-worker app shell, and the
    AuraMind dev-language training pass. */
 const fs = require("fs"), path = require("path");
-const src = fs.readFileSync(path.join(__dirname, "aura.html"), "utf8");
+const src = fs.readFileSync(path.join(__dirname, "aura-classic.html"), "utf8");
 const sw  = fs.readFileSync(path.join(__dirname, "sw.js"), "utf8");
 
 let pass = 0, fail = 0;

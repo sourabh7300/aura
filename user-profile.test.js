@@ -15,7 +15,7 @@
 const fs = require('fs');
 const vm = require('vm');
 
-const html = fs.readFileSync(__dirname + '/aura.html', 'utf8');
+const html = fs.readFileSync(__dirname + '/aura-classic.html', 'utf8');
 
 // Locate the AuraAuth IIFE at runtime so the slice is always correct even after edits.
 const IIFE_START = html.indexOf('const AuraAuth = (function(){');

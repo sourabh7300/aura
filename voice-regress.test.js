@@ -3,7 +3,7 @@
    Bug 2: the mic dropped clean speech (longest-alternative pick + no interim fallback).       */
 const fs = require('fs');
 const vm = require('vm');
-const html = fs.readFileSync(__dirname + '/aura.html', 'utf8');
+const html = fs.readFileSync(__dirname + '/aura-classic.html', 'utf8');
 
 function grab(startMarker, endMarker) {
   const a = html.indexOf(startMarker);
