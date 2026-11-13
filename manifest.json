@@ -1,6 +1,6 @@
 {
   "schema": 4,
-  "version": "0.2.26",
+  "version": "0.2.27",
   "system_prompt_addendum": "When the user wants to use AURA or launch the 3D holographic AI assistant, open the main view via open_app_view('main').",
   "ui": {
     "bundle": {
