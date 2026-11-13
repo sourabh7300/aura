@@ -4,7 +4,10 @@
    tests always run against the REAL shipped code, not a copy. Suites guarded by
    sentinels activate automatically as features land in aura.html. */
 const fs = require("fs"), path = require("path");
-const src = fs.readFileSync(path.join(__dirname, "aura.html"), "utf8");
+/* the live aura.html is now the reference interface (copied verbatim, plus a small
+   backend hook); the engine this suite guards lives on in aura-classic.html */
+const uiFile = fs.existsSync(path.join(__dirname, "aura-classic.html")) ? "aura-classic.html" : "aura.html";
+const src = fs.readFileSync(path.join(__dirname, uiFile), "utf8");
 const srv = fs.readFileSync(path.join(__dirname, "aura-backend", "server.js"), "utf8");
 
 let pass = 0, fail = 0, skip = 0;
