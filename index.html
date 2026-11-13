@@ -132,6 +132,6 @@ if(t>4.4&&st<1){st=1;$('#hd').classList.add('on')}
 if(t>8.6&&st<2){st=2;$('#hd').classList.add('off');B.classList.add('on3')}
 if(t>13.6&&st<3){st=3;B.classList.add('on4')}
 if(t>15.2){B.classList.add('fin');try{localStorage.setItem('auraVisited','1')}catch(e){}}
-if(warping>0){ent=Math.min(1,ent+.017);const e=sm(ent);P.position.x=lp(P.position.x,-4.4,e);P.position.y=lp(P.position.y,3.0,e);P.scale.setScalar(P.scale.x*(1-.9*e));B.classList.add('leaving');if(ent>=1&&warping==1){warping=2;$('#flash').style.opacity=1;setTimeout(()=>{try{sessionStorage.setItem('auraFromIntro','1')}catch(e){}if(location.hostname.endsWith('github.io'))location.href=APP;else{$('#msg').style.opacity=1;setTimeout(()=>{$('#msg').style.opacity=0;$('#flash').style.opacity=0;ent=0;warping=0;B.classList.remove('leaving')},3000)}},500)}}
+if(warping>0){ent=Math.min(1,ent+.017);const e=sm(ent);P.position.x=lp(P.position.x,-4.4,e);P.position.y=lp(P.position.y,3.0,e);P.scale.setScalar(P.scale.x*(1-.9*e));B.classList.add('leaving');if(ent>=1&&warping==1){warping=2;$('#flash').style.opacity=1;setTimeout(()=>{try{sessionStorage.setItem('auraFromIntro','1')}catch(e){}if(location.hostname.endsWith('github.io'))location.href=APP+'?v='+Date.now();else{$('#msg').style.opacity=1;setTimeout(()=>{$('#msg').style.opacity=0;$('#flash').style.opacity=0;ent=0;warping=0;B.classList.remove('leaving')},3000)}},500)}}
 U.warp.value=warp*warp;R.render(S,C)})(0);
 </script></body></html>
