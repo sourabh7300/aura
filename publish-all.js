@@ -91,6 +91,11 @@ async function pages() {
   if (DRY) { console.log("  [dry] git add -u && commit && push  (build " + want.slice(0, 7) + ")"); return ok("Pages plan", "commit + push, then both URLs verified against build " + want.slice(0, 7)); }
 
   sh("git add -u", ROOT);
+  /* new install-app files are untracked until the first push, and `git add -u`
+     ignores untracked paths */
+  const fresh = ["manifest.webmanifest", "sw.js", "icon-192.png", "icon-512.png"]
+    .filter(f => fs.existsSync(path.join(ROOT, f)));
+  if (fresh.length) sh("git add " + fresh.join(" "), ROOT);
   let committed = false;
   if (staged(ROOT)) {
     const msg = "AURA update " + new Date().toISOString().slice(0, 16).replace("T", " ") + " [build " + want.slice(0, 7) + "]";
