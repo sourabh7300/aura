@@ -185,6 +185,19 @@ async function anna() {
   step("4/5 · Anna app (bundle " + BUMP + " publish)");
   if (!fs.existsSync(path.join(ROOT, "manifest.json"))) return bad("anna publish", "manifest.json missing");
 
+  /* NO VERSION SPAM — while a review is open, cutting another version every publish
+     only stacks pending versions (89 of them at one point) and nothing can go live
+     anyway. Skip the cut unless the owner asks for it with --force-anna. */
+  try{
+    const pre = cap("anna-app apps status " + ANNA_SLUG, ROOT);
+    const pending = /status\s*:\s*pending_review/i.test(pre);
+    const inReview = (pre.match(/in review\s*:\s*(v?[0-9][0-9.]*)/i) || [])[1] || "";
+    if(pending && !has("--force-anna")){
+      ok("anna skipped", (inReview ? inReview + " " : "") + "already pending_review — pass --force-anna to cut another");
+      return;
+    }
+  }catch(e){}
+
   /* shell:true so the Windows .cmd shim resolves — spawnSync alone reports ENOENT there */
   /* the server is the source of truth for version order: if the local manifest is behind
      the last cut, bump it forward first — otherwise every publish collides with

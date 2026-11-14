@@ -5,12 +5,6 @@
 ---
 # AURA — Adaptive Universal Reasoning Assistant
 
-> **🏅 Selected for the Anna Founding Builder Program (Oct 2026)** — an invitation-only
-> cohort of AI builders backed by an **$80K monthly pool** of recurring usage-based grants.
-> AURA was picked for "speaking naturally with a holographic companion whose reactive 3D
-> particle core, voice input and output, and editable behavior make everyday assistance
-> feel visibly alive."
-
 A holographic AI assistant built as a single self-contained file with zero frameworks:
 hand-rolled 3D particle core, voice I/O, and a multi-brain cloud architecture.
 
