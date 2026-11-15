@@ -36,6 +36,7 @@ from . import live  # noqa: F401  registers web_search / read_page
 from .live import search_health
 from .memory import MemoryConfig, MemoryManager
 from .mesh import MeshManager, create_mesh_router
+from .copilot import create_copilot_router
 from .router import ProviderRouter, ProviderUnavailable, TOOL_REGISTRY, tool
 from .websocket_handler import GroqWhisper, create_stream_router
 
@@ -333,6 +334,8 @@ def create_app() -> FastAPI:
     mesh = MeshManager()
     app.state.mesh = mesh
     app.include_router(create_mesh_router(mesh))
+    # passive co-pilot: POST /api/passive-vision (same contract as the Node backend)
+    app.include_router(create_copilot_router())
 
     # ---- REST routes ------------------------------------------------------ #
 
