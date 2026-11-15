@@ -218,7 +218,7 @@ async function anna() {
         for (let i = 0; i < 3; i++) if ((A[i] || 0) !== (B[i] || 0)) return (A[i] || 0) - (B[i] || 0);
         return 0;
       };
-      if (cmp(j.version || "0.1.0", latest) < 0) {
+      if (j.version && cmp(j.version || "0.1.0", latest) < 0) {
         j.version = latest;
         fs.writeFileSync(mf, JSON.stringify(j, null, 2) + "\n");
         ok("anna version synced", (j.version || "?") + " → " + latest);
