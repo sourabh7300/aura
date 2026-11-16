@@ -138,6 +138,30 @@ async function backend() {
       fs.copyFileSync(path.join(src, f), path.join(dst, f));
       copied++;
     }
+    /* Render installs the ROOT package.json (its start command is `node server.js` at
+       the repo root, which forwards into aura-backend/). A dependency added only in
+       aura-backend/package.json is therefore invisible to the deployed process — that
+       is exactly how web-push went missing while the code and the env vars were live.
+       Keep the two dependency lists in step on every mirror. */
+    try {
+      const depSrc = JSON.parse(fs.readFileSync(path.join(src, "package.json"), "utf8"));
+      const rootPkgPath = path.join(tmp, "package.json");
+      const rootPkg = fs.existsSync(rootPkgPath)
+        ? JSON.parse(fs.readFileSync(rootPkgPath, "utf8"))
+        : { name: "sourabh-portfolio-root", private: true, engines: { node: ">=18" }, scripts: { start: "node aura-backend/server.js" }, dependencies: {} };
+      rootPkg.dependencies = rootPkg.dependencies || {};
+      const added = [];
+      for (const [name, ver] of Object.entries(depSrc.dependencies || {})) {
+        if (rootPkg.dependencies[name] !== ver) { rootPkg.dependencies[name] = ver; added.push(name); }
+      }
+      if (added.length) {
+        fs.writeFileSync(rootPkgPath, JSON.stringify(rootPkg, null, 2) + "\n");
+        sh("git add package.json", tmp);
+        ok("root package.json synced", "added/updated: " + added.join(", "));
+      }
+    } catch (e) {
+      bad("root package.json sync", String(e.message || e).slice(0, 160));
+    }
     sh("git add aura-backend", tmp);
     const changed = staged(tmp);
     if (changed) {
