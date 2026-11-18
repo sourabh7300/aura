@@ -1,0 +1,65 @@
+name: Daily AURA log — one real commit a day
+
+# The owner wants a green contribution graph that grows every day. Empty "ping"
+# commits are noise, so this lane records something true instead: the build in the
+# repo, the build GitHub Pages actually serves, and the live backend's health.
+# Commits are authored with the owner's address, so they land on the graph.
+
+on:
+  schedule:
+    - cron: "23 4 * * *"   # ~09:53 IST, off the hour to dodge cron congestion
+  # changing the lane itself proves it still runs, without waiting for 04:23 UTC
+  push:
+    paths:
+      - .github/workflows/daily-aura.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+concurrency:
+  group: daily-aura-log
+  cancel-in-progress: false
+
+jobs:
+  log:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Record today's build + live health
+        run: |
+          set -uo pipefail
+          mkdir -p docs
+          day=$(date -u +%Y-%m-%d)
+          repo_build=$(grep -o 'aura-build" content="[a-f0-9]*' aura.html | head -1 | sed 's/.*content="//' || echo unknown)
+          live_build=$(curl -fsSL --max-time 60 "https://sourabh7300.github.io/aura/aura.html?cb=$(date -u +%s)" | grep -o 'aura-build" content="[a-f0-9]*' | head -1 | sed 's/.*content="//' || echo unreachable)
+          health_code=$(curl -s -o /tmp/health.json -w '%{http_code}' -m 90 \
+            -H 'Origin: https://sourabh7300.github.io' \
+            https://aura-backend-jomj.onrender.com/health || echo 000)
+          status=$(node -e '
+            try {
+              const h = require("/tmp/health.json");
+              const m = (h.liveMirror && h.liveMirror.probe && h.liveMirror.probe.sync) || "?";
+              console.log("health ok=" + h.ok + " crashes=" + h.crashes + " keys=" + h.keysLive + "/" + h.keysTotal + " mirror=" + m);
+            } catch (e) { console.log("health unparsed (HTTP " + process.argv[1] + ")"); }
+          ' "$health_code")
+          line="- **$day** · build \`$repo_build\` · live \`$live_build\` · $status"
+          file=docs/aura-daily.md
+          if [ ! -f "$file" ]; then
+            printf '# AURA — daily build log\n\nOne real line per day: the build in this repo, the build GitHub Pages serves, and the live backend health.\n\n' > "$file"
+          fi
+          grep -q "^- \*\*$day\*\*" "$file" || printf '%s\n' "$line" >> "$file"
+          echo "$line"
+
+      - name: Commit as the owner
+        run: |
+          set -uo pipefail
+          git config user.name "Sourabh Singh"
+          git config user.email "aashoksingh577@gmail.com"
+          if git diff --quiet && [ -z "$(git status --porcelain)" ]; then
+            echo "::notice title=Already logged today::nothing to commit"
+            exit 0
+          fi
+          git add docs/aura-daily.md
+          git commit -m "Daily AURA log $(date -u +%Y-%m-%d)"
+          git push
