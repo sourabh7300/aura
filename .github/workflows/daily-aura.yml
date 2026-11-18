@@ -1,9 +1,15 @@
-name: Daily AURA log — one real commit a day
+name: Daily AURA audit — health, keys, drift, suites
 
-# The owner wants a green contribution graph that grows every day. Empty "ping"
-# commits are noise, so this lane records something true instead: the build in the
-# repo, the build GitHub Pages actually serves, and the live backend's health.
-# Commits are authored with the owner's address, so they land on the graph.
+# The owner cannot commit every day, and a stale graph is not the only risk: an app
+# nobody opens is an app whose keys, mirror and build drift go unnoticed. This lane
+# does a real audit once a day and records it as ONE commit:
+#   1. repo build vs the build GitHub Pages actually serves (mirror drift)
+#   2. backend /health: crashes, key bank (live/total), vision, search, squad clock
+#   3. the cheap regression suites, so a broken build is caught without a push
+# It writes docs/aura-daily.md (one true line per day) + docs/aura-status.json
+# (machine-readable snapshot) and commits them as the owner, which also keeps the
+# contribution graph alive. The gate at the end fails the run when something is
+# genuinely broken — the record is committed first, so a red day still shows up.
 
 on:
   schedule:
@@ -17,49 +23,138 @@ on:
 permissions:
   contents: write
 concurrency:
-  group: daily-aura-log
+  group: daily-aura-audit
   cancel-in-progress: false
 
 jobs:
-  log:
+  audit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
 
-      - name: Record today's build + live health
+      - name: Audit build, mirror, health and keys
+        id: audit
         run: |
           set -uo pipefail
           mkdir -p docs
+          work=$(mktemp -d)
           day=$(date -u +%Y-%m-%d)
           repo_build=$(grep -o 'aura-build" content="[a-f0-9]*' aura.html | head -1 | sed 's/.*content="//' || echo unknown)
-          live_build=$(curl -fsSL --max-time 60 "https://sourabh7300.github.io/aura/aura.html?cb=$(date -u +%s)" | grep -o 'aura-build" content="[a-f0-9]*' | head -1 | sed 's/.*content="//' || echo unreachable)
-          health_code=$(curl -s -o /tmp/health.json -w '%{http_code}' -m 90 \
+
+          live_code=$(curl -s -o "$work/live.html" -w '%{http_code}' -m 60 "https://sourabh7300.github.io/aura/aura.html?cb=$(date -u +%s)" || echo 000)
+          live_build=$(grep -o 'aura-build" content="[a-f0-9]*' "$work/live.html" 2>/dev/null | head -1 | sed 's/.*content="//' || echo none)
+
+          health_code=$(curl -s -o "$work/health.json" -w '%{http_code}' -m 90 \
             -H 'Origin: https://sourabh7300.github.io' \
             https://aura-backend-jomj.onrender.com/health || echo 000)
-          status=$(node -e '
-            try {
-              const h = require("/tmp/health.json");
-              const m = (h.liveMirror && h.liveMirror.probe && h.liveMirror.probe.sync) || "?";
-              console.log("health ok=" + h.ok + " crashes=" + h.crashes + " keys=" + h.keysLive + "/" + h.keysTotal + " mirror=" + m);
-            } catch (e) { console.log("health unparsed (HTTP " + process.argv[1] + ")"); }
-          ' "$health_code")
-          line="- **$day** · build \`$repo_build\` · live \`$live_build\` · $status"
-          file=docs/aura-daily.md
-          if [ ! -f "$file" ]; then
-            printf '# AURA — daily build log\n\nOne real line per day: the build in this repo, the build GitHub Pages serves, and the live backend health.\n\n' > "$file"
-          fi
-          grep -q "^- \*\*$day\*\*" "$file" || printf '%s\n' "$line" >> "$file"
-          echo "$line"
 
-      - name: Commit as the owner
+          # one node pass turns the raw health payload into the facts everything else uses
+          node -e '
+            const fs = require("fs");
+            const [healthPath, healthCode, file] = process.argv.slice(1);
+            let h = {};
+            try { h = JSON.parse(fs.readFileSync(healthPath, "utf8")); } catch (e) {}
+            const probe = (h.liveMirror && h.liveMirror.probe) || {};
+            const clock = (h.squad && h.squad.clock) || {};
+            fs.writeFileSync(file, JSON.stringify({
+              health_code: healthCode,
+              ok: h.ok === true,
+              crashes: Number(h.crashes || 0),
+              keys_live: Number(h.keysLive || 0),
+              keys_total: Number(h.keysTotal || 0),
+              vision: h.vision === true,
+              search: h.search || "none",
+              push: h.push || "?",
+              accounts: h.accounts || "?",
+              mirror: probe.sync || "?",
+              squad: clock.running ? "alive/" + clock.everyMinutes + "m" : "down",
+              boot: h.bootStage || "?"
+            }));
+          ' "$work/health.json" "$health_code" "$work/facts.json"
+
+          node -e '
+            const fs = require("fs");
+            const [day, repo, liveCode, live, factsPath] = process.argv.slice(1);
+            const f = JSON.parse(fs.readFileSync(factsPath, "utf8"));
+            const line = "- **" + day + "** · build `" + repo + "` · live `" + live + "` (" + liveCode + ") · " +
+              "health " + (f.health_code === "200" && f.ok ? "ok" : "DOWN(" + f.health_code + ")") +
+              " · crashes " + f.crashes +
+              " · keys " + f.keys_live + "/" + f.keys_total +
+              " · vision " + (f.vision ? "on" : "OFF") +
+              " · search " + f.search +
+              " · push " + f.push +
+              " · accounts " + f.accounts +
+              " · squad " + f.squad +
+              " · mirror " + f.mirror;
+            const log = "docs/aura-daily.md";
+            if (!fs.existsSync(log)) {
+              fs.writeFileSync(log, "# AURA — daily audit log\n\nOne true line per day: the build in this repo, the build GitHub Pages serves, the live backend health, the API key bank, the squad clock and the mirror state.\nWritten by `.github/workflows/daily-aura.yml` and committed as the owner, so the record and the contribution graph both stay alive.\n\n");
+            }
+            const text = fs.readFileSync(log, "utf8");
+            if (!text.includes("- **" + day + "**")) fs.writeFileSync(log, (text.endsWith("\n") ? text : text + "\n") + line + "\n");
+            fs.writeFileSync("docs/aura-status.json", JSON.stringify({ day, repoBuild: repo, liveBuild: live, liveCode, ...f }, null, 2) + "\n");
+            console.log(line);
+          ' "$day" "$repo_build" "$live_code" "$live_build" "$work/facts.json"
+
+      - name: Cheap regression suites
+        id: suites
+        run: |
+          set -uo pipefail
+          fail=0
+          run_one() {
+            name=$1; shift
+            printf '%-14s ' "$name"
+            if "$@" > "suite-$name.log" 2>&1; then
+              tail -1 "suite-$name.log" 2>/dev/null || true
+            else
+              echo "FAILED"; tail -8 "suite-$name.log" || true; fail=1
+            fi
+            rm -f "suite-$name.log"
+          }
+          run_one aura       node aura.test.js
+          run_one offline    node offline.test.js
+          run_one voice-mode node voice-mode.test.js
+          run_one syntax     node syntax-check.js
+          echo "failed=$fail" >> "$GITHUB_OUTPUT"
+
+      - name: Commit the record as the owner
+        if: always()
         run: |
           set -uo pipefail
           git config user.name "Sourabh Singh"
           git config user.email "aashoksingh577@gmail.com"
-          if git diff --quiet && [ -z "$(git status --porcelain)" ]; then
-            echo "::notice title=Already logged today::nothing to commit"
+          if [ -z "$(git status --porcelain docs)" ]; then
+            echo "::notice title=Already logged today::nothing new to commit"
             exit 0
           fi
-          git add docs/aura-daily.md
-          git commit -m "Daily AURA log $(date -u +%Y-%m-%d)"
+          git add docs/aura-daily.md docs/aura-status.json
+          git commit -m "Daily AURA audit $(date -u +%Y-%m-%d)"
           git push
+
+      - name: Fail the run when something is really broken
+        if: always()
+        run: |
+          set -uo pipefail
+          suites="${{ steps.suites.outputs.failed }}"
+          drift=$(node -e '
+            const fs = require("fs");
+            let f = {};
+            try { f = JSON.parse(fs.readFileSync("docs/aura-status.json", "utf8")); } catch (e) {}
+            const drift = !!f.liveBuild && f.liveBuild !== f.repoBuild;
+            console.log("health", f.health_code, "ok", f.ok, "crashes", f.crashes, "keys", f.keys_live + "/" + f.keys_total, "mirror", f.mirror, "drift", drift);
+            const bad = [];
+            if (!(f.health_code === "200" && f.ok)) bad.push("backend /health is not ok");
+            if (Number(f.crashes) > 0) bad.push("backend reports crashes");
+            if (Number(f.keys_live) < 1) bad.push("API key bank is empty");
+            if (bad.length) { console.error("::error title=Audit red::" + bad.join("; ")); process.exit(1); }
+            console.log("drift=" + drift);
+          ')
+          echo "$drift"
+          if echo "$drift" | grep -q 'drift=true'; then
+            echo "::warning title=Live copy is behind::GitHub Pages serves a different build than this repo — the mirror-portfolio Action will catch up, or run node publish-all.js."
+          fi
+          if [ "${suites:-0}" != "0" ]; then
+            echo "::error title=Regression suite failed::see the suites step above."
+            exit 1
+          fi
+          echo "audit clean"

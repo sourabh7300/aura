@@ -6,9 +6,14 @@ The owner wants his GitHub contribution graph to grow daily. Do **not** create e
 commits; `docs/aura-daily.md` records something true every day (repo build, live
 build on `https://sourabh7300.github.io/aura/aura.html`, backend `/health`).
 
-- `.github/workflows/daily-aura.yml` runs at `23 4 * * *` and appends that line.
-- If the workflow is disabled or a day was missed, add the line by hand and commit it
-  (`scripts` are not needed — one line per day, newest at the bottom).
+- `.github/workflows/daily-aura.yml` runs at `23 4 * * *` (and on changes to itself)
+  and does a real audit each day: repo build vs the build GitHub Pages serves, backend
+  `/health` (crashes, key bank live/total, vision, search, push, accounts, squad clock),
+  mirror state, plus the aura/offline/voice-mode/syntax suites. It writes one line to
+  `docs/aura-daily.md` and a machine snapshot to `docs/aura-status.json`, then fails the
+  run if health, the key bank or a suite is red.
+- If a day was missed, run the first step of that workflow locally (or add the same line
+  by hand) and commit it — one line per day, newest at the bottom.
 - Commit as `Sourabh Singh <aashoksingh577@gmail.com>` so it lands on the graph.
 
 ## How this app is built
