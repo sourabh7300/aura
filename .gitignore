@@ -13,3 +13,12 @@ aura-pre-*.html
 aura-landing-backup.html
 *.b64
 devserver.log
+# local scratch, generated artifacts and screenshots — the source is hook.html
+.tmp/
+.anna/
+app.json
+bundle/
+aura.html.bak
+aura-*.png
+*- Copy.*
+standalone/index.html.bak
