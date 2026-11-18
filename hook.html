@@ -3036,7 +3036,11 @@ function makeQR(text) {
       setTimeout(row, 3000);
 
       var localHost = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
-      if('serviceWorker' in navigator && (location.protocol === 'https:' || localHost)){
+      /* Anna (and any other embed) serves this build inside an iframe from a bundle that
+         has no sw.js: registering there is a guaranteed 404 in the console and no
+         offline shell, so the service worker belongs to top-level visits only. */
+      var topLevel = (function(){ try{ return window.self === window.top; }catch(e){ return false; } })();
+      if('serviceWorker' in navigator && topLevel && (location.protocol === 'https:' || localHost)){
         navigator.serviceWorker.register('./sw.js').then(function(reg){
           reg.update().catch(function(){});
           /* a new build must show up on THIS phone without the user clearing anything:

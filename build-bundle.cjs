@@ -32,20 +32,35 @@ h = h.replace(/<style\b([^>]*)>([\s\S]*?)<\/style>/gi, (m, attrs, css) => {
   return `<link rel="stylesheet" href="${fn}"${attrs}>`;
 });
 
+/* Anna serves the app inside a sandboxed iframe. Without same-origin storage the
+   first localStorage read throws a SecurityError and the boot never finishes, which
+   looks like a dead app. Give the bundle in-memory storage it can always use. */
+const STORAGE_SHIM = `<script>(function(){
+  try{ window.localStorage.getItem("__aura_probe"); window.localStorage.setItem("__aura_probe","1"); window.localStorage.removeItem("__aura_probe"); return; }catch(e){}
+  var make = function(){
+    var mem = {};
+    return {
+      getItem: function(k){ return Object.prototype.hasOwnProperty.call(mem, String(k)) ? String(mem[k]) : null; },
+      setItem: function(k,v){ mem[String(k)] = String(v); },
+      removeItem: function(k){ delete mem[String(k)]; },
+      clear: function(){ mem = {}; },
+      key: function(i){ var ks = Object.keys(mem); return i >= 0 && i < ks.length ? ks[i] : null; },
+      get length(){ return Object.keys(mem).length; }
+    };
+  };
+  try{ Object.defineProperty(window, "localStorage", { configurable: true, value: make() }); }catch(e){}
+  try{ Object.defineProperty(window, "sessionStorage", { configurable: true, value: make() }); }catch(e){}
+})();</script>`;
+h = h.replace(/<head(\s[^>]*)?>/i, function(m){ return m + "\n" + STORAGE_SHIM; });
+
 fs.writeFileSync('bundle/index.html', h);
 
 // 3. Update manifest.json with all needed permissions & external_origins
-//    The version is owned by the anna-app CLI (it bumps it on every publish), so keep
-//    whatever is on disk — regenerating it as 0.1.0 made every publish collide with an
-//    already-cut version.
-let prevVersion = "0.1.0";
-try {
-  const prev = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
-  if (prev && typeof prev.version === 'string' && prev.version) prevVersion = prev.version;
-} catch (e) {}
+//    No top-level "version": schema 4 forbids it (anna-app validate fails on
+//    additional properties), and the anna-app CLI owns the version server-side —
+//    it bumps on every publish and cuts the immutable version itself.
 const manifest = {
   schema: 4,
-  version: prevVersion,
   system_prompt_addendum: "When the user wants to use AURA or launch the 3D holographic AI assistant, open the main view via open_app_view('main').",
   ui: {
     bundle: {
