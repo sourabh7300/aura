@@ -8,9 +8,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Every HTML file must be a complete document
+        # hook.html is the SOURCE fragment that .tmp/inject.js splices into a host
+        # document — it legitimately has no <html>/</html>, so it is not a page.
         run: |
           fail=0
-          for f in $(git ls-files '*.html'); do
+          for f in $(git ls-files '*.html' | grep -v '^hook\.html$'); do
             grep -qi '</html>' "$f" || { echo "✗ $f missing </html>"; fail=1; }
           done
           exit $fail
