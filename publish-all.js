@@ -232,15 +232,34 @@ async function anna() {
      "must NOT have additional properties"), so the manifest never carries one and the
      CLI alone owns version order: it bumps from the server's latest cut on publish. */
 
-  const publish = spawnSync("anna-app apps publish --bump " + BUMP, { cwd: ROOT, encoding: "utf8", shell: true });
-  const out = ((publish.stdout || "") + (publish.stderr || "")).trim();
-  const cut = out.match(/cut immutable version ([\w.\-]+)/);
+  /* The manifest cannot carry a version (schema 4: additionalProperties false), so the
+     CLI's own `--bump` has nothing to count from and proposes 0.1.1 forever — a version
+     that was cut long ago, which is why a publish failed with "version 0.1.1 already
+     cut". Resolve the next version from the SERVER's latest cut and cut it explicitly. */
+  const stNow = cap("anna-app apps status " + ANNA_SLUG, ROOT);
+  const latest = (stNow.match(/latest\s*:\s*v?([0-9][0-9.]*)/) || [])[1] || "0.1.0";
+  const nextVersion = (() => {
+    const p = latest.split(".").map(n => parseInt(n, 10) || 0);
+    while (p.length < 3) p.push(0);
+    if (BUMP === "major") { p[0] += 1; p[1] = 0; p[2] = 0; }
+    else if (BUMP === "minor") { p[1] += 1; p[2] = 0; }
+    else p[2] += 1;
+    return p.join(".");
+  })();
+
+  const push = spawnSync("anna-app apps push", { cwd: ROOT, encoding: "utf8", shell: true });
+  const pushOut = ((push.stdout || "") + (push.stderr || "")).trim();
+  if (push.status !== 0) return bad("anna push", (pushOut.split("\n").filter(Boolean).pop() || "push failed").slice(0, 160));
+
+  const cutRes = spawnSync("anna-app apps cut " + nextVersion, { cwd: ROOT, encoding: "utf8", shell: true });
+  const cutOut = ((cutRes.stdout || "") + (cutRes.stderr || "")).trim();
+  const cut = cutOut.match(/cut immutable version ([\w.\-]+)/);
   if (!cut) {
-    /* a publish can legitimately fail while another review is open — say why, do not guess */
-    return bad("anna publish", (out.split("\n").filter(Boolean).pop() || "no version cut").slice(0, 160));
+    /* a cut can legitimately fail while another review is open — say why, do not guess */
+    return bad("anna cut", (cutOut.split("\n").filter(Boolean).pop() || "no version cut").slice(0, 160));
   }
   const version = cut[1];
-  ok("anna version cut", "v" + version);
+  ok("anna version cut", "v" + version + " (server latest was v" + latest + ")");
 
   const sub = spawnSync("anna-app apps submit-review " + ANNA_SLUG, { cwd: ROOT, encoding: "utf8", shell: true });
   const subOut = ((sub.stdout || "") + (sub.stderr || "")).trim();
