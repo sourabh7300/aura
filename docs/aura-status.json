@@ -12,7 +12,7 @@
   "search": "tavily",
   "push": "ready",
   "accounts": "online",
-  "mirror": "unknown",
+  "mirror": "in-sync",
   "squad": "alive/15m",
   "boot": "ready"
 }

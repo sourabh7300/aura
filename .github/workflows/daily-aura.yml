@@ -44,9 +44,18 @@ jobs:
           live_code=$(curl -s -o "$work/live.html" -w '%{http_code}' -m 60 "https://sourabh7300.github.io/aura/aura.html?cb=$(date -u +%s)" || echo 000)
           live_build=$(grep -o 'aura-build" content="[a-f0-9]*' "$work/live.html" 2>/dev/null | head -1 | sed 's/.*content="//' || echo none)
 
-          health_code=$(curl -s -o "$work/health.json" -w '%{http_code}' -m 90 \
-            -H 'Origin: https://sourabh7300.github.io' \
-            https://aura-backend-jomj.onrender.com/health || echo 000)
+          # a just-woken Render process reports mirror "unprobed" on the first call and
+          # fills it in on the next one, so probe until the answer is real (max 3 tries)
+          health_code=000
+          for attempt in 1 2 3; do
+            health_code=$(curl -s -o "$work/health.json" -w '%{http_code}' -m 90 \
+              -H 'Origin: https://sourabh7300.github.io' \
+              https://aura-backend-jomj.onrender.com/health || echo 000)
+            sync=$(node -e 'try{const h=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));console.log((h.liveMirror&&h.liveMirror.probe&&h.liveMirror.probe.sync)||"unknown")}catch(e){console.log("unknown")}' "$work/health.json")
+            [ "$sync" != "unknown" ] && break
+            sleep 8
+          done
+          echo "health probe: http=$health_code mirror=$sync (attempt $attempt)"
 
           # one node pass turns the raw health payload into the facts everything else uses
           node -e '
