@@ -28,3 +28,18 @@ build on `https://sourabh7300.github.io/aura/aura.html`, backend `/health`).
 - The Anna bundle must stay iframe-safe: no service worker when framed, and the
   in-memory storage shim in `build-bundle.cjs` covers sandboxed storage.
 - Anna version cutting reads the **server's** latest cut, not the manifest.
+
+## Ghost Mode (voice commands that act)
+
+- `hook.html` module `aura-ghost-mode` parses commands, shows the confirmation card and
+  executes through two hands: the page itself (device storage, a `.md` download, a new
+  tab) and `aura_bridge.py` on `127.0.0.1:8765` for the local machine. No third-party
+  file SDK is loaded — keep it that way (the owner asked for Puter.js to be removed).
+- `aura_bridge.py` is stdlib-only, binds loopback, needs `X-Aura-Token`, only touches
+  `--allow` roots, is dry-run unless started with `--live`, and has no generic command
+  op. Never add one: diagnostics are a fixed PowerShell script on purpose.
+- The four tools and their policy live in `aura-fastapi/backend/ghost.py`; `/v1/chat`
+  with `ghost: true` only *plans* them, and `POST /v1/ghost/confirm` releases one plan
+  after the user says "Zeus, confirm" (single use, 2 minute expiry).
+- The voice sheet is called AURA (ids `auraSheet*`, hook `window.__auraIntent`). Do not
+  reintroduce another assistant's name in the UI copy.

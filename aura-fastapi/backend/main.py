@@ -23,7 +23,7 @@ import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, AsyncIterator
+from typing import Any, AsyncIterator, Literal
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
@@ -38,6 +38,13 @@ from .memory import MemoryConfig, MemoryManager
 from .mesh import MeshManager, create_mesh_router
 from .copilot import create_copilot_router
 from .router import ProviderRouter, ProviderUnavailable, TOOL_REGISTRY, tool
+from .ghost import (
+    GHOST_TOOL_NAMES,
+    actions_from_trace,
+    is_confirmation,
+    register_ghost_tools,
+    take as take_ghost_action,
+)
 from .websocket_handler import GroqWhisper, create_stream_router
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -144,10 +151,24 @@ class ChatIn(BaseModel):
 
     message: str = Field(min_length=1, max_length=8_000)
     user_id: str = Field(default="default", max_length=128)
+    # Emotion-Sync: the browser classifies face tension + voice pace into one of these.
+    user_state: Literal["calm", "rushed", "stressed"] = "calm"
+    # Ghost Mode: let the model ask for one of the four actions. The server only
+    # plans them; the browser executes after the user approves.
+    ghost: bool = False
+    ghost_token: str | None = Field(default=None, max_length=64)
+    ghost_confirm: str | None = Field(default=None, max_length=80)
     use_memory: bool = True
     tools: list[str] = Field(
         default_factory=lambda: ["remember", "recall", "now", "web_search", "read_page"]
     )
+
+
+class GhostConfirmIn(BaseModel):
+    """Approval for a parked Ghost Mode action."""
+
+    token: str = Field(min_length=4, max_length=64)
+    text: str = Field(default="", max_length=80)
 
 
 class MemoryIn(BaseModel):
@@ -376,14 +397,41 @@ def create_app() -> FastAPI:
                 pass
 
         system = SYSTEM_PROMPT if not context else f"{SYSTEM_PROMPT}\n\n{context}"
+        if body.ghost:
+            # Ghost Mode: the model may plan an action instead of only talking. It
+            # gets the tool schemas, never an executor — the browser holds those.
+            register_ghost_tools()
+            system += (
+                "\n\nYou can perform real actions through tools. Use one only when the"
+                " user clearly asks for it, and put their own words in the arguments"
+                " (folder path, rule, note title). Never invent a path. After a tool"
+                " call, say in one short line what you are about to do and that it"
+                " waits for their confirmation when confirmation is required."
+            )
+        # Emotion-Sync: a tense or hurried user gets the answer, not a preamble.
+        if body.user_state != "calm":
+            who = "stressed" if body.user_state == "stressed" else "in a hurry"
+            system += (
+                f"\n\nThe user is {who}. Answer in at most two short sentences: the direct"
+                " answer first, then at most one concrete next step. No preamble, no lists,"
+                " no follow-up offer."
+            )
+        tools = list(body.tools)
+        if body.ghost:
+            tools = sorted(set(tools) | set(GHOST_TOOL_NAMES))
         try:
             result = await prov.chat(
                 system=system,
                 messages=[{"role": "user", "content": body.message}],
-                tools=body.tools,
+                tools=tools,
             )
         except ProviderUnavailable as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+        ghost_actions = actions_from_trace(result.tool_trace) if body.ghost else []
+        approved = None
+        if body.ghost and ghost_actions and is_confirmation(body.ghost_confirm or ""):
+            approved = take_ghost_action(body.ghost_token or ghost_actions[0].get("token") or "")
 
         if body.use_memory:
             try:
@@ -406,7 +454,27 @@ def create_app() -> FastAPI:
                 {"name": t.name, "ok": t.ok, "ms": t.duration_ms, "error": t.error}
                 for t in result.tool_trace
             ],
+            "ghost": {
+                "enabled": bool(body.ghost),
+                "actions": ghost_actions,
+                "approved": approved,
+            },
         }
+
+    @app.post("/v1/ghost/confirm")
+    async def ghost_confirm(body: GhostConfirmIn) -> dict[str, Any]:
+        """Approve one parked Ghost Mode action.
+
+        The browser sends the token it got with the plan plus what the user said.
+        Approval is the spoken/typed phrase ("Zeus, confirm"), it is single use and
+        it expires, so a stale card cannot be replayed later.
+        """
+        if not is_confirmation(body.text):
+            raise HTTPException(status_code=400, detail="say 'Zeus, confirm' to approve this action")
+        action = take_ghost_action(body.token)
+        if not action:
+            raise HTTPException(status_code=410, detail="that confirmation expired — ask again")
+        return {"ok": True, "action": action}
 
     @app.post("/v1/memory", status_code=201)
     async def save_memory(body: MemoryIn) -> dict[str, Any]:
