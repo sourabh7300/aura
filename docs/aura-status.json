@@ -1,5 +1,5 @@
 {
-  "day": "2026-11-18",
+  "day": "2026-11-19",
   "repoBuild": "e5555e7dc0e0",
   "liveBuild": "e5555e7dc0e0",
   "liveCode": "200",
@@ -12,7 +12,7 @@
   "search": "tavily",
   "push": "ready",
   "accounts": "online",
-  "mirror": "in-sync",
+  "mirror": "unknown",
   "squad": "alive/15m",
   "boot": "ready"
 }
