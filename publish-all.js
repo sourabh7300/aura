@@ -109,8 +109,18 @@ async function pages() {
     sh('git commit -m "' + msg + '"', ROOT);
     committed = true;
   }
-  try { sh("git push origin HEAD:main", ROOT); } catch (e) { /* already up to date is fine */ }
-  ok(committed ? "pushed" : "nothing to commit", "build " + want.slice(0, 7));
+  /* A push that is rejected (the daily audit commits on its own schedule) used to be
+     swallowed here, so the summary claimed "pushed" while GitHub still had the old
+     head. Rebase once and retry; report a real failure instead of a false success. */
+  let pushed = false;
+  for (let attempt = 1; attempt <= 2 && !pushed; attempt++) {
+    try { sh("git push origin HEAD:main", ROOT); pushed = true; }
+    catch (e) {
+      try { sh("git pull --rebase origin main", ROOT); } catch (e2) { break; }
+    }
+  }
+  if (pushed) ok(committed ? "pushed" : "nothing to commit", "build " + want.slice(0, 7));
+  else bad("git push", "rejected by the remote and the rebase retry failed — run git pull --rebase && git push");
 
   for (let i = 1; i <= 8; i++) {
     let all = true;
