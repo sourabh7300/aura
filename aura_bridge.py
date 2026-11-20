@@ -11,7 +11,8 @@ Security model (read this before changing anything):
   * binds 127.0.0.1 only, so the LAN cannot reach it;
   * every call needs the token printed at start (X-Aura-Token), compared in
     constant time; the token is never logged by the page;
-  * CORS answers only AURA's own origins (the GitHub Pages app and localhost
+  * CORS answers only AURA's own origins (the GitHub Pages app, the Firebase
+    Hosting copy and localhost
     dev servers), never "*" for credentialed calls;
   * file work is confined to --allow roots (default: Downloads and ~/AURA) and
     symlinks may not escape them;
@@ -52,6 +53,9 @@ POWERSHELL_TIMEOUT = 12
 ORIGIN_EXACT = {
     "https://sourabh7300.github.io",
     "https://sourabh7300.github.io".replace("https://", "http://"),
+    # the Firebase Hosting copy of the same app (aura-live-81185.web.app)
+    "https://aura-live-81185.web.app",
+    "https://aura-live-81185.firebaseapp.com",
 }
 LOCALHOST_RE = re.compile(r"^http://(localhost|127\.0\.0\.1)(:\d+)?$", re.I)
 HOME = Path.home()
