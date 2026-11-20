@@ -22,3 +22,7 @@ aura.html.bak
 aura-*.png
 *- Copy.*
 standalone/index.html.bak
+
+# generated Firebase Hosting folder (built from aura.html by firebase-deploy.js)
+firebase-public/
+.firebase/

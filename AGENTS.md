@@ -23,6 +23,13 @@ build on `https://sourabh7300.github.io/aura/aura.html`, backend `/health`).
   node squad.test.js && node voice-mode.test.js && node voice-regress.test.js &&
   node user-profile.test.js && node roster-guard.test.js` → `node publish-all.js`
   (add `--force-anna` to cut a new Anna version, `--no-anna` for a backend/frontend-only push).
+- `publish-all.js` has four destinations and all of them must move together: GitHub Pages
+  (`/aura/aura.html` + `/aura.html`), the Render backend mirror, **Firebase Hosting**
+  (`aura-live-81185.web.app`, built by `firebase-deploy.js` from the same `aura.html`) and
+  Anna. `--no-firebase` skips Firebase; never leave it stale — it is an advertised URL in
+  the portfolio README and in the backend CORS allowlist.
+- `firebase-deploy.js` writes `firebase-public/` (gitignored) and byte-verifies both live
+  paths; `firebase.json` / `.firebaserc` pin project `aura-live-81185`.
 - `node build-bundle.cjs` produces the Anna bundle in `bundle/`; `anna-app validate`
   must pass (schema 4 forbids a top-level `version` in `manifest.json`).
 - The Anna bundle must stay iframe-safe: no service worker when framed, and the

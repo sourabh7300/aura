@@ -2,10 +2,11 @@
 /* ============================================================
    AURA publish-all.js — one command, three destinations.
 
-     node publish-all.js                 build + Pages + backend + Anna
+     node publish-all.js                 build + Pages + backend + Firebase + Anna
      node publish-all.js --dry-run       show the plan, touch nothing
      node publish-all.js --no-anna       skip the Anna publish
      node publish-all.js --no-backend    skip the Render mirror
+     node publish-all.js --no-firebase   skip the Firebase Hosting lane
      node publish-all.js --only-anna     Anna only (no git, no Pages)
      node publish-all.js --bump minor    Anna version bump kind (patch|minor|major)
 
@@ -15,7 +16,12 @@
                    (sourabh7300.github.io), NOT from here. Skipping this mirror
                    silently leaves the live API on an old build; that is exactly
                    how anna.partners ended up with a 403 on every request.
-   3. Anna       — the app is a static bundle (build-bundle.cjs) uploaded with the
+   3. Firebase   — aura-live-81185.web.app is an advertised URL (portfolio README,
+                   backend CORS allowlist). It used to be deployed by hand from a
+                   different folder, so it silently fell behind every release.
+                   firebase-deploy.js builds it from THIS aura.html and verifies
+                   both live paths byte-for-byte.
+   4. Anna       — the app is a static bundle (build-bundle.cjs) uploaded with the
                    anna-app CLI. `release` only works once the app is APPROVED, so
                    a pending review is reported, never forced.
    ============================================================ */
@@ -42,6 +48,7 @@ const DRY = has("--dry-run");
 const ONLY_ANNA = has("--only-anna");
 const DO_PAGES = !has("--no-pages") && !ONLY_ANNA;
 const DO_BACKEND = !has("--no-backend") && !ONLY_ANNA;
+const DO_FIREBASE = !has("--no-firebase") && !ONLY_ANNA;
 const DO_ANNA = !has("--no-anna");
 const BUMP = val("--bump", "patch");
 
@@ -71,7 +78,7 @@ async function fetchText(url) {
 
 /* ---------- 1. build both artifacts ---------- */
 async function build() {
-  step("1/5 · build (standalone copy + Anna bundle)");
+  step("1/6 · build (standalone copy + Anna bundle)");
   if (fs.existsSync(path.join(ROOT, "sync-standalone.js"))) {
     try { sh("node sync-standalone.js"); ok("standalone refreshed"); }
     catch (e) { bad("standalone build", String(e.message || e).slice(0, 120)); }
@@ -85,7 +92,7 @@ async function build() {
 /* ---------- 2. Pages: commit + push this repo, then verify bytes ---------- */
 async function pages() {
   if (!DO_PAGES) return;
-  step("2/5 · Pages (sourabh7300/aura)");
+  step("2/6 · Pages (sourabh7300/aura)");
   const local = plain(fs.readFileSync(path.join(ROOT, "aura.html"), "utf8"));
   const want = sha(local);
   if (DRY) { console.log("  [dry] git add -u && commit && push  (build " + want.slice(0, 7) + ")"); return ok("Pages plan", "commit + push, then both URLs verified against build " + want.slice(0, 7)); }
@@ -120,8 +127,8 @@ async function pages() {
 /* ---------- 3. backend mirror into the portfolio repo Render runs ---------- */
 async function backend() {
   if (!DO_BACKEND) return;
-  if (DRY) { step("3/5 · backend mirror"); console.log("  [dry] clone portfolio repo, copy aura-backend/*.js|json, push, then verify Render restart + CORS for " + CORS_PROBES.length + " origins"); return ok("backend plan", "mirror to portfolio repo, wait for Render restart, probe " + CORS_PROBES.length + " origins"); }
-  step("3/5 · backend mirror → portfolio repo (this is what Render runs)");
+  if (DRY) { step("3/6 · backend mirror"); console.log("  [dry] clone portfolio repo, copy aura-backend/*.js|json, push, then verify Render restart + CORS for " + CORS_PROBES.length + " origins"); return ok("backend plan", "mirror to portfolio repo, wait for Render restart, probe " + CORS_PROBES.length + " origins"); }
+  step("3/6 · backend mirror → portfolio repo (this is what Render runs)");
   const before = await fetchText(BACKEND + "/health");
   const startedBefore = (() => { try { return JSON.parse(before).started; } catch (e) { return null; } })();
 
@@ -207,11 +214,29 @@ async function backend() {
   }
 }
 
-/* ---------- 4. Anna publish ---------- */
+/* ---------- 4. Firebase Hosting (aura-live-81185.web.app) ---------- */
+async function firebase() {
+  if (!DO_FIREBASE) return;
+  if (DRY) {
+    step("4/6 · Firebase Hosting (aura-live-81185.web.app)");
+    try { sh("node firebase-deploy.js --dry-run"); } catch (e) { /* dry-run never deploys */ }
+    return ok("firebase plan", "build firebase-public/ from aura.html, deploy to project aura-live-81185, verify / and /aura.html byte-exact");
+  }
+  step("4/6 · Firebase Hosting (aura-live-81185.web.app)");
+  if (!fs.existsSync(path.join(ROOT, "firebase-deploy.js"))) return bad("firebase", "firebase-deploy.js missing");
+  try {
+    sh("node firebase-deploy.js");
+    ok("firebase deployed", "root + /aura.html match this build");
+  } catch (e) {
+    bad("firebase deploy", String(e.message || e).slice(0, 200));
+  }
+}
+
+/* ---------- 5. Anna publish ---------- */
 async function anna() {
   if (!DO_ANNA) return;
-  if (DRY) { step("4/5 · Anna app"); console.log("  [dry] anna-app apps publish --bump " + BUMP + " && anna-app apps submit-review " + ANNA_SLUG); return ok("anna plan", "publish --bump " + BUMP + " then submit-review; release only if APPROVED"); }
-  step("4/5 · Anna app (bundle " + BUMP + " publish)");
+  if (DRY) { step("5/6 · Anna app"); console.log("  [dry] anna-app apps publish --bump " + BUMP + " && anna-app apps submit-review " + ANNA_SLUG); return ok("anna plan", "publish --bump " + BUMP + " then submit-review; release only if APPROVED"); }
+  step("5/6 · Anna app (bundle " + BUMP + " publish)");
   if (!fs.existsSync(path.join(ROOT, "manifest.json"))) return bad("anna publish", "manifest.json missing");
 
   /* NO VERSION SPAM — while a review is open, cutting another version every publish
@@ -282,7 +307,7 @@ async function anna() {
 
 /* ---------- 5. summary ---------- */
 function summary() {
-  step("5/5 · summary");
+  step("6/6 · summary");
   for (const r of results) console.log("  " + (r.ok ? "✓" : "✗") + " " + r.name + (r.detail ? " — " + r.detail : ""));
   const failed = results.filter(r => !r.ok);
   if (failed.length) { console.log("\n" + failed.length + " step(s) need attention."); process.exitCode = 1; }
@@ -294,6 +319,7 @@ function summary() {
   await build();
   await pages();
   await backend();
+  await firebase();
   await anna();
   summary();
 })();

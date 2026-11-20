@@ -44,6 +44,11 @@ jobs:
           live_code=$(curl -s -o "$work/live.html" -w '%{http_code}' -m 60 "https://sourabh7300.github.io/aura/aura.html?cb=$(date -u +%s)" || echo 000)
           live_build=$(grep -o 'aura-build" content="[a-f0-9]*' "$work/live.html" 2>/dev/null | head -1 | sed 's/.*content="//' || echo none)
 
+          # Firebase Hosting is a third public copy of the same app; catching its drift
+          # here is what stops aura-live-81185.web.app from silently falling behind.
+          fb_code=$(curl -s -o "$work/fb.html" -w '%{http_code}' -m 60 "https://aura-live-81185.web.app/aura.html?cb=$(date -u +%s)" || echo 000)
+          fb_build=$(grep -o 'aura-build" content="[a-f0-9]*' "$work/fb.html" 2>/dev/null | head -1 | sed 's/.*content="//' || echo none)
+
           # a just-woken Render process reports mirror "unprobed" on the first call and
           # fills it in on the next one, so probe until the answer is real (max 3 tries)
           health_code=000
@@ -60,7 +65,7 @@ jobs:
           # one node pass turns the raw health payload into the facts everything else uses
           node -e '
             const fs = require("fs");
-            const [healthPath, healthCode, file] = process.argv.slice(1);
+            const [healthPath, healthCode, file, firebaseCode, firebaseBuild] = process.argv.slice(1);
             let h = {};
             try { h = JSON.parse(fs.readFileSync(healthPath, "utf8")); } catch (e) {}
             const probe = (h.liveMirror && h.liveMirror.probe) || {};
@@ -77,9 +82,11 @@ jobs:
               accounts: h.accounts || "?",
               mirror: probe.sync || "?",
               squad: clock.running ? "alive/" + clock.everyMinutes + "m" : "down",
-              boot: h.bootStage || "?"
+              boot: h.bootStage || "?",
+              firebase_code: firebaseCode,
+              firebase_build: firebaseBuild
             }));
-          ' "$work/health.json" "$health_code" "$work/facts.json"
+          ' "$work/health.json" "$health_code" "$work/facts.json" "$fb_code" "$fb_build"
 
           node -e '
             const fs = require("fs");
@@ -94,7 +101,8 @@ jobs:
               " · push " + f.push +
               " · accounts " + f.accounts +
               " · squad " + f.squad +
-              " · mirror " + f.mirror;
+              " · mirror " + f.mirror +
+              " · firebase " + (f.firebase_build === repo ? "=build" : f.firebase_build + "(" + f.firebase_code + ")");
             const log = "docs/aura-daily.md";
             if (!fs.existsSync(log)) {
               fs.writeFileSync(log, "# AURA — daily audit log\n\nOne true line per day: the build in this repo, the build GitHub Pages serves, the live backend health, the API key bank, the squad clock and the mirror state.\nWritten by `.github/workflows/daily-aura.yml` and committed as the owner, so the record and the contribution graph both stay alive.\n\n");
@@ -150,17 +158,21 @@ jobs:
             let f = {};
             try { f = JSON.parse(fs.readFileSync("docs/aura-status.json", "utf8")); } catch (e) {}
             const drift = !!f.liveBuild && f.liveBuild !== f.repoBuild;
-            console.log("health", f.health_code, "ok", f.ok, "crashes", f.crashes, "keys", f.keys_live + "/" + f.keys_total, "mirror", f.mirror, "drift", drift);
+            const fbDrift = !!f.firebase_build && f.firebase_build !== f.repoBuild;
+            console.log("health", f.health_code, "ok", f.ok, "crashes", f.crashes, "keys", f.keys_live + "/" + f.keys_total, "mirror", f.mirror, "drift", drift, "firebaseDrift", fbDrift);
             const bad = [];
             if (!(f.health_code === "200" && f.ok)) bad.push("backend /health is not ok");
             if (Number(f.crashes) > 0) bad.push("backend reports crashes");
             if (Number(f.keys_live) < 1) bad.push("API key bank is empty");
             if (bad.length) { console.error("::error title=Audit red::" + bad.join("; ")); process.exit(1); }
-            console.log("drift=" + drift);
+            console.log("drift=" + drift + " firebaseDrift=" + fbDrift);
           ')
           echo "$drift"
           if echo "$drift" | grep -q 'drift=true'; then
             echo "::warning title=Live copy is behind::GitHub Pages serves a different build than this repo — the mirror-portfolio Action will catch up, or run node publish-all.js."
+          fi
+          if echo "$drift" | grep -q 'firebaseDrift=true'; then
+            echo "::warning title=Firebase copy is behind::aura-live-81185.web.app serves a different build — run node firebase-deploy.js (publish-all.js does it automatically)."
           fi
           if [ "${suites:-0}" != "0" ]; then
             echo "::error title=Regression suite failed::see the suites step above."
