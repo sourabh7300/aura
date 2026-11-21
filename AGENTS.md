@@ -36,6 +36,19 @@ build on `https://sourabh7300.github.io/aura/aura.html`, backend `/health`).
   in-memory storage shim in `build-bundle.cjs` covers sandboxed storage.
 - Anna version cutting reads the **server's** latest cut, not the manifest.
 
+## Camera, sign language and the + menu
+
+- Sign language is **inside the camera** (`📷 Camera` → `🤟 Sign: on` by default, caption
+  panel, typed input, talk-back). There is no separate sign window or sign row any more —
+  do not add one back.
+- The `+` menu is one grouped panel built in `hook.html` (`the + menu, rebuilt`). It moves
+  the reference's own buttons into cards, so their handlers stay; a missing row gets
+  created instead of breaking the whole panel.
+- An attachment with an empty composer is a valid send: `__auraSendPackOnly` fills a
+  default request before the reference's `send()` (which returns early on empty text).
+- PDF text extraction handles literal strings, hex strings and UTF-16/CID glyphs, and
+  gives up after 20s instead of leaving the card spinning.
+
 ## Ghost Mode (voice commands that act)
 
 - `hook.html` module `aura-ghost-mode` parses commands, shows the confirmation card and
