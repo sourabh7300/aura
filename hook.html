@@ -5421,6 +5421,8 @@ function makeQR(text) {
           if(listening) return;
           show('\uD83C\uDFA4 Waiting for microphone permission\u2026', true);
           tell('Press Allow in the browser so AURA can hear you');
+          /* a prompt that is never answered must not leave the button stuck on */
+          setTimeout(function(){ if(!listening){ hide(); mark(false); } }, 15000);
         }, 7000);
         navigator.mediaDevices.getUserMedia({
           audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true }
@@ -5515,7 +5517,8 @@ function makeQR(text) {
       }
       var onMic = function(e){
         if(e){ try{ e.preventDefault(); e.stopImmediatePropagation(); }catch(err){} }
-        clearTimeout(sendTimer);
+        /* sendTimer belonged to the old recogniser; touching it here threw a
+           ReferenceError before start(), so the button looked completely dead */
         if(listening || pill.style.display === 'flex'){ stop(); hide(); return; }
         start();
       };
