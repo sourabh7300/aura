@@ -5784,7 +5784,9 @@ function makeQR(text) {
           d.remove();
           if(adminTab) adminTab.click();
         }catch(err){
-          m.textContent = 'Sign-in failed: ' + (err && err.message ? err.message : 'unknown') + '. Try again.';
+          /* never stringify a raw Event — that is what produced "Sign-in failed:
+             [object Event]" in the Anna review */
+          m.textContent = 'Sign-in failed: ' + errText(err) + '. Try again.';
           btn.textContent = 'Continue with Google'; btn.disabled = false;
         }
       };
