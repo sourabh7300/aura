@@ -9,8 +9,13 @@
      node publish-all.js --no-firebase   skip the Firebase Hosting lane
      node publish-all.js --only-anna     Anna only (no git, no Pages)
      node publish-all.js --bump minor    Anna version bump kind (patch|minor|major)
+     node publish-all.js --no-verify     skip the gate (emergency only — say why)
 
    WHY EVERY STEP EXISTS
+   0. Verify     — verify.js syntax-checks every backend file and runs every suite
+                   (root 7 + namecheck + backend 6). It runs BEFORE anything is
+                   pushed: a red suite must never reach Pages, Render, Firebase or
+                   Anna, because undoing a four-destination release is expensive.
    1. Pages      — the standalone site lives in THIS repo (sourabh7300/aura).
    2. Backend    — Render runs the backend from the PORTFOLIO repo
                    (sourabh7300.github.io), NOT from here. Skipping this mirror
@@ -50,6 +55,7 @@ const DO_PAGES = !has("--no-pages") && !ONLY_ANNA;
 const DO_BACKEND = !has("--no-backend") && !ONLY_ANNA;
 const DO_FIREBASE = !has("--no-firebase") && !ONLY_ANNA;
 const DO_ANNA = !has("--no-anna");
+const DO_VERIFY = !has("--no-verify") && !ONLY_ANNA;
 const BUMP = val("--bump", "patch");
 
 const results = [];
@@ -74,6 +80,21 @@ const plain = s => s.replace(/\r\n/g, "\n");
 async function fetchText(url) {
   try { const r = await fetch(url, { cache: "no-store" }); return r.ok ? plain(await r.text()) : null; }
   catch (e) { return null; }
+}
+
+/* ---------- 0. verify gate: nothing ships from a red tree ---------- */
+async function verify() {
+  if (!DO_VERIFY) return true;
+  step("0/6 · verify (backend syntax + every suite)");
+  if (DRY) { console.log("  [dry] node verify.js"); ok("verify plan", "14 suites + syntax, then publish"); return true; }
+  if (!fs.existsSync(path.join(ROOT, "verify.js"))) { bad("verify gate", "verify.js missing"); return false; }
+  const r = spawnSync(process.execPath, ["verify.js"], { cwd: ROOT, stdio: "inherit" });
+  if (r.status !== 0) {
+    bad("verify gate", "a check is red — publish aborted before any destination moved");
+    return false;
+  }
+  ok("verify gate", "all checks green (pass --no-verify only if you know why)");
+  return true;
 }
 
 /* ---------- 1. build both artifacts ---------- */
@@ -326,6 +347,7 @@ function summary() {
 
 (async () => {
   console.log("AURA publish-all" + (DRY ? " (dry run)" : "") + " — " + new Date().toISOString().slice(0, 16).replace("T", " "));
+  if (!(await verify())) return summary();
   await build();
   await pages();
   await backend();

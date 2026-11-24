@@ -19,10 +19,14 @@ build on `https://sourabh7300.github.io/aura/aura.html`, backend `/health`).
 ## How this app is built
 
 - `hook.html` is the source. `aura.html` is generated: **never edit `aura.html` directly**.
-- Build loop: `node .tmp/inject.js` → `node aura.test.js && node offline.test.js &&
-  node squad.test.js && node voice-mode.test.js && node voice-regress.test.js &&
-  node user-profile.test.js && node roster-guard.test.js` → `node publish-all.js`
+- Build loop: `node .tmp/inject.js` → `node verify.js` → `node publish-all.js`
   (add `--force-anna` to cut a new Anna version, `--no-anna` for a backend/frontend-only push).
+- `verify.js` is the deploy gate: `node --check` on every `aura-backend/*.js` plus all
+  fourteen suites (root: aura, offline, squad, voice-mode, voice-regress, user-profile,
+  roster-guard; `.tmp/namecheck.js`; backend: answer-guard, freshness, search-focus,
+  tavily-keys, autonomy-cycle, evidence-gate). `publish-all.js` runs it as step 0 and
+  aborts before touching any destination when a check is red. `--no-verify` exists for
+  emergencies only — never use it to get past a failing suite; fix the suite.
 - `publish-all.js` has four destinations and all of them must move together: GitHub Pages
   (`/aura/aura.html` + `/aura.html`), the Render backend mirror, **Firebase Hosting**
   (`aura-live-81185.web.app`, built by `firebase-deploy.js` from the same `aura.html`) and
