@@ -40,6 +40,15 @@ build on `https://sourabh7300.github.io/aura/aura.html`, backend `/health`).
   in-memory storage shim in `build-bundle.cjs` covers sandboxed storage.
 - Anna version cutting reads the **server's** latest cut, not the manifest.
 
+## Home layout (the welcome screen)
+
+- The hero (orb + greeting) must fit the space above the composer on a 1366×768 or
+  1280×720 laptop. It sizes from height (`min(max(220px,28vw),30vh)`) and is centred in
+  `#msgs`; `hook.html`'s `homeLayout` module also runs a measured `fitHero()` pass because
+  an older module (`aura-mobile-clean`) locks the orb to 236px `!important` later in the
+  cascade. Do not size the orb from width alone — that is what pushed the greeting under
+  the composer.
+
 ## Camera, sign language and the + menu
 
 - Sign language is **inside the camera** (`📷 Camera` → `🤟 Sign: on` by default, caption
