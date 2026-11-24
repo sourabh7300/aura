@@ -22,7 +22,9 @@ hand-rolled 3D particle core, voice I/O, and a multi-brain cloud architecture.
 - 📚 **Document RAG** — uploads your PDFs and answers with file + page citations
 - 🧵 **Long-term memory** — remembers facts about you across sessions
 - ⏰ **Reminders** — time-based tasks with real browser notifications
-- ⚡ **KRATOS Squad** — admin-only bot command center with a daily shift engine (see below)
+- ⚡ **KRATOS Squad** — the four-bot command chain with a daily shift engine, driven by the
+  backend routes (see below). The in-app **ADMIN tab was removed on 24 Nov 2026**: it was an
+  empty shell whose controls had no handlers
 - 🤖 **24/7 autopilot** — the squad keeps sweeping, building, shipping and reporting from the *server*, even when nobody has AURA open (see below)
 - 🌦 **Live-data lane** — weather / news / scores served from same-day web sources, never stale training data
 - 🧩 **Ecosystem OS** — voice-drives the other portfolio apps (Foodora, Lucid)
@@ -30,11 +32,18 @@ hand-rolled 3D particle core, voice I/O, and a multi-brain cloud architecture.
 - 🔐 **Zero-key access** — visitors just open the site and talk; all server credentials
   are managed privately by the owner on the hosting dashboard and never appear in this repository.
 
-## ⚡ KRATOS Squad — the admin bot command center
+## ⚡ KRATOS Squad — the bot command chain
 
-Admin-only mission control inside the ADMIN tab. Four specialists, one command
-chain — you talk to them like ZEUS, in **English or Hinglish**, and you always
-choose who executes:
+> **The ADMIN tab is gone (24 Nov 2026).** Its panel was a shell — the squad grid was four
+> static names and none of its buttons (`SEND`, `START AUTOPILOT`, `PAUSE`, `RUN A CYCLE NOW`,
+> `SAVE TO DATABASE`) had a handler in the shipped bundle, so nothing on that screen could
+> act. Its only entry point needed a staff Google sign-in sheet built from a
+> `firebaseWebConfig` the backend no longer serves. The squad itself is unchanged and still
+> runs: drive it with the `/v1/squad/*` routes below, with the companion extension, or by
+> asking the bots in chat.
+
+Four specialists, one command chain — you talk to them like ZEUS, in **English or Hinglish**,
+and you always choose who executes:
 
 | Bot | Dept | What it does |
 |---|---|---|
@@ -166,11 +175,11 @@ code; never attack/scan/probe/harvest credentials/write malware; refuse and expl
 instead), and the PUSH POLICY above. Read it any time with `BotTeam.db()` in the
 console or in the AUTOPILOT panel.
 
-Where to watch and control it: **ADMIN → KRATOS SQUAD → AUTOPILOT** panel (real
-state, mission board, what is **BUILDING** right now, the **publish queue**, the
-signed reports, START / PAUSE / RUN A CYCLE NOW / PUBLISH QUEUE / push-mode toggle),
-or ask the bots in Hinglish — `"autopilot status"`, `"run a cycle now"`,
-`"stop autopilot"`, `"publish it"`, `"hold mode"`.
+Where to watch and control it: the `/v1/squad/state`, `/v1/squad/status` and
+`/v1/squad/report` routes (the old **ADMIN → KRATOS SQUAD → AUTOPILOT** panel that used to
+draw them was removed on 24 Nov 2026 — see the note above), or ask the bots in Hinglish —
+`"autopilot status"`, `"run a cycle now"`, `"stop autopilot"`, `"publish it"`,
+`"hold mode"`.
 
 ### 🧩 Companion extension (watch on the go)
 

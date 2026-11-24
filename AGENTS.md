@@ -40,6 +40,21 @@ build on `https://sourabh7300.github.io/aura/aura.html`, backend `/health`).
   in-memory storage shim in `build-bundle.cjs` covers sandboxed storage.
 - Anna version cutting reads the **server's** latest cut, not the manifest.
 
+## Admin console: removed, do not bring it back
+
+- The ADMIN tab and its panel are gone (24 Nov 2026, owner's call). Every control in it was
+  dead: `#ksend`/`#kcmd`/`#klog`, `#ap1`/`#ap2`/`#ap3`, `#mcs` with `#mc1..#mc3` had no
+  handler, `#squad` was filled with four static names, and the tab could only be opened
+  through a Firebase sign-in sheet whose config the backend no longer serves.
+- `hook.html` removes the tab and the panel from the DOM at boot, deletes the saved
+  `aura_admin_session`, keeps the command palette from listing "Go to Admin", and guards
+  `goTab('admin')` so it lands on Chat instead of blanking the stage (an old saved tab id
+  can still be in `localStorage`). `README.md` says the same thing.
+- The squad/autopilot backend is untouched: `/v1/squad/state|status|report|tick|autopilot|...`
+  still drive it. The live infrastructure state the panel pretended to show is now one
+  read-only **Services** row in Settings, fed by `/health` (keys live/total, search, vision,
+  crashes). Never print key values there — `/health` only publishes counts.
+
 ## Home layout (the welcome screen)
 
 - The hero (orb + greeting) must fit the space above the composer on a 1366×768 or
