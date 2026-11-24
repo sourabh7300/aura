@@ -64,6 +64,34 @@ build on `https://sourabh7300.github.io/aura/aura.html`, backend `/health`).
   cascade. Do not size the orb from width alone — that is what pushed the greeting under
   the composer.
 
+## Gesture & Emotion Sync (MediaPipe, in the browser)
+
+- One module at the end of `hook.html` (`<script type="module" id="aura-emotion-sync">`)
+  owns this. Nothing is uploaded and the backend is never called by the detection loop.
+- Models: `GestureRecognizer` (hand landmarks **and** the gesture label in one model) plus
+  `FaceLandmarker` (blendshapes). A separate `HandLandmarker` would download a second model
+  to redo work the recogniser already returns — do not add one. GPU delegate with a CPU
+  fallback; imported lazily, only when the user switches Sync on.
+- Budget: detection 8 FPS, face 4 FPS, on its own rAF. The particle HUD keeps its 60.
+  The loop is gated by `document.hidden`, so nothing runs in a background tab.
+- Gestures: open palm (held 0.9s) = freeze the core + stop speech/media; closed fist =
+  `setModeNow('zeus')` (never `activate()`, which runs the cinematic and holds `busy`);
+  pinch (thumb tip ↔ index tip, normalised by hand length) = confirm an open dialog, else a
+  Co-Pilot snapshot; thumbs up = snapshot, or bookmark the last answer when Co-Pilot is off.
+- Emotion: `happy|focused|neutral|stressed` from blendshapes, held 800ms before it applies.
+  It drives `window.AURA_CORE.mood(name)`, which sets palette + spin + pulse + turbulence
+  (gold/warm for a smile, calmer slow blue for stress). `window.__auraUserState` stays
+  `calm|stressed` because that is the contract the backend reads.
+- The mood mix is **pull-based** (`easeMood()` derives it from elapsed time when read or
+  drawn). Do not turn it back into a timer/rAF push: both are throttled in a background
+  tab and the palette then silently stops moving.
+- The welcome orb is the iris (`#auraIris`), not `#auraCoreWrap` — the floating core is
+  only shown while a chat is open. The iris reads the same palette through
+  `AURA_CORE.palette()` and mixes it into every light, and exposes
+  `window.__auraIrisDraw(ms)` to paint a single frame on demand.
+- UI: the toggle lives in the header (`.topr`, id `auraSyncHud`), mirrored in the camera
+  modal (`camSync`) and a small badge. Console: `AuraSync.state()`, `.simulate('Closed_Fist')`.
+
 ## Camera, sign language and the + menu
 
 - Sign language is **inside the camera** (`📷 Camera` → `🤟 Sign: on` by default, caption
