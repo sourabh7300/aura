@@ -4951,6 +4951,11 @@ function makeQR(text) {
               var first = p.querySelector('#tools .at-card');
               if(first) try{ first.focus(); }catch(err){}
             }, 90);
+            /* the card list renders after the first clamp, and a taller list moves a
+               bottom-anchored panel's top edge up — measured -19px at 1280x800 when
+               place() only ran at 0 and 90ms. Two late passes settle it. */
+            setTimeout(place, 320);
+            setTimeout(place, 760);
           }
         };
       }
