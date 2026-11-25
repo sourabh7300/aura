@@ -6285,7 +6285,9 @@ function makeQR(text) {
               by identity, so reordering the row cannot break the rule;
            2. every selector is scoped under #card, which outranks the reference's
               plain .crow/.mic/.send rules — no !important is needed at all.
-         Widths: 360 -> 40/40/40/42/46, 390 -> 36/36/40/40/44, 430+ -> 38/38/40/40/44. */
+         Sizes live in one JS table (46px send, 40px mic/+ , 38px side buttons at every
+         width) because the reference re-applies inline width on its own renders. CSS owns
+         only what inline cannot fight: gap, and the chip's cap/hiding. */
       '#card .crow{gap:8px}',
       '#card .crow>*{flex:0 0 auto}',
       '#card .crow [data-crow="model"]{flex:0 1 auto;min-width:0;max-width:104px;overflow:hidden;' +

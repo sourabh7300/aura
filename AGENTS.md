@@ -92,10 +92,18 @@ build on `https://sourabh7300.github.io/aura/aura.html`, backend `/health`).
 |---|---|
 | **< 640** | phone: Code + System tabs off, chips/tip off, search field off, Code Forge row off, tour shows the phone note |
 | **< 820** | Code workspace off (`#p-code` + its tab), Code Forge row off, Code/Keyboard tour steps out |
-| **≤ 430** | persona chip capped to 76px so Send stays inside the card (at 390 it hung 9px out) |
-| **≤ 380** | persona chip hidden entirely (it only duplicated Settings → personality); mic 42, send 44–46 |
+| **≤ 440** | persona chip capped to 76px so Send stays inside the card (at 390 it hung 9px out) |
+| **≤ 370** | persona chip hidden entirely (it only duplicated Settings → personality) |
 
-- The composer row must be checked at **360, 390, 430**: the row is width-critical and the
+- **The composer row has one owner.** Sizes are a single table in `tagCrow()` (46px send,
+  40px mic and `+`, 38px side buttons at every width) because the reference re-applies
+  inline `width` on its own renders, which no stylesheet can beat without `!important`.
+  CSS owns only gap, the chip cap and the chip hiding — all in one place, zero
+  `!important`. The two `.persel` divs are marked `data-crow="tools"|"model"`; never
+  select them by `:nth-of-type`. Breakpoints are 440/370 rather than 430/380 because a
+  viewport reporting 430.4 fails a `max-width:430` query — that is how the old cap
+  silently stopped applying.
+- The row must be checked at **360, 390, 430**: the row is width-critical and the
   send button is the first thing to fall off the card.
 - At 360 the welcome block (orb 190px) must end above the composer: verified 585 vs 595.
 
