@@ -4943,6 +4943,18 @@ function makeQR(text) {
           if(p && p.classList.contains('on')){ setTimeout(place, 80); setTimeout(place, 420); }
         });
       });
+      /* A resize event can arrive before the new width is real, so the breakpoint itself
+         is also watched: this fires when the query actually flips, which is what decides
+         bottom sheet vs popover. */
+      try{
+        var bp900 = window.matchMedia('(max-width:900px)');
+        bp900.addEventListener('change', function(){ var p = panel(); if(p && p.classList.contains('on')) setTimeout(place, 30); });
+      }catch(e){}
+      try{
+        if(window.visualViewport) window.visualViewport.addEventListener('resize', function(){
+          var p = panel(); if(p && p.classList.contains('on')) setTimeout(place, 60);
+        });
+      }catch(e){}
     })();
   }catch(e){}
 
