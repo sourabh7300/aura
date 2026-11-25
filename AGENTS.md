@@ -125,7 +125,39 @@ build on `https://sourabh7300.github.io/aura/aura.html`, backend `/health`).
   `flex-wrap:wrap`, which turned the column into a *second* column off the right edge —
   the menu looked cut in half with every label missing.
 - On ≤900px the + panel is a bottom sheet (`position:fixed`, 10px a side, 88px above
-  the composer), not a popover anchored to the button.
+  the composer), not a popover anchored to the button — and it is `place()` that writes
+  that box inline, not a `@media` block. `place()` is the single owner of the panel's
+  geometry: bottom sheet on a phone, clamped popover on desktop. The clamp runs a second
+  correction pass (`if(pr.top < 8)`) because capping the height moves the bottom edge on
+  a bottom-anchored panel and once left the menu 19px above a 1280×800 window.
+  Breakpoint changes are also watched through `matchMedia('(max-width:900px)')` and
+  `visualViewport`, because a `resize` event can arrive before the new width is real.
+
+## `!important` policy (the whole sheet)
+
+The injected sheets are the *second* stylesheet; the reference's own CSS is earlier in
+`<head>` and contains exactly one `!important` (reduced-motion). So a rule here wins on
+**specificity or order**, and `!important` is only correct in three cases:
+
+1. an inline style the reference writes (composer sizes, Settings input widths, the + panel
+   box) — then the inline value is owned from JS instead: `tagCrow()`, `fitSettingsInputs()`,
+   `place()`. Never a stylesheet fighting inline;
+2. a user preference (`prefers-reduced-motion`), which must outrank everything;
+3. nothing else — if a rule seems to need it, the selector is too weak.
+
+Done in this pattern, each measured at 360/390/430/1280:
+
+| Block | Owner | Verified |
+|---|---|---|
+| composer row | `tagCrow()` sizes, CSS gap/chip | 36–38px side, 44×40 send, chip 76 → hidden |
+| panels, `.ov`, `#msgs` | CSS only, zero `!important` | opacity 1, `.sc` static/block/auto |
+| Settings rows | CSS stacks (`#p-set .row`), `fitSettingsInputs()` owns widths | input 100% on phone, 200px/160px on desktop |
+| + panel | `place()` owns the box, CSS owns the skin | sheet fixed 10px a side; popover top 14, inside viewport |
+
+Still carrying `!important`: the orb stage / hero sizes (`#coreStageWrap`, `#wel h2`,
+`#wel p`, `#auraTour`, `#card` blur, `#srch`, `#auraCoreWrap`). Those are the same
+inline-style case (the reference's `homeLayout` writes the stage size inline), so they
+should move to the same JS-owned treatment next.
 - Hidden on phones because they cannot work there: Code Forge row (keyboard + sandbox),
   Code and System tabs, the search field, and the matching tour steps (`desk: true`).
   A phone-only note (`mob: true`) explains that layout instead. The tour filters both,
