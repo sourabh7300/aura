@@ -4562,6 +4562,11 @@ function makeQR(text) {
         var available = Math.min(vh, pr.bottom) - 14;
         p.style.maxHeight = Math.round(Math.max(280, Math.min(640, available))) + 'px';
         p.style.left = '0px'; p.style.right = 'auto';
+        /* capping the height moves the bottom edge on a bottom-anchored panel, so the
+           first pass could still leave the top above the window — measured -19px at
+           1280x800. One correction pass fixes it. */
+        pr = p.getBoundingClientRect();
+        if(pr.top < 8) p.style.maxHeight = Math.round(Math.max(240, pr.height - (8 - pr.top))) + 'px';
         pr = p.getBoundingClientRect();
         if(pr.right > vw - 8) p.style.left = Math.round((vw - 8) - pr.right) + 'px';
         pr = p.getBoundingClientRect();
