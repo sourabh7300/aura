@@ -6231,6 +6231,10 @@ function makeQR(text) {
       '@media(max-width:430px){',
         '.tabs button{font-size:11.5px;padding:0 8px;height:32px}',
         '.tabs{gap:1px}',
+        /* measured at 390: the row was 344px inside a 338px card, so Send hung 9px
+           past the card edge; a narrower persona chip brings it back in */
+        '.crow{gap:7px!important}',
+        '.crow .persel:nth-of-type(2){max-width:76px!important;overflow:hidden!important;flex:0 1 auto!important}',
       '}',
       /* 360px: the composer row was 384px wide inside a 332px card, so the send
          button sat 39px off the screen and the hero ran under the card */
