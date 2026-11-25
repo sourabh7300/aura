@@ -64,6 +64,30 @@ build on `https://sourabh7300.github.io/aura/aura.html`, backend `/health`).
   cascade. Do not size the orb from width alone — that is what pushed the greeting under
   the composer.
 
+## The orb (welcome core) and its colour
+
+- `#auraIris` draws a real 3D orb, not a flat gradient: halo, two tilted orbit rings
+  drawn in depth order with motes, a lit sphere with an equator band clipped to it, a
+  rim light, a breathing core and one specular highlight. Keep those in that order —
+  the highlight is what makes it read as a sphere.
+- Colour comes from `AURA_CORE.palette()`. Settings → "Orb colour" writes
+  `localStorage.aura_orb` through `AURA_CORE.orb(name)` (`auto|cyan|gold|violet|rose|
+  emerald|mono`); a fixed theme replaces the palette colours but **not** the motion, so
+  mood still changes speed and turbulence while the hue stays put.
+- `window.__auraIrisDraw(ms)` paints one frame on demand — used by the visibility
+  handler and by the checks.
+
+## Phones: what is hidden on purpose
+
+- `#tools` must keep `flex-wrap:nowrap` inside `#plusmenu`. The reference sets
+  `flex-wrap:wrap`, which turned the column into a *second* column off the right edge —
+  the menu looked cut in half with every label missing.
+- On ≤900px the + panel is a bottom sheet (`position:fixed`, 10px a side, 88px above
+  the composer), not a popover anchored to the button.
+- Hidden on phones because they cannot work there: Code Forge row (keyboard + sandbox),
+  Code and System tabs, the search field, and the matching tour steps (`desk: true`).
+  The tour filters those out, so its length is 10 on a phone and 13 on a laptop.
+
 ## The tour (the only place a newcomer learns how this works)
 
 - `TOUR` in `hook.html` is 13 steps, each with three lines: what it is, how to use it,
