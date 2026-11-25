@@ -64,6 +64,23 @@ build on `https://sourabh7300.github.io/aura/aura.html`, backend `/health`).
   cascade. Do not size the orb from width alone — that is what pushed the greeting under
   the composer.
 
+## The tour (the only place a newcomer learns how this works)
+
+- `TOUR` in `hook.html` is 13 steps, each with three lines: what it is, how to use it,
+  and **How it works**. Do not add a step without that third line — "tap here" alone is
+  what the old four-step tour did, and nobody learned anything from it.
+- A step may carry `tab: 'chats' | 'code' | 'sys' | 'set'`; the tour switches the tab
+  first, then rings the target. `sel: null` means a plain card with nothing to point at.
+- Card is centred with `margin:0 auto` and **not** `translateX(-50%)`: the phone
+  stylesheet pins `left`/`right` with `!important`, and the leftover transform used to
+  push the card half off-screen.
+- Controls: Back / Skip / Next, ← → keys, Esc closes. Progress is stored in
+  `aura_tour_v3`, so it opens once per browser. Replay from Settings ("Show tour") or
+  from + → Guide — the Guide row opens the tour, the DOCS sheet is retired and stays
+  hidden.
+- The card is capped at `64vh` and placed just above the composer on phones; keep both
+  when editing it, or the first screen gets covered again.
+
 ## Gesture & Emotion Sync (MediaPipe, in the browser)
 
 - One module at the end of `hook.html` (`<script type="module" id="aura-emotion-sync">`)
@@ -74,6 +91,11 @@ build on `https://sourabh7300.github.io/aura/aura.html`, backend `/health`).
   fallback; imported lazily, only when the user switches Sync on.
 - Budget: detection 8 FPS, face 4 FPS, on its own rAF. The particle HUD keeps its 60.
   The loop is gated by `document.hidden`, so nothing runs in a background tab.
+- rAF is not guaranteed (embedded webviews, occluded windows, power save). A 260ms
+  timer steps in when frames stop, and `visibilitychange` resets the frame budget so
+  the first detection after coming back is immediate. Keep both.
+- Camera states are visible in the badge and in `AuraSync.state().camera`:
+  `none` → `waiting for camera` → `live`, or `blocked`/`unsupported` with a note.
 - Gestures: open palm (held 0.9s) = freeze the core + stop speech/media; closed fist =
   `setModeNow('zeus')` (never `activate()`, which runs the cinematic and holds `busy`);
   pinch (thumb tip ↔ index tip, normalised by hand length) = confirm an open dialog, else a
