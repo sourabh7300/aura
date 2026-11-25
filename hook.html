@@ -6237,8 +6237,9 @@ function makeQR(text) {
       '@media(max-width:400px){',
         '.crow{gap:7px!important}',
         /* the persona chip cannot fit beside five controls at 360px and it only
-           duplicated Settings → personality, so it steps aside and the buttons grow */
-        '.crow .persel{display:none!important}',
+           duplicated Settings → personality, so it steps aside and the buttons grow.
+           Only the SECOND .persel is the chip — the first wraps the + button. */
+        '.crow .persel:nth-of-type(2){display:none!important}',
         '.crow #auraSearchBtn,.crow #auraAttachBtn{width:40px!important;min-width:40px!important;height:40px!important}',
         '.crow .mic{width:42px!important;min-width:42px!important;height:42px!important}',
         '.crow .send{width:46px!important;min-width:46px!important;height:42px!important}',
