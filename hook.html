@@ -6792,6 +6792,21 @@ function makeQR(text) {
       window.addEventListener('resize', function(){
         if(Math.abs(orbCount() - ORB_N) > 600) buildOrb();
       });
+      /* pointer parallax, like the reference: rotation.y = time*.12 + mx*.5 */
+      var PAR = { x: 0, y: 0, tx: 0, ty: 0 };
+      function trackPointer(e){
+        var p = (e.touches && e.touches[0]) ? e.touches[0] : e;
+        if(p.clientX == null) return;
+        PAR.tx = (p.clientX / Math.max(1, window.innerWidth)) * 2 - 1;
+        PAR.ty = (p.clientY / Math.max(1, window.innerHeight)) * 2 - 1;
+      }
+      window.addEventListener('pointermove', trackPointer, { passive: true });
+      window.addEventListener('touchmove', trackPointer, { passive: true });
+      window.addEventListener('deviceorientation', function(e){
+        if(e.gamma == null) return;
+        PAR.tx = Math.max(-1, Math.min(1, e.gamma / 45));
+        PAR.ty = Math.max(-1, Math.min(1, (e.beta - 45) / 45));
+      }, true);
 
       function spriteFor(rgb){
         var key = rgb.join(',');
@@ -6860,9 +6875,11 @@ function makeQR(text) {
         ctx.fillStyle = bloom;
         ctx.beginPath(); ctx.arc(cx, cy, maxR, 0, Math.PI * 2); ctx.fill();
 
-        /* rotation: y = time * .12 like the portfolio, x sways with the mood */
-        var rotY = t * 0.12 * sp;
-        var rotX = Math.sin(t * 0.19) * 0.26 * turb;
+        /* rotation: y = time * .12 like the portfolio, plus the pointer's own pull */
+        PAR.x += (PAR.tx - PAR.x) * 0.06;
+        PAR.y += (PAR.ty - PAR.y) * 0.06;
+        var rotY = t * 0.12 * sp + PAR.x * 0.5;
+        var rotX = Math.sin(t * 0.19) * 0.26 * turb + PAR.y * 0.26;
         var cosY = Math.cos(rotY), sinY = Math.sin(rotY);
         var cosX = Math.cos(rotX), sinX = Math.sin(rotX);
         var FOV = 3.0;
