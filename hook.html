@@ -5582,6 +5582,14 @@ function makeQR(text) {
         [].forEach.call(crow.querySelectorAll('.persel'), function(el){
           el.setAttribute('data-crow', el === wrap ? 'tools' : 'model');
         });
+        /* The reference writes width/height inline on these nodes (34px search, 36px
+           send...). Inline beats every stylesheet, which is the real reason this block
+           grew a pile of !important. Clear the five properties the stylesheet owns,
+           once, and CSS becomes the single source of truth for the row. */
+        var OWNED = ['width', 'height', 'min-width', 'min-height', 'border-radius'];
+        [].forEach.call(crow.querySelectorAll('#auraSearchBtn,#auraAttachBtn,.mic,.send,[data-crow],[data-crow] button'), function(el){
+          OWNED.forEach(function(prop){ el.style.removeProperty(prop); });
+        });
         var model = crow.querySelector('[data-crow="model"]');
         if(model && !model.getAttribute('title')) model.setAttribute('title', 'Personality — switch in Settings');
         return true;
