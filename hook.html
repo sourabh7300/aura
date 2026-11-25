@@ -2964,6 +2964,11 @@ function makeQR(text) {
       if(!el) return;
       tourRing = el;
       try{ el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' }); }catch(e){}
+      /* a step that switches tab points at a panel that is still laying out, so the
+         first scroll lands short — nudge again once it has settled */
+      setTimeout(function(){
+        try{ if(el.isConnected) el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' }); }catch(e){}
+      }, 450);
       el.style.outline = '2px solid rgba(120,215,255,.85)';
       el.style.outlineOffset = '4px';
       el.style.boxShadow = '0 0 0 6px rgba(120,215,255,.18), 0 0 24px rgba(120,215,255,.45)';
