@@ -86,7 +86,14 @@ build on `https://sourabh7300.github.io/aura/aura.html`, backend `/health`).
   the composer), not a popover anchored to the button.
 - Hidden on phones because they cannot work there: Code Forge row (keyboard + sandbox),
   Code and System tabs, the search field, and the matching tour steps (`desk: true`).
-  The tour filters those out, so its length is 10 on a phone and 13 on a laptop.
+  A phone-only note (`mob: true`) explains that layout instead. The tour filters both,
+  so it is **12 steps on a phone and 14 on a laptop** — keep those numbers in mind when
+  adding a step.
+- Composer controls are one size on a phone: search/attach 38px, mic 40px, send 44px.
+  The mic used to be 33px wide and send 30px, which made the two most used buttons the
+  smallest things on the screen.
+- Tour scrolling is instant and only when the target is out of view. A smooth scroll
+  after a tab switch lands short and makes the phone stutter.
 
 ## The tour (the only place a newcomer learns how this works)
 
