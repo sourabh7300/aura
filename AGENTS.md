@@ -81,6 +81,19 @@ build on `https://sourabh7300.github.io/aura/aura.html`, backend `/health`).
 - `window.__auraIrisDraw(ms)` paints one frame on demand — used by the visibility
   handler and by the checks.
 
+## Breakpoints (measured, do not guess)
+
+| Width | Rule |
+|---|---|
+| **< 640** | phone: Code + System tabs off, chips/tip off, search field off, Code Forge row off, tour shows the phone note |
+| **< 820** | Code workspace off (`#p-code` + its tab), Code Forge row off, Code/Keyboard tour steps out |
+| **≤ 430** | persona chip capped to 76px so Send stays inside the card (at 390 it hung 9px out) |
+| **≤ 380** | persona chip hidden entirely (it only duplicated Settings → personality); mic 42, send 44–46 |
+
+- The composer row must be checked at **360, 390, 430**: the row is width-critical and the
+  send button is the first thing to fall off the card.
+- At 360 the welcome block (orb 190px) must end above the composer: verified 585 vs 595.
+
 ## Phones: what is hidden on purpose
 
 - `#tools` must keep `flex-wrap:nowrap` inside `#plusmenu`. The reference sets
