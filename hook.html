@@ -6404,6 +6404,12 @@ function makeQR(text) {
          only what inline cannot fight: gap, and the chip's cap/hiding. */
       '#card .crow{gap:8px}',
       '#card .crow>*{flex:0 0 auto}',
+      /* the reference's own spacer carries the row's push: `<span class="sp">` sits
+         between the + and the persona chip and its `.sp{flex:1}` is what puts the mic and
+         send at the far RIGHT of the dock. The blanket `>*{flex:0 0 auto}` above overrode
+         it, so the whole row collapsed to the left and the composer read like the phone
+         one on a laptop. Restore it with a selector specific enough to win, no !important. */
+      '#card .crow>.sp{flex:1 1 auto;min-width:0}',
       '#card .crow [data-crow="model"]{flex:0 1 auto;min-width:0;max-width:104px;overflow:hidden;' +
         'height:38px;font-size:12px;white-space:nowrap}',
       /* 440/370, not 430/380: a phone that reports 430.4 CSS px would fail a
