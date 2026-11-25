@@ -132,6 +132,19 @@ build on `https://sourabh7300.github.io/aura/aura.html`, backend `/health`).
   a bottom-anchored panel and once left the menu 19px above a 1280×800 window.
   Breakpoint changes are also watched through `matchMedia('(max-width:900px)')` and
   `visualViewport`, because a `resize` event can arrive before the new width is real.
+- **`position:fixed` is not the viewport here.** The composer card carries
+  `backdrop-filter`, which makes it the containing block for fixed children, so a flat
+  `left:10px` landed at x=24 on a 360 phone. `fixedBlock()` walks up for the first ancestor
+  with transform / filter / backdrop-filter / perspective / will-change / contain and the
+  insets are written relative to it (`10 - block.left`). Measured after the fix: 11px a
+  side at 360 (w 338), 390 (w 368) and 430 (w 408) — the extra 1px is the card's border.
+- The panel's own card list renders after the first clamp, and a taller list lifts a
+  bottom-anchored popover above the window (measured top -19 at 1280×800). `place()` is
+  therefore called at open + 90 / 320 / 760ms, not just once.
+- The `+` glyph: the reference's `.plus` is 22px; `tagCrow()` sets `font-size:19px` inline
+  on any viewport under 900, which is what the deleted `@media` rule did. Note that
+  computed-style reads are frozen in a hidden panel, so this one is verified by the inline
+  declaration and a screenshot, not by `getComputedStyle`.
 
 ## `!important` policy (the whole sheet)
 
