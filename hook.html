@@ -6943,6 +6943,18 @@ function makeQR(text) {
         }
         return { frame: frame, count: function(){ return NPTS; }, type: 'webgl' };
       })();
+      if(!orbGL && ctx === null){
+        /* The context was created but the shaders did not build. A canvas can never
+           change context kind, so take a fresh node for the Canvas2D fallback instead
+           of painting nothing every frame. */
+        var fresh = document.createElement('canvas');
+        fresh.id = 'auraIris';
+        fresh.style.cssText = cv.style.cssText;
+        if(cv.parentNode) cv.parentNode.replaceChild(fresh, cv);
+        cv = fresh;
+        ctx = cv.getContext('2d');
+        try{ size(); }catch(e){}
+      }
 
       function level(){
         try{

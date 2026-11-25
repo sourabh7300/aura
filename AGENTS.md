@@ -66,20 +66,32 @@ build on `https://sourabh7300.github.io/aura/aura.html`, backend `/health`).
 
 ## The orb (welcome core) and its colour
 
-- `#auraIris` is matched to the owner's portfolio core (`MyPortfolio/index.html`,
-  Three.js): Fibonacci sphere, 9000 points on desktop / 4200 on a phone, additive
-  blending, hard 1-2px points (a rect, not a blurred sprite), per-particle wobble
-  ±0.07, `rotation.y = t * .12`, pointer parallax `+ mx * .5`, colour ramp
-  `mix(c1, c2, depth)` with **teal specks at ~2.8%** (the reference uses 2.5%).
-- The reference numbers, copied deliberately: c1 `(255,122,61)`, c2 `(255,224,160)`,
-  speck `(130,255,240)`, FOV 3.0, point size `base * .0072` scaled by depth.
-- Cost: ~4.5ms per frame at 9000 points on a 236px canvas. That is the Canvas2D budget;
-  the portfolio's 34k is WebGL. Raising the count further will drop frames on a phone.
+- `#auraIris` **is the portfolio's own shader**, not an imitation. `MyPortfolio/index.html`
+  (three.js **r128**) draws its core with one `ShaderMaterial`; r128 has no colour
+  management, so its colours reach the GPU exactly as written and the shader can be
+  copied line for line. `orbGL` in `hook.html` is that copy: the same 4 shape
+  generators (sphere 2.1, helix 2.3, cube lattice, ring 2.3), the same wobble
+  `p += vec3(sin,cos,sin)*.07`, the same `mix(sc,p,intro)` shell reveal, the same
+  `gl_PointSize = px*(1+step(.96,sd)*1.5)/-mv.z`, the same fragment colour
+  `mix(c1,c2,y*.22+.5)` with `step(.975,sd)` teal specks at 2.5%.
+- Constants, copied deliberately: **34,000 points on desktop / 12,000 on phone** (the
+  reference never scales its count with the window), c1 `(255,122,61)`, c2
+  `(255,224,160)`, speck `(112,232,214)` = `vec3(.44,.91,.84)`, `rotation.y = t*.12`,
+  pointer parallax `±.25`, `rotation.x = ±.15`, `al = .85`, camera z 9, fov narrowed to
+  `2*atan(1.89/(.86*9))` so the sphere fills 86% of the stage instead of the hero's 51%.
+- Point size is `0.0085 * sphereDiameter`, **not** the proportional 0.0056: the
+  reference's 2.8px points overlap six deep per pixel on a 500px sphere, and a straight
+  shrink lands on ~1.1px points that never overlap — a dusty haze instead of glowing
+  grain. Measured at that setting: 85% of the sphere covered, max alpha 255, ~0.1ms of
+  JS per frame (the work is on the GPU; 34k points is nothing).
+- Canvas2D is the fallback only (`ctx = glTry ? null : cv.getContext('2d')`) — a canvas
+  can never hand out two context kinds, so the WebGL attempt must come first.
 - Themes: `AURA_CORE.orb('portfolio'|'auto'|'cyan'|'gold'|'violet'|'rose'|'emerald|'mono')`.
   `portfolio` is the default and is the exact reference palette; `auto` follows mood.
 - No rings, no rim light, no solid body — the reference has none of those, and adding
   them back is what made it read as "a ball" instead of "a particle core".
-- Colour comes from `AURA_CORE.palette()`. Settings → "Orb colour" writes
+- Colour comes from `AURA_CORE.palette()` (`deep` → c1, `hot` → c2, `speck` → c3).
+  Settings → "Orb colour" writes
   `localStorage.aura_orb` through `AURA_CORE.orb(name)` (`auto|cyan|gold|violet|rose|
   emerald|mono`); a fixed theme replaces the palette colours but **not** the motion, so
   mood still changes speed and turbulence while the hue stays put.
