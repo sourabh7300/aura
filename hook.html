@@ -6875,7 +6875,11 @@ function makeQR(text) {
              on the portfolio hero at 540x900: 2.8px points on a 500px sphere). */
           var d = hPx * 0.86;
           NPTS = window.innerWidth < 768 ? 12000 : 34000;
-          PXSIZE = 9 * Math.max(1, Math.min(5, 0.0056 * d));
+          /* 0.85% of the sphere across, not the portfolio's 0.56%: at 500px the reference's
+             2.8px points overlap six deep per pixel, and a straight proportional shrink
+             would land on 1.1px points that never overlap — a dusty haze instead of the
+             glowing grain. Slightly larger points here reproduce the same density. */
+          PXSIZE = 9 * Math.max(1.35, Math.min(5, 0.0085 * d));
           var A = [[], [], [], []], sc = [], sd = [];
           for(var i = 0; i < NPTS; i++){
             for(var k = 0; k < 4; k++){ var p = SH[k](); A[k].push(p[0], p[1], p[2]); }
