@@ -6235,11 +6235,13 @@ function makeQR(text) {
       /* 360px: the composer row was 384px wide inside a 332px card, so the send
          button sat 39px off the screen and the hero ran under the card */
       '@media(max-width:400px){',
-        '.crow{gap:6px!important}',
-        '.crow #auraSearchBtn,.crow #auraAttachBtn{width:36px!important;min-width:36px!important;height:36px!important}',
-        '.crow .persel{max-width:80px!important;overflow:hidden!important}',
-        '.crow .mic{width:38px!important;min-width:38px!important;height:38px!important}',
-        '.crow .send{width:40px!important;min-width:40px!important;height:38px!important}',
+        '.crow{gap:7px!important}',
+        /* the persona chip cannot fit beside five controls at 360px and it only
+           duplicated Settings → personality, so it steps aside and the buttons grow */
+        '.crow .persel{display:none!important}',
+        '.crow #auraSearchBtn,.crow #auraAttachBtn{width:40px!important;min-width:40px!important;height:40px!important}',
+        '.crow .mic{width:42px!important;min-width:42px!important;height:42px!important}',
+        '.crow .send{width:46px!important;min-width:46px!important;height:42px!important}',
         '#coreStageWrap{width:190px!important;height:190px!important}',
         '#wel h2{font-size:clamp(21px,6.4vw,30px)!important}',
       '}'
