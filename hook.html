@@ -5014,14 +5014,14 @@ function makeQR(text) {
            the portfolio's 400px sphere. 46vh with a 400px ceiling gives a laptop a real
            core while a short window still shrinks it. Phones are capped to 236px by the
            later media sheet, so the max(220px,...) floor only ever applies above 900px. */
-        '#coreStageWrap{width:clamp(200px,min(max(220px,26vw),46vh),400px)!important;' +
-          'height:clamp(200px,min(max(220px,26vw),46vh),400px)!important;margin-bottom:10px!important}' +
+        '#coreStageWrap{width:clamp(200px,min(max(220px,30vw),44vh),400px)!important;' +
+          'height:clamp(200px,min(max(220px,30vw),44vh),400px)!important;margin-bottom:10px!important}' +
         '#wel h2{font-size:clamp(26px,min(max(32px,4.6vw),6.4vh),58px)!important;line-height:1.08!important}' +
         /* the top-bar search button: the reference's own markup is `Search` + `<kbd>Ctrl K</kbd>`
            in a 34px-high icon-button slot, which squeezed the shortcut into 19px of unreadable
            text. Give it room and style the kbd like a key. Desktop only — ≤900 it is hidden. */
         '@media(min-width:901px){' +
-          '#srch{min-width:158px;height:36px;padding:0 13px;gap:9px;border-radius:11px;' +
+          '#srch{min-width:158px;height:34px;padding:0 13px;gap:9px;border-radius:10px;' +
             'justify-content:space-between;color:var(--tx);font-size:12.5px;' +
             'background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.13);transition:.18s}' +
           '#srch:hover{background:rgba(255,255,255,.09);border-color:rgba(120,215,255,.45)}' +
