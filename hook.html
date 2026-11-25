@@ -8104,6 +8104,8 @@ function makeQR(text) {
         S.face = await cpu.face;
       }
       S.ready = true;
+      /* models are up; say what we are still waiting for instead of "starting…" */
+      if(S.on && !liveFeed()) paintBadge('SYNC · waiting for camera — allow it');
       return true;
     } catch (e) {
       note('Sync needs the MediaPipe models — check the connection');
