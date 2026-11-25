@@ -4565,7 +4565,10 @@ function makeQR(text) {
             /* NOT !important: place() writes an inline max-height that fits the space above
                the composer, and an important rule here would win and hand it back */
             'max-height:min(76vh,640px);box-shadow:0 26px 70px rgba(0,0,0,.7)!important}' +
-          '#plusmenu #tools{display:flex!important;flex-direction:column;max-height:inherit;padding:0}' +
+          /* nowrap matters: the reference sets flex-wrap:wrap on #tools, so a column
+             taller than the sheet wrapped its rows into a SECOND column that sat off
+             the right edge — the phone menu looked like it was cut in half. */
+          '#plusmenu #tools{display:flex!important;flex-direction:column;flex-wrap:nowrap!important;max-height:inherit;padding:0}' +
           '#tools .at-top{display:flex;align-items:center;gap:8px;padding:12px 12px 10px 14px;' +
             'border-bottom:1px solid rgba(255,255,255,.07);background:rgba(255,255,255,.015);flex:none}' +
           '#tools .at-dot{width:6px;height:6px;border-radius:50%;background:#4ec8ff;box-shadow:0 0 10px #4ec8ff;flex:none}' +
