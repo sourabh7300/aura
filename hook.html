@@ -6234,7 +6234,7 @@ function makeQR(text) {
       '}',
       /* 360px: the composer row was 384px wide inside a 332px card, so the send
          button sat 39px off the screen and the hero ran under the card */
-      '@media(max-width:400px){',
+      '@media(max-width:380px){',   /* 360-class phones only; a 390 keeps its persona chip */
         '.crow{gap:7px!important}',
         /* the persona chip cannot fit beside five controls at 360px and it only
            duplicated Settings → personality, so it steps aside and the buttons grow.
