@@ -6775,6 +6775,9 @@ function makeQR(text) {
         var R = base * 0.315 * (1 + ex * 0.05 + amp * 0.18);
         var sp = mood.frozen ? 0 : (mood.spin || 1);
         var turb = mood.turb || 1;
+        /* it drifts as well as turns, so it never looks pinned to the page */
+        cx += Math.sin(t * 0.37) * R * 0.035;
+        cy += Math.cos(t * 0.29) * R * 0.026;
         ctx.clearRect(0, 0, w, h);
 
         /* ---- the light the sphere sits in ---- */
@@ -6840,7 +6843,8 @@ function makeQR(text) {
         for(var i = 0; i < SPHERE.length; i++){
           var q = project(SPHERE[i], true);
           var depth = (1 - q.z) / 2;                       /* 0 back .. 1 front */
-          var alpha = 0.05 + Math.pow(depth, 1.45) * 0.95;
+          var twinkle = 0.82 + 0.18 * Math.sin(t * 2.1 + SPHERE[i].w * 11);
+          var alpha = (0.05 + Math.pow(depth, 1.45) * 0.95) * twinkle;
           var size = dot * (0.50 + depth * 1.35) * SPHERE[i].w;
           /* the front of the sphere takes the hot colour, the back stays deep */
           var col = depth > 0.82 ? mix(210, 248, 255, true)
