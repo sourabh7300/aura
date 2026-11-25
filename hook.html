@@ -6229,6 +6229,17 @@ function makeQR(text) {
       '@media(max-width:430px){',
         '.tabs button{font-size:11.5px;padding:0 8px;height:32px}',
         '.tabs{gap:1px}',
+      '}',
+      /* 360px: the composer row was 384px wide inside a 332px card, so the send
+         button sat 39px off the screen and the hero ran under the card */
+      '@media(max-width:400px){',
+        '.crow{gap:6px!important}',
+        '.crow #auraSearchBtn,.crow #auraAttachBtn{width:36px!important;min-width:36px!important;height:36px!important}',
+        '.crow .persel{max-width:80px!important;overflow:hidden!important}',
+        '.crow .mic{width:38px!important;min-width:38px!important;height:38px!important}',
+        '.crow .send{width:40px!important;min-width:40px!important;height:38px!important}',
+        '#coreStageWrap{width:190px!important;height:190px!important}',
+        '#wel h2{font-size:clamp(21px,6.4vw,30px)!important}',
       '}'
     ].join("");
     document.head.appendChild(mq);
