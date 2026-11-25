@@ -66,14 +66,19 @@ build on `https://sourabh7300.github.io/aura/aura.html`, backend `/health`).
 
 ## The orb (welcome core) and its colour
 
-- `#auraIris` draws a **particle sphere**, the look the owner asked for: points on a
-  Fibonacci sphere (640 phone / 1180 desktop), rotated on Y with a slow X sway,
-  projected with a real perspective divide (`FOV / (FOV + z)`) so the far side shrinks
-  and dims, plus a thin outer cloud, two orbit rings, a limb glow and a core glow.
-  The whole orb drifts a few pixels on a sine so it never looks pinned to the page.
-- Constants that control the feel: `dot` (particle radius), the `alpha` curve
-  (`pow(depth, 1.45)`), `FOV = 3.1`, and the rotation speed `t * 0.30 * sp`. Density is
-  rebuilt on a large resize; do not allocate per frame.
+- `#auraIris` is matched to the owner's portfolio core (`MyPortfolio/index.html`,
+  Three.js): Fibonacci sphere, 9000 points on desktop / 4200 on a phone, additive
+  blending, hard 1-2px points (a rect, not a blurred sprite), per-particle wobble
+  ±0.07, `rotation.y = t * .12`, pointer parallax `+ mx * .5`, colour ramp
+  `mix(c1, c2, depth)` with **teal specks at ~2.8%** (the reference uses 2.5%).
+- The reference numbers, copied deliberately: c1 `(255,122,61)`, c2 `(255,224,160)`,
+  speck `(130,255,240)`, FOV 3.0, point size `base * .0072` scaled by depth.
+- Cost: ~4.5ms per frame at 9000 points on a 236px canvas. That is the Canvas2D budget;
+  the portfolio's 34k is WebGL. Raising the count further will drop frames on a phone.
+- Themes: `AURA_CORE.orb('portfolio'|'auto'|'cyan'|'gold'|'violet'|'rose'|'emerald|'mono')`.
+  `portfolio` is the default and is the exact reference palette; `auto` follows mood.
+- No rings, no rim light, no solid body — the reference has none of those, and adding
+  them back is what made it read as "a ball" instead of "a particle core".
 - Colour comes from `AURA_CORE.palette()`. Settings → "Orb colour" writes
   `localStorage.aura_orb` through `AURA_CORE.orb(name)` (`auto|cyan|gold|violet|rose|
   emerald|mono`); a fixed theme replaces the palette colours but **not** the motion, so
