@@ -6796,8 +6796,11 @@ function makeQR(text) {
         c.width = c.height = 32;
         var g = c.getContext('2d');
         var grd = g.createRadialGradient(16, 16, 0, 16, 16, 16);
+        /* a tight core with a short falloff: the shader's smoothstep(.5,0,d), not a
+           fat blur — a wide sprite turns 6000 additive points into one woolly ball */
         grd.addColorStop(0, 'rgba(' + key + ',1)');
-        grd.addColorStop(0.42, 'rgba(' + key + ',0.55)');
+        grd.addColorStop(0.26, 'rgba(' + key + ',0.62)');
+        grd.addColorStop(0.60, 'rgba(' + key + ',0.16)');
         grd.addColorStop(1, 'rgba(' + key + ',0)');
         g.fillStyle = grd;
         g.fillRect(0, 0, 32, 32);
@@ -6878,7 +6881,9 @@ function makeQR(text) {
           var speck = p.s > 0.975;
           var sz = px * (0.55 + depth * 1.45) * (0.75 + p.s * 0.5) * persp;
           if(speck) { sz *= 2.1; tint = 5; }
-          ctx.globalAlpha = (0.26 + depth * 0.52) * (speck ? 1 : 0.86);
+          /* additive blending stacks, so each point must be faint: the reference
+             composites 12k-34k of them before the sphere looks solid */
+          ctx.globalAlpha = (0.10 + depth * 0.34) * (speck ? 1 : 0.8);
           var spr = tints[tint];
           ctx.drawImage(spr, sx - sz, sy - sz, sz * 2, sz * 2);
         }
