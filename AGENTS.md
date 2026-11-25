@@ -86,6 +86,15 @@ build on `https://sourabh7300.github.io/aura/aura.html`, backend `/health`).
   JS per frame (the work is on the GPU; 34k points is nothing).
 - Canvas2D is the fallback only (`ctx = glTry ? null : cv.getContext('2d')`) — a canvas
   can never hand out two context kinds, so the WebGL attempt must come first.
+- **Stage size** (`homeLayout`): `clamp(200px, min(max(220px,30vw),44vh), 400px)`. The
+  height term used to be `30vh`, which is 240px on a 1280×800 laptop — the core read as a
+  badge beside the portfolio's ~400px sphere. Measured after the change: 307px at
+  1024×768, 352 at 1280×800, 338 at 1366×768, 396 at 1440×900, all with the hero still
+  10–35px clear of the composer. Phones keep their own caps (236 above 380, 190 at ≤380).
+- **Top-bar search** (`.ib#srch`, desktop only): `min-width:158px`, 34px tall, and its
+  `<kbd>Ctrl K</kbd>` gets 9.5px on one line. The reference's own markup squeezed that
+  shortcut into a 19px box — unreadable, which is what "the search bar is too small"
+  meant. Hidden below 900px.
 - Themes: `AURA_CORE.orb('portfolio'|'auto'|'cyan'|'gold'|'violet'|'rose'|'emerald|'mono')`.
   `portfolio` is the default and is the exact reference palette; `auto` follows mood.
 - No rings, no rim light, no solid body — the reference has none of those, and adding
