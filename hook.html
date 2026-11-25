@@ -5586,9 +5586,10 @@ function makeQR(text) {
            send) and re-applies them on its own renders, so a stylesheet cannot own the
            sizes without !important. One table, one function, applied from JS: the row's
            sizes are now a single readable list instead of three media queries. */
-        var T = window.innerWidth <= 370 ? { side: 40, mic: 42, send: 46, h: 42 }
-              : window.innerWidth <= 440 ? { side: 36, mic: 40, send: 44, h: 40 }
-              : { side: 38, mic: 40, send: 44, h: 40 };
+        /* two rows is all the row needs: the narrow set fits 360 with room to spare
+           (278px of 346), so there is no third breakpoint to keep in sync */
+        var T = window.innerWidth <= 440 ? { side: 36, mic: 40, send: 44, h: 40 }
+                                        : { side: 38, mic: 40, send: 44, h: 40 };
         var box = function(el, w, h, r){
           if(!el) return;
           el.style.width = w + 'px'; el.style.minWidth = w + 'px';
@@ -5607,8 +5608,13 @@ function makeQR(text) {
       }
       if(!tag()) setTimeout(tag, 500);
       setTimeout(tag, 1800);            /* the reference re-renders its dock once */
+      /* the viewport settles a beat after the event, so tag on both edges */
       var rz = 0;
-      window.addEventListener('resize', function(){ clearTimeout(rz); rz = setTimeout(tag, 160); });
+      window.addEventListener('resize', function(){
+        clearTimeout(rz);
+        setTimeout(tag, 80);
+        rz = setTimeout(tag, 420);
+      });
     })();
   }catch(e){}
 
