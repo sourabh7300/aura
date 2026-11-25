@@ -66,10 +66,14 @@ build on `https://sourabh7300.github.io/aura/aura.html`, backend `/health`).
 
 ## The orb (welcome core) and its colour
 
-- `#auraIris` draws a real 3D orb, not a flat gradient: halo, two tilted orbit rings
-  drawn in depth order with motes, a lit sphere with an equator band clipped to it, a
-  rim light, a breathing core and one specular highlight. Keep those in that order —
-  the highlight is what makes it read as a sphere.
+- `#auraIris` draws a **particle sphere**, the look the owner asked for: points on a
+  Fibonacci sphere (640 phone / 1180 desktop), rotated on Y with a slow X sway,
+  projected with a real perspective divide (`FOV / (FOV + z)`) so the far side shrinks
+  and dims, plus a thin outer cloud, two orbit rings, a limb glow and a core glow.
+  The whole orb drifts a few pixels on a sine so it never looks pinned to the page.
+- Constants that control the feel: `dot` (particle radius), the `alpha` curve
+  (`pow(depth, 1.45)`), `FOV = 3.1`, and the rotation speed `t * 0.30 * sp`. Density is
+  rebuilt on a large resize; do not allocate per frame.
 - Colour comes from `AURA_CORE.palette()`. Settings → "Orb colour" writes
   `localStorage.aura_orb` through `AURA_CORE.orb(name)` (`auto|cyan|gold|violet|rose|
   emerald|mono`); a fixed theme replaces the palette colours but **not** the motion, so
