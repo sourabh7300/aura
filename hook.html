@@ -4937,7 +4937,10 @@ function makeQR(text) {
           var p = panel();
           /* deferred: on the resize event the composer has not been re-laid out yet, so an
              immediate measure clamps against the old box and the panel hangs off the top */
-          if(p && p.classList.contains('on')) setTimeout(place, 80);
+          /* twice: the first pass can still see the old viewport (the resize event fires
+             before layout settles), which left a phone sheet pinned after growing the
+             window back to desktop */
+          if(p && p.classList.contains('on')){ setTimeout(place, 80); setTimeout(place, 420); }
         });
       });
     })();
