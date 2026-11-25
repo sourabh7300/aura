@@ -91,10 +91,15 @@ build on `https://sourabh7300.github.io/aura/aura.html`, backend `/health`).
   badge beside the portfolio's ~400px sphere. Measured after the change: 307px at
   1024×768, 352 at 1280×800, 338 at 1366×768, 396 at 1440×900, all with the hero still
   10–35px clear of the composer. Phones keep their own caps (236 above 380, 190 at ≤380).
-- **Top-bar search** (`.ib#srch`, desktop only): `min-width:158px`, 34px tall, and its
-  `<kbd>Ctrl K</kbd>` gets 9.5px on one line. The reference's own markup squeezed that
-  shortcut into a 19px box — unreadable, which is what "the search bar is too small"
-  meant. Hidden below 900px.
+- **Top-bar search** (`.ib#srch`, desktop only): the reference's thin outlined chip, kept
+  as-is (no fill — a filled pill reads as a mobile search field). Only the squeeze is
+  fixed: `white-space:nowrap`, `kbd` 10.5px, 107×34 total, no clipping. Hidden below 900px.
+- **Composer row spacer**: `#card .crow>.sp{flex:1 1 auto;min-width:0}`. The reference's
+  markup is `[+][sp][model chip][mic][send]` and its own `.sp{flex:1}` is what pushes the
+  right cluster to the dock's right edge. The blanket `#card .crow>*{flex:0 0 auto}`
+  outranked it, so every control collapsed into the left corner and the laptop composer
+  looked exactly like the phone row. Measured after the fix: send 21px from the card's
+  right edge at 360 / 390 / 1280, model chip hidden at ≤370, no horizontal overflow.
 - Themes: `AURA_CORE.orb('portfolio'|'auto'|'cyan'|'gold'|'violet'|'rose'|'emerald|'mono')`.
   `portfolio` is the default and is the exact reference palette; `auto` follows mood.
 - No rings, no rim light, no solid body — the reference has none of those, and adding
