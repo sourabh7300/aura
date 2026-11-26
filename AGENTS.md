@@ -70,10 +70,14 @@ build on `https://sourabh7300.github.io/aura/aura.html`, backend `/health`).
   (three.js **r128**) draws its core with one `ShaderMaterial`; r128 has no colour
   management, so its colours reach the GPU exactly as written and the shader can be
   copied line for line. `orbGL` in `hook.html` is that copy: the same 4 shape
-  generators (sphere 2.1, helix 2.3, cube lattice, ring 2.3), the same wobble
-  `p += vec3(sin,cos,sin)*.07`, the same `mix(sc,p,intro)` shell reveal, the same
-  `gl_PointSize = px*(1+step(.96,sd)*1.5)/-mv.z`, the same fragment colour
+  generators (sphere 2.1, helix 2.3, cube lattice, ring 2.3), the same
+  `mix(sc,p,intro)` shell reveal, the same fragment colour
   `mix(c1,c2,y*.22+.5)` with `step(.975,sd)` teal specks at 2.5%.
+- **Two amplitudes are deliberately tuned away from the reference**, because at a 300px
+  stage the reference's numbers boil instead of drifting: wobble `.028` at `time*.16`
+  (reference `.07` at `*.25`) and glint `*.9` instead of `*1.5`, wrapped in
+  `max(1., …)` so far points never fall below one device pixel and alias. Grain, glow and
+  colour are untouched (measured after: cover .456, mean alpha 72 at 1024, same as before).
 - Constants, copied deliberately: **34,000 points on desktop / 12,000 on phone** (the
   reference never scales its count with the window), c1 `(255,122,61)`, c2
   `(255,224,160)`, speck `(112,232,214)` = `vec3(.44,.91,.84)`, `rotation.y = t*.12`,
