@@ -59,7 +59,12 @@
         if (result !== null) return result;
         if (attempt >= maxRetries) { pushSys('[JSON parse retry' + (ctx ? ' ' + ctx : '') + '] max retries reached'); return fallback; }
         var delay = baseDelay * Math.pow(2, attempt);
-        pu
+        pushSys('[JSON parse retry' + (ctx ? ' ' + ctx : '') + '] attempt ' + (attempt+1) + '/' + maxRetries + ' waiting ' + delay + 'ms');
+        attempt++;
+        return new Promise(function(resolve){ setTimeout(function(){ resolve(tryParse()); }, delay); });
+      }
+      return tryParse();
+    };
     // AURA_GEN_CHAT_SEARCH_CHANGE_GUARD — prevents live source conflicts during chat-search updates
     window.chatSearchChangeGuard = (function(){
       var version = 0;
@@ -91,12 +96,7 @@
       }
       function getState(){ return { version: version, lastUpdate: lastUpdate, pending: pending }; }
       return { beginUpdate: beginUpdate, commitUpdate: commitUpdate, abortUpdate: abortUpdate, getState: getState, checkConflict: checkConflict };
-    })();shSys('[JSON parse retry' + (ctx ? ' ' + ctx : '') + '] attempt ' + (attempt+1) + '/' + maxRetries + ' waiting ' + delay + 'ms');
-        attempt++;
-        return new Promise(function(resolve){ setTimeout(function(){ resolve(tryParse()); }, delay); });
-      }
-      return tryParse();
-    };
+    })();
     try{
       var theme = null;
       var fb = window.safeJSONParse(localStorage.getItem('aura_fb_live'), null, 'aura_fb_live');
@@ -1447,7 +1447,6 @@ body[data-tab="chats"] .ch2-prev{
   body[data-tab="chats"] #sessPrev{min-height:0;max-height:46vh}
 }
 
-/* ============================================================
 </style>
 <style>
 
@@ -2173,7 +2172,7 @@ body:not(.theme-classical):not(.theme-gold) .msg.user{
   body #settingsMenu{top:84px!important;left:98px!important;right:14px!important;bottom:44px!important}
   body{--dockH:150px}
 }
-   At v5's 14px chip size it wrapped onto two lines and collided with the mic
+   /* At v5's 14px chip size it wrapped onto two lines and collided with the mic
    (measured 172x43px overlap), so it is phone-only and stays compact there. */
 @media(min-width:601px){#chipsMobile{display:none!important}}
 @media(max-width:600px){#chipsMobile .chip{font-size:11px;padding:5px 11px}}
@@ -3186,9 +3185,8 @@ html.m-phone body #meshTop{
 <symbol id="i-set" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 13.5a7.8 7.8 0 0 0 0-3l1.8-1.4-2-3.4-2.2.9a7.6 7.6 0 0 0-2.6-1.5L14 2h-4l-.4 2.6a7.6 7.6 0 0 0-2.6 1.5l-2.2-.9-2 3.4L4.6 10a7.8 7.8 0 0 0 0 3l-1.8 1.4 2 3.4 2.2-.9a7.6 7.6 0 0 0 2.6 1.5L10 22h4l.4-2.6a7.6 7.6 0 0 0 2.6-1.5l2.2.9 2-3.4z"/></symbol>
 </defs></svg>
 <div id="tabbar">
-  <button data-t="chat" class="on" aria-label="Chat"><svg class="i"><use href="#i-chat"
-/* AURA_GEN_ACCESSIBILITY_ARIA_LABELS */
-/></svg>CHAT</button>
+  <!-- AURA_GEN_ACCESSIBILITY_ARIA_LABELS -->
+  <button data-t="chat" class="on" aria-label="Chat"><svg class="i"><use href="#i-chat"/></svg>CHAT</button>
   <button data-t="chats"><svg class="i"><use href="#i-chats"/></svg>CHATS</button>
   <button data-t="code"><svg class="i"><use href="#i-code"/></svg>CODE</button>
   <button data-t="system"><svg class="i"><use href="#i-sys"/></svg>SYSTEM</button>
