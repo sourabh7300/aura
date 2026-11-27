@@ -2955,7 +2955,7 @@ function makeQR(text) {
       return true;
     });
     var TOUR_KEY = 'aura_tour_v3';
-    var tourEl = null, tourStep = 0, tourRing = null, tourKey = null;
+    var tourEl = null, tourStep = 0, tourRing = null, tourKey = null, tourRez = null;
 
     function ringOn(sel){
       ringOff();
@@ -2994,6 +2994,9 @@ function makeQR(text) {
     function tourClose(done){
       ringOff();
       if(tourKey){ try{ document.removeEventListener('keydown', tourKey, true); }catch(e){} tourKey = null; }
+      if(tourRez){ try{ window.removeEventListener('resize', tourRez); }catch(e){} tourRez = null; }
+      var cop = document.getElementById('auraCopLauncher');
+      if(cop) cop.style.visibility = '';
       if(tourEl && tourEl.parentNode) tourEl.parentNode.removeChild(tourEl);
       tourEl = null;
       tourSave(done ? 'done' : 'skipped');
@@ -3001,6 +3004,43 @@ function makeQR(text) {
     function tourGo(i){
       tourStep = Math.max(0, Math.min(TOUR.length - 1, i));
       tourDraw();
+    }
+    /* The card is 225px tall — taller than the gap between the orb and the composer on
+       a laptop — so sitting above the composer hides the bottom of the core. When there
+       is room beside the orb (1280 and wider) it docks to the right edge instead; below
+       that there is no room and it stays above the composer. */
+    function tourPlace(){
+      if(!tourEl) return;
+      var st = tourEl.style, vh = innerHeight;
+      var cv = document.getElementById('auraIris');
+      var half = cv ? cv.getBoundingClientRect().width / 2 : 0;
+      var box = document.getElementById('card') || document.getElementById('inp');
+      var bottom = 96;
+      if(box){
+        var top = box.getBoundingClientRect().top;
+        if(top > 40 && top < vh - 30) bottom = Math.max(16, Math.min(vh * 0.55, vh - top + 10));
+      }
+      var room = innerWidth / 2 - half;
+      if(innerWidth > 900 && room >= 330){
+        /* top-docked, not centred: steps run 206–269px tall, and a centred card reaches
+           down to the greeting while still clearing the orb. At 72px the tallest step
+           ends at 341 and the composer starts at 530. Below 1280 the side margin is
+           narrower than 430px, so the card narrows to fit it rather than cover the core. */
+        st.width = 'min(430px,' + Math.round(room - 40) + 'px)';
+        st.left = 'auto'; st.right = '24px'; st.margin = '0'; st.bottom = 'auto';
+        st.top = '72px';
+      } else {
+        st.width = ''; st.left = '0'; st.right = '0'; st.margin = '0 auto'; st.top = 'auto';
+        st.bottom = bottom + 'px';
+      }
+      /* the Co-Pilot launcher now sits just above the composer, which is where the card
+         ends up on a phone — hide it for as long as the tour covers that corner */
+      var cop = document.getElementById('auraCopLauncher');
+      if(cop){
+        var cr = cop.getBoundingClientRect(), tr = tourEl.getBoundingClientRect();
+        var hit = cr.left < tr.right && cr.right > tr.left && cr.top < tr.bottom && cr.bottom > tr.top;
+        cop.style.visibility = hit ? 'hidden' : '';
+      }
     }
     function tourDraw(){
       var s = TOUR[tourStep];
@@ -3030,6 +3070,8 @@ function makeQR(text) {
           else if(e.key === 'ArrowLeft'){ e.preventDefault(); tourGo(tourStep - 1); }
         };
         document.addEventListener('keydown', tourKey, true);
+        tourRez = function(){ tourPlace(); };
+        window.addEventListener('resize', tourRez);
       }
       /* sit above the composer, never on top of it (mobile included) */
       try{
@@ -3068,6 +3110,7 @@ function makeQR(text) {
       };
       var back = document.getElementById('auraTourBack');
       if(back) back.onclick = function(){ tourGo(tourStep - 1); };
+      tourPlace();
       setTimeout(function(){ ringOn(s.sel); }, s.tab ? 240 : 30);
     }
     window.__auraTour = function(){
@@ -3639,6 +3682,21 @@ function makeQR(text) {
       window.addEventListener('resize', function(){ if(el.style.display !== 'none') copClamp(el); });
     }
 
+    /* On a phone the composer card spans the full width, so the launcher's default
+       bottom-right corner lands on the text field. Lift it clear of the card whenever
+       that default spot would overlap. */
+    function copDefaultBottom(){
+      var bottom = 78;
+      var card = document.getElementById('card');
+      if(!card) return bottom;
+      var r = card.getBoundingClientRect();
+      if(!r.width || !r.height) return bottom;
+      var left = innerWidth - 14 - 50, top = innerHeight - bottom - 50;
+      var hits = left < r.right && left + 50 > r.left && top < r.bottom && top + 50 > r.top;
+      if(!hits) return bottom;
+      return Math.max(12, Math.round(innerHeight - r.top + 12));
+    }
+
     /* the always-visible entry point: a 50px orb, draggable, tap to open the window */
     var launcherEl = null;
     function copLauncher(){
@@ -3654,7 +3712,7 @@ function makeQR(text) {
         'cursor:pointer;transition:transform .16s ease';
       var pos = copPosGet('aura_cop_pos_btn');
       if(pos){ b.style.left = pos.l + 'px'; b.style.top = pos.t + 'px'; }
-      else { b.style.right = '14px'; b.style.bottom = '78px'; }
+      else { b.style.right = '14px'; b.style.bottom = copDefaultBottom() + 'px'; }
       document.body.appendChild(b);
       launcherEl = b;
       var moved = false, sx = 0, sy = 0, ox = 0, oy = 0;
@@ -3681,7 +3739,13 @@ function makeQR(text) {
       });
       /* keyboard / assistive click must open it too, not only a pointer tap */
       b.addEventListener('click', function(){ copPanel(true); });
-      window.addEventListener('resize', function(){ copClamp(b); });
+      /* the composer is measured, and it is not always laid out when the launcher is
+         built — re-place once the first paint has settled as well as on resize */
+      setTimeout(function(){ if(b.style.right !== 'auto') b.style.bottom = copDefaultBottom() + 'px'; }, 500);
+      window.addEventListener('resize', function(){
+        if(b.style.right !== 'auto') b.style.bottom = copDefaultBottom() + 'px';
+        copClamp(b);
+      });
       return b;
     }
 

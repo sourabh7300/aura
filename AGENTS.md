@@ -104,6 +104,12 @@ build on `https://sourabh7300.github.io/aura/aura.html`, backend `/health`).
   outranked it, so every control collapsed into the left corner and the laptop composer
   looked exactly like the phone row. Measured after the fix: send 21px from the card's
   right edge at 360 / 390 / 1280, model chip hidden at ≤370, no horizontal overflow.
+- **First-run tour** (`#auraTour`): a 206–269px card cannot fit between the orb and the
+  composer on a laptop, and sitting above the composer cut the core in half. When there
+  is ≥460px beside the core (1280 and wider) it docks to the top-right at 72px; below
+  that it stays above the composer. The Co-Pilot launcher is lifted above the composer
+  when its default corner would land on the card (`copDefaultBottom()`), and hidden
+  while the tour covers it.
 - Themes: `AURA_CORE.orb('portfolio'|'auto'|'cyan'|'gold'|'violet'|'rose'|'emerald|'mono')`.
   `portfolio` is the default and is the exact reference palette; `auto` follows mood.
 - No rings, no rim light, no solid body — the reference has none of those, and adding
