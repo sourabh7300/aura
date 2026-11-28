@@ -51,6 +51,18 @@ BASE_DIR = Path(__file__).resolve().parent
 FRONTEND_DIR = BASE_DIR.parent / "frontend"
 DATA_DIR = Path(os.environ.get("AURA_DATA_DIR") or (BASE_DIR.parent / "data"))
 
+# CORS: the hosted UI and local development always work, whatever else is
+# configured in ALLOWED_ORIGINS. `*` in the env var still means "everything".
+DEFAULT_ORIGINS = [
+    "https://sourabh7300.github.io",
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://localhost:8000",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:8000",
+]
+
 
 # --------------------------------------------------------------------------- #
 # Settings
@@ -70,16 +82,23 @@ class Settings:
     @classmethod
     def load(cls) -> "Settings":
         _load_dotenv()
-        origins = os.environ.get("ALLOWED_ORIGINS", "*").strip()
         return cls(
             groq_keys=_collect_keys("GROQ_API_KEY"),
             gemini_keys=_collect_keys("GEMINI_API_KEY"),
             groq_model=os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b").strip(),
             gemini_model=os.environ.get("GEMINI_MODEL", "gemini-2.5-flash").strip(),
-            allowed_origins=[o.strip() for o in origins.split(",") if o.strip()] or ["*"],
+            allowed_origins=_allowed_origins(),
             data_dir=DATA_DIR,
             use_chroma=os.environ.get("AURA_USE_CHROMA", "1") not in ("0", "false", "False"),
         )
+
+
+def _allowed_origins() -> list[str]:
+    """`ALLOWED_ORIGINS` plus the hosted UI and localhost, which must always work."""
+    configured = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()]
+    if "*" in configured:
+        return ["*"]
+    return configured + [o for o in DEFAULT_ORIGINS if o not in configured]
 
 
 def _collect_keys(name: str, count: int = 10) -> list[str]:
@@ -179,6 +198,15 @@ class MemoryIn(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class QuantumIn(BaseModel):
+    """One Quantum-AI hybrid request: prompt in, real simulated distribution out."""
+
+    prompt: str = Field(min_length=1, max_length=600)
+    persona: str = Field(default="aura", max_length=32)
+    # 2048 shots is the ceiling: the free instance runs Aer in 512 MB.
+    shots: int = Field(default=1024, ge=1, le=2048)
+
+
 def register_tools(memory: MemoryManager) -> None:
     """Bind the model-callable tools to the live memory manager."""
     if "remember" in TOOL_REGISTRY:
@@ -265,6 +293,163 @@ def make_vision_describer(gemini_key: str, model: str) -> Any:
         return "".join(str(p.get("text", "")) for p in parts).strip()
 
     return describe
+
+
+# --------------------------------------------------------------------------- #
+# Quantum-AI hybrid — POST /api/quantum
+#
+# Three steps, two of them the existing Groq → Gemini helper:
+#   A) the prompt becomes a circuit spec — strict JSON, validated against a gate
+#      allow-list with 1..6 qubits so a cold free instance stays inside 512 MB;
+#   B) Qiskit Aer really executes it and returns counts, percentages and depth;
+#   C) the measured distribution is explained in the active persona's voice.
+# qiskit is imported lazily: without the wheel the rest of the API still boots and
+# this endpoint answers a clean JSON error instead of failing at import time.
+# --------------------------------------------------------------------------- #
+
+QUANTUM_MIN_QUBITS = 1
+QUANTUM_MAX_QUBITS = 6
+QUANTUM_MAX_SHOTS = 2048
+QUANTUM_MAX_GATES = 40
+QUANTUM_DEFAULT_ANGLE = 1.5708
+
+QUANTUM_ONE_QUBIT = {"h", "x", "y", "z", "s", "t", "rx", "ry", "rz"}
+QUANTUM_ANGLE_GATES = {"rx", "ry", "rz"}
+QUANTUM_TWO_QUBIT = {"cx", "cz", "swap"}
+QUANTUM_THREE_QUBIT = {"ccx"}
+
+QUANTUM_COMPILER_PROMPT = (
+    "You are a quantum circuit compiler. Turn the user's request into ONE circuit "
+    "specification and reply with JSON only — no prose, no markdown fences, no comments.\n"
+    "Schema:\n"
+    '{"title": str, "num_qubits": int, "gates": [{"gate": str, "targets": [int], '
+    '"controls": [int], "angle": float}]}\n'
+    "Rules:\n"
+    "- 1 <= num_qubits <= 6.\n"
+    "- Every qubit index is an integer in 0..num_qubits-1.\n"
+    "- Allowed gates: h, x, y, z, s, t, rx, ry, rz, cx, cz, swap, ccx.\n"
+    "- cx, cz and swap take one control and one target; ccx takes two controls and one target.\n"
+    "- rx, ry and rz take an optional angle in radians (default 1.5708).\n"
+    "- Use at least one gate and stay under 40 gates.\n"
+    "- title is a short human name for the circuit (max 60 characters).\n"
+    "Example for \"entangle two qubits\":\n"
+    '{"title": "Bell State Entanglement", "num_qubits": 2, "gates": '
+    '[{"gate": "h", "targets": [0]}, {"gate": "cx", "controls": [0], "targets": [1]}]}\n'
+    "Reply with the JSON object only."
+)
+
+QUANTUM_PERSONAS = {
+    "zeus": (
+        "You are Zeus, a bold strategic commander. Speak in short, decisive lines. State "
+        "what the measurement proves, what it means, then give one order for the next move. "
+        "No hedging, no filler, no bullet lists."
+    ),
+    "aura": (
+        "You are AURA, a sleek hyper-intelligent assistant. Speak in calm, precise, elegant "
+        "lines. Name the physics in one clause, interpret the distribution, then give one "
+        "sharp takeaway. Never pad."
+    ),
+}
+
+
+def _json_object(text: str) -> dict[str, Any]:
+    """Pull the first JSON object out of a model reply (code fences tolerated)."""
+    raw = (text or "").strip()
+    if raw.startswith("```"):
+        raw = raw[3:]
+        if raw.lower().startswith("json"):
+            raw = raw[4:]
+    if raw.rstrip().endswith("```"):
+        raw = raw.rstrip()[:-3]
+    start, end = raw.find("{"), raw.rfind("}")
+    if start < 0 or end <= start:
+        raise ValueError("the model did not return a JSON object")
+    data = json.loads(raw[start : end + 1])
+    if not isinstance(data, dict):
+        raise ValueError("the model returned JSON that is not an object")
+    return data
+
+
+def _qubit_indexes(value: Any, num_qubits: int) -> list[int]:
+    """Keep the in-range, integer qubit indexes; drop everything else."""
+    out: list[int] = []
+    for item in value if isinstance(value, (list, tuple)) else []:
+        try:
+            index = int(item)
+        except (TypeError, ValueError):
+            continue
+        if 0 <= index < num_qubits and index not in out:
+            out.append(index)
+    return out
+
+
+def _normalise_spec(spec: dict[str, Any]) -> tuple[str, int, list[dict[str, Any]]]:
+    """Clamp a model-written spec into something the simulator can always run."""
+    title = " ".join(str(spec.get("title") or "").split())[:60] or "Quantum Circuit"
+    try:
+        num_qubits = int(spec.get("num_qubits") or 1)
+    except (TypeError, ValueError):
+        num_qubits = 1
+    num_qubits = max(QUANTUM_MIN_QUBITS, min(num_qubits, QUANTUM_MAX_QUBITS))
+
+    raw_gates = spec.get("gates")
+    applied: list[dict[str, Any]] = []
+    for entry in (raw_gates if isinstance(raw_gates, list) else [])[:QUANTUM_MAX_GATES]:
+        if not isinstance(entry, dict):
+            continue
+        name = str(entry.get("gate") or "").strip().lower()
+        targets = _qubit_indexes(entry.get("targets"), num_qubits)
+        controls = _qubit_indexes(entry.get("controls"), num_qubits)
+        if name in QUANTUM_ONE_QUBIT:
+            if not targets:
+                continue
+            gate: dict[str, Any] = {"gate": name, "targets": targets[:1]}
+            if name in QUANTUM_ANGLE_GATES:
+                try:
+                    gate["angle"] = float(entry.get("angle", QUANTUM_DEFAULT_ANGLE))
+                except (TypeError, ValueError):
+                    gate["angle"] = QUANTUM_DEFAULT_ANGLE
+            applied.append(gate)
+        elif name in QUANTUM_TWO_QUBIT:
+            if not controls or not targets or controls[0] == targets[0]:
+                continue
+            applied.append({"gate": name, "controls": controls[:1], "targets": targets[:1]})
+        elif name in QUANTUM_THREE_QUBIT:
+            if len(controls) < 2 or not targets or targets[0] in controls[:2]:
+                continue
+            applied.append({"gate": name, "controls": controls[:2], "targets": targets[:1]})
+    return title, num_qubits, applied
+
+
+def _run_circuit(
+    num_qubits: int, gates: list[dict[str, Any]], shots: int
+) -> tuple[dict[str, int], dict[str, float], int]:
+    """Build the circuit, measure every qubit, run it on Aer, return the results."""
+    from qiskit import QuantumCircuit  # lazy: a missing wheel must not stop boot
+    from qiskit_aer import AerSimulator
+
+    qc = QuantumCircuit(num_qubits)
+    for gate in gates:
+        name = gate["gate"]
+        if name in QUANTUM_ANGLE_GATES:
+            getattr(qc, name)(float(gate.get("angle", QUANTUM_DEFAULT_ANGLE)), gate["targets"][0])
+        elif name in QUANTUM_ONE_QUBIT:
+            getattr(qc, name)(gate["targets"][0])
+        elif name in QUANTUM_TWO_QUBIT:
+            getattr(qc, name)(gate["controls"][0], gate["targets"][0])
+        else:  # ccx — already validated to have two distinct controls
+            qc.ccx(gate["controls"][0], gate["controls"][1], gate["targets"][0])
+    qc.measure_all()
+    depth = int(qc.depth())
+
+    result = AerSimulator().run(qc, shots=shots).result()
+    counts = {str(bits): int(n) for bits, n in result.get_counts().items()}
+    total = sum(counts.values()) or 1
+    probabilities = {
+        bits: round(n * 100.0 / total, 2)
+        for bits, n in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+    }
+    return counts, probabilities, depth
 
 
 # --------------------------------------------------------------------------- #
@@ -521,6 +706,97 @@ def create_app() -> FastAPI:
                 }
                 for r in rows
             ],
+        }
+
+    @app.post("/api/quantum")
+    async def quantum(body: QuantumIn) -> Any:
+        """Quantum-AI hybrid: prompt → circuit spec → Aer run → persona analysis."""
+        prov: ProviderRouter = getattr(app.state, "provider", None) or _lazy_provider(settings)
+        if prov._client is None:
+            await prov.start()
+        shots = max(1, min(int(body.shots), QUANTUM_MAX_SHOTS))
+        persona = (body.persona or "aura").strip().lower()
+        if persona not in QUANTUM_PERSONAS:
+            persona = "aura"
+
+        # Step A — AI-to-circuit compiler.
+        try:
+            compiled = await prov.chat(
+                system=QUANTUM_COMPILER_PROMPT,
+                messages=[{"role": "user", "content": body.prompt}],
+                temperature=0.1,
+                max_tokens=500,
+            )
+            spec = _json_object(compiled.text)
+        except ProviderUnavailable as exc:
+            return JSONResponse(
+                status_code=503,
+                content={"error": "compiler_unavailable", "message": str(exc)},
+            )
+        except Exception as exc:
+            return JSONResponse(
+                status_code=502,
+                content={"error": "compile_failed", "message": f"{type(exc).__name__}: {exc}"},
+            )
+
+        title, num_qubits, gates = _normalise_spec(spec)
+
+        # Step B — real execution on Aer.
+        try:
+            counts, probabilities, depth = _run_circuit(num_qubits, gates, shots)
+        except ImportError as exc:
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "error": "quantum_unavailable",
+                    "message": "qiskit / qiskit-aer is not installed on this instance",
+                    "detail": str(exc),
+                },
+            )
+        except Exception as exc:
+            return JSONResponse(
+                status_code=500,
+                content={"error": "simulation_failed", "message": f"{type(exc).__name__}: {exc}"},
+            )
+
+        # Step C — persona synthesis over the measured distribution.
+        top = list(probabilities.items())[:6]
+        distribution = ", ".join(f"|{bits}\u27e9 {pct}%" for bits, pct in top)
+        try:
+            explained = await prov.chat(
+                system=QUANTUM_PERSONAS[persona],
+                messages=[
+                    {
+                        "role": "user",
+                        "content": (
+                            f"Request: {body.prompt}\n"
+                            f"Circuit: {title} — {num_qubits} qubit(s), {len(gates)} gates, "
+                            f"depth {depth}, {shots} shots\n"
+                            f"Measured distribution: {distribution}\n"
+                            "Explain what this circuit does and what the measurement shows, "
+                            "in at most three sentences."
+                        ),
+                    }
+                ],
+                temperature=0.5,
+                max_tokens=400,
+            )
+            analysis = explained.text.strip()
+        except Exception as exc:
+            analysis = (
+                f"{title} ran on {num_qubits} qubit(s) with {len(gates)} gates "
+                f"(depth {depth}, {shots} shots). Measured: {distribution}. "
+                f"(analysis unavailable: {type(exc).__name__})"
+            )
+
+        return {
+            "title": title,
+            "num_qubits": num_qubits,
+            "gates": gates,
+            "counts": counts,
+            "probabilities": probabilities,
+            "circuit_depth": depth,
+            "analysis": analysis,
         }
 
     # ---- realtime lane ---------------------------------------------------- #

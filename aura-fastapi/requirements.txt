@@ -9,3 +9,10 @@ python-dotenv>=1.0
 # MODULE 1 vector index. Optional: without it memory.py falls back to a SQLite
 # cosine index so the service still boots and still searches.
 chromadb>=0.5
+
+# QUANTUM lane (POST /api/quantum). Wheels only — no matplotlib, no visualisation
+# extras — so the circuit builder and the Aer simulator stay inside the 512 MB
+# free instance. Both imports are lazy in main.py: if either wheel is missing the
+# rest of the API still boots and the endpoint answers a clean JSON error.
+qiskit>=1.2.0
+qiskit-aer>=0.15.0
