@@ -13,3 +13,4 @@ Written by `.github/workflows/daily-aura.yml` (cron `23 4 * * *`), committed as 
 - **2026-11-25** · build `b2b237369283` · live `b2b237369283` (200) · health ok · crashes 0 · keys 3/3 · vision on · search tavily · push ready · accounts online · squad alive/15m · mirror in-sync · firebase =build
 - **2026-11-26** · build `b2b237369283` · live `b2b237369283` (200) · health ok · crashes 0 · keys 3/3 · vision on · search tavily · push ready · accounts online · squad alive/15m · mirror in-sync · firebase =build
 - **2026-11-27** · build `90266ee3cb34` · live `90266ee3cb34` (200) · health ok · crashes 0 · keys 3/3 · vision on · search tavily · push ready · accounts online · squad alive/15m · mirror in-sync · firebase =build
+- **2026-11-28** · build `7fe20aa020c8` · live `7fe20aa020c8` (200) · health ok · crashes 0 · keys 3/3 · vision on · search tavily · push ready · accounts online · squad alive/15m · mirror in-sync · firebase =build
