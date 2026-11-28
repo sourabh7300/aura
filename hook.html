@@ -9538,11 +9538,17 @@ function makeQR(text) {
            '</div>';
   }
 
+  /* "Quantum of Solace" and "Quantum Leap" are a film and a series, not circuits:
+     a title mentioned next to a media word keeps its normal chat answer */
+  var NOT_COMPUTING = /\b(movie|film|series|episode|song|album|lyrics|trailer|bond|solace|leap|quantum of solace|quantum leap)\b/i;
+
   function isQuantumQuestion(text){
     if(!text) return false;
     if(/^[\/!]/.test(text)) return false;                    /* real commands stay commands */
+    if(!INTENT.test(text)) return false;
     try{ if(typeof parseCmd === "function" && parseCmd(text)) return false; }catch(e){}
-    return INTENT.test(text);
+    if(NOT_COMPUTING.test(text) && !/\b(qubit|circuit|qiskit|hadamard|grover|qaoa|shots?)\b/i.test(text)) return false;
+    return true;
   }
 
   function busyOff(){
