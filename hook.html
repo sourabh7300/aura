@@ -9366,3 +9366,306 @@ function makeQR(text) {
   }, true);
 })();
 </script>
+<script id="aura-quantum-core">/* ================= AURA QUANTUM CORE =================
+   A quantum question — typed, dictated or spoken — is recognised on its own and
+   never reaches the chat lane: it goes to POST /api/quantum, which compiles the
+   prompt into a circuit, runs it on Qiskit Aer and explains the result. The reply
+   is drawn as a circuit + probability card inside the same assistant bubble.
+   No toggle, no /command, no layout change; a slow or dead lane leaves one short
+   line in the bubble so the chat itself never stalls.
+   ================================================================= */
+(function(){
+  "use strict";
+  if(window.__auraQuantum) return;
+  window.__auraQuantum = true;
+
+  var BASE = (localStorage.getItem("aura_backend_url") || "https://aura-backend-jomj.onrender.com").replace(/\/+$/, "");
+  var SHOTS = 1024;
+  var TIMEOUT = 45000;
+  /* natural language, not a command: one of these words anywhere in the sentence */
+  var INTENT = /\b(quantum|qubits?|qiskit|superposition|entangl(?:e|ed|ement|ing)?|bell[ -]?state|grover|hadamard|bloch|qaoa|shor|deutsch|amplitude[ -]amplification|quantum[ -]circuit|quantum[ -]key|teleport(?:ation)?|decoherence|noise[ -]model)\b/i;
+
+  var CSS = [
+    ".aqc-wrap{display:block;max-width:100%}",
+    ".aqc-bubble{max-width:min(560px,100%)}",
+    ".aqc-status{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;letter-spacing:.03em;color:var(--dim,#8fa6b2)}",
+    ".aqc-dot{width:7px;height:7px;border-radius:50%;background:var(--ac,#4df3ff);box-shadow:0 0 10px var(--ac,#4df3ff);animation:aqcPulse 1.15s ease-in-out infinite}",
+    "@keyframes aqcPulse{0%,100%{opacity:.35;transform:scale(.82)}50%{opacity:1;transform:scale(1.15)}}",
+    ".aqc-card{margin-top:4px;padding:12px 12px 10px;border-radius:14px;border:1px solid rgba(130,220,255,.18);background:linear-gradient(165deg,rgba(12,28,38,.9),rgba(6,14,20,.72));box-shadow:0 8px 28px rgba(0,0,0,.28);display:flex;flex-direction:column;gap:10px}",
+    ".aqc-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}",
+    ".aqc-title{font-size:13.5px;font-weight:600;letter-spacing:.01em;color:var(--fg,#e8f6ff)}",
+    ".aqc-badges{display:flex;gap:6px;flex:none}",
+    ".aqc-badge{display:inline-flex;align-items:baseline;gap:4px;padding:3px 7px;border-radius:7px;font-size:8.5px;letter-spacing:.12em;color:var(--dim,#8fa6b2);border:1px solid rgba(130,220,255,.22);background:rgba(70,190,255,.08)}",
+    ".aqc-badge b{font-size:11px;letter-spacing:0;color:var(--ac,#4df3ff)}",
+    ".aqc-diagram{overflow:auto;padding:2px 0}",
+    ".aqc-svg{display:block;width:100%;height:auto;max-height:190px;min-width:200px}",
+    ".aqc-wire{stroke:rgba(150,215,255,.35);stroke-width:1}",
+    ".aqc-q{fill:var(--dim,#8fa6b2);font-size:8.5px;letter-spacing:.04em}",
+    ".aqc-gate{fill:rgba(70,190,255,.12);stroke:rgba(120,225,255,.6);stroke-width:1}",
+    ".aqc-g{fill:var(--ac,#4df3ff);font-size:9px;font-weight:600;text-anchor:middle;letter-spacing:.04em}",
+    ".aqc-sub{fill:var(--dim,#8fa6b2);font-size:6.8px;text-anchor:middle}",
+    ".aqc-conn{stroke:rgba(120,225,255,.55);stroke-width:1}",
+    ".aqc-ctrl{fill:var(--ac,#4df3ff)}",
+    ".aqc-tgt{fill:none;stroke:rgba(120,225,255,.85);stroke-width:1.2}",
+    ".aqc-x{stroke:rgba(120,225,255,.85);stroke-width:1.3}",
+    ".aqc-meas{fill:rgba(255,255,255,.05);stroke:rgba(150,215,255,.4);stroke-width:1}",
+    ".aqc-m{fill:var(--dim,#cfe9f5);font-size:8.5px;text-anchor:middle}",
+    ".aqc-bars{display:flex;flex-direction:column;gap:5px}",
+    ".aqc-bar{display:grid;grid-template-columns:58px 1fr 54px;align-items:center;gap:8px;font-size:11px}",
+    ".aqc-ket{color:var(--fg,#dff2ff);font-variant-numeric:tabular-nums}",
+    ".aqc-track{height:6px;border-radius:4px;background:rgba(255,255,255,.07);overflow:hidden}",
+    ".aqc-fill{display:block;height:100%;border-radius:4px;background:linear-gradient(90deg,rgba(70,190,255,.55),var(--ac,#4df3ff));box-shadow:0 0 8px rgba(77,243,255,.35)}",
+    ".aqc-pct{text-align:right;color:var(--dim,#8fa6b2);font-variant-numeric:tabular-nums}",
+    ".aqc-analysis{margin:8px 0 0;font-size:13px;line-height:1.55;color:inherit;white-space:pre-wrap}",
+    ".aqc-error{margin-top:2px;padding:9px 11px;border-radius:10px;font-size:12.5px;line-height:1.5;color:#ffd7dd;background:rgba(255,90,110,.09);border:1px solid rgba(255,90,110,.28)}"
+  ].join("\n");
+  try{
+    if(!document.getElementById("aura-quantum-css")){
+      var st = document.createElement("style");
+      st.id = "aura-quantum-css";
+      st.textContent = CSS;
+      (document.head || document.documentElement).appendChild(st);
+    }
+  }catch(e){}
+
+  function esc(s){
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){
+      return { "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c];
+    });
+  }
+
+  function angleLabel(a){
+    var v = Number(a);
+    if(!isFinite(v) || Math.abs(v - 1.5708) < 0.002) return "\u03c0/2";
+    if(Math.abs(v - 3.14159) < 0.003) return "\u03c0";
+    if(Math.abs(v - 0.7854) < 0.003) return "\u03c0/4";
+    if(Math.abs(v - 4.71239) < 0.003) return "3\u03c0/2";
+    return v.toFixed(2);
+  }
+
+  /* ---- the diagram: wires, gate boxes, control dots, targets, measurement ---- */
+  function svgCircuit(d){
+    var n = Math.max(1, Math.min(6, parseInt(d.num_qubits, 10) || 1));
+    var gates = Array.isArray(d.gates) ? d.gates.slice(0, 40) : [];
+    var rowH = 26, padTop = 16, labelW = 28, colW = 40, measW = 34;
+    var cols = Math.max(1, gates.length);
+    var W = labelW + cols * colW + measW + 12;
+    var H = padTop * 2 + (n - 1) * rowH;
+    function y(q){ return padTop + q * rowH; }
+    function cross(x, cy){
+      return '<line class="aqc-x" x1="' + (x - 3.2) + '" y1="' + (cy - 3.2) + '" x2="' + (x + 3.2) + '" y2="' + (cy + 3.2) + '"/>' +
+             '<line class="aqc-x" x1="' + (x - 3.2) + '" y1="' + (cy + 3.2) + '" x2="' + (x + 3.2) + '" y2="' + (cy - 3.2) + '"/>';
+    }
+    function target(x, cy){
+      return '<circle class="aqc-tgt" cx="' + x + '" cy="' + cy + '" r="6.2"/>' +
+             '<line class="aqc-wire" x1="' + (x - 6.2) + '" y1="' + cy + '" x2="' + (x + 6.2) + '" y2="' + cy + '"/>' +
+             '<line class="aqc-wire" x1="' + x + '" y1="' + (cy - 6.2) + '" x2="' + x + '" y2="' + (cy + 6.2) + '"/>';
+    }
+
+    var out = '<svg class="aqc-svg" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMinYMid meet" role="img" aria-label="Quantum circuit: ' + esc(d.title || "circuit") + '">';
+    var q;
+    for(q = 0; q < n; q++){
+      out += '<text class="aqc-q" x="1" y="' + (y(q) + 4) + '">q' + q + '</text>';
+      out += '<line class="aqc-wire" x1="' + labelW + '" y1="' + y(q) + '" x2="' + (W - 6) + '" y2="' + y(q) + '"/>';
+    }
+
+    gates.forEach(function(g, i){
+      if(!g || typeof g !== "object") return;
+      var name = String(g.gate || "").toLowerCase();
+      var t = (g.targets && g.targets[0]);
+      var cs = Array.isArray(g.controls) ? g.controls : [];
+      if(typeof t !== "number" || t < 0 || t >= n) return;
+      var x = labelW + 20 + i * colW;
+
+      if(name === "cx" || name === "cz" || name === "swap" || name === "ccx"){
+        var ys = [y(t)], k;
+        for(k = 0; k < cs.length; k++){ if(cs[k] >= 0 && cs[k] < n) ys.push(y(cs[k])); }
+        if(ys.length > 1){
+          out += '<line class="aqc-conn" x1="' + x + '" y1="' + Math.min.apply(null, ys) + '" x2="' + x + '" y2="' + Math.max.apply(null, ys) + '"/>';
+        }
+        for(k = 0; k < cs.length; k++){
+          if(cs[k] < 0 || cs[k] >= n) continue;
+          if(name === "swap") out += cross(x, y(cs[k]));
+          else out += '<circle class="aqc-ctrl" cx="' + x + '" cy="' + y(cs[k]) + '" r="3.3"/>';
+        }
+        if(name === "swap") out += cross(x, y(t));
+        else if(name === "cz") out += '<circle class="aqc-ctrl" cx="' + x + '" cy="' + y(t) + '" r="3.3"/>';
+        else out += target(x, y(t));
+        return;
+      }
+
+      var label = name.toUpperCase();
+      var angled = (name === "rx" || name === "ry" || name === "rz");
+      var sub = angled ? angleLabel(g.angle) : "";
+      var bw = Math.max(24, label.length * 6.6 + 12);
+      out += '<rect class="aqc-gate" x="' + (x - bw / 2) + '" y="' + (y(t) - 10) + '" width="' + bw + '" height="20" rx="5"/>';
+      out += '<text class="aqc-g" x="' + x + '" y="' + (y(t) + (angled ? -0.5 : 4)) + '">' + esc(label) + '</text>';
+      if(sub) out += '<text class="aqc-sub" x="' + x + '" y="' + (y(t) + 8) + '">' + esc(sub) + '</text>';
+    });
+
+    var mx = labelW + cols * colW + 10;
+    for(q = 0; q < n; q++){
+      out += '<rect class="aqc-meas" x="' + mx + '" y="' + (y(q) - 10) + '" width="26" height="20" rx="5"/>';
+      out += '<text class="aqc-m" x="' + (mx + 13) + '" y="' + (y(q) + 4) + '">M</text>';
+    }
+    return out + '</svg>';
+  }
+
+  function card(d){
+    var probs = (d.probabilities && typeof d.probabilities === "object") ? d.probabilities : {};
+    var keys = Object.keys(probs);
+    var bars = "", i, k, v;
+    for(i = 0; i < keys.length && i < 12; i++){
+      k = keys[i];
+      v = Number(probs[k]);
+      if(!isFinite(v)) v = 0;
+      bars += '<div class="aqc-bar"><span class="aqc-ket">|' + esc(k) + '\u27e9</span>' +
+              '<span class="aqc-track"><span class="aqc-fill" style="width:' + Math.max(0, Math.min(100, v)) + '%"></span></span>' +
+              '<span class="aqc-pct">' + v.toFixed(2) + '%</span></div>';
+    }
+    if(!bars) bars = '<div class="aqc-bar"><span class="aqc-ket">\u2014</span><span class="aqc-track"></span><span class="aqc-pct">no data</span></div>';
+
+    return '<div class="aqc-card">' +
+             '<div class="aqc-head">' +
+               '<div class="aqc-title">' + esc(d.title || "Quantum Circuit") + '</div>' +
+               '<div class="aqc-badges">' +
+                 '<span class="aqc-badge"><b>' + esc(d.num_qubits) + '</b>QUBITS</span>' +
+                 '<span class="aqc-badge"><b>' + esc(d.circuit_depth) + '</b>DEPTH</span>' +
+               '</div>' +
+             '</div>' +
+             '<div class="aqc-diagram">' + svgCircuit(d) + '</div>' +
+             '<div class="aqc-bars">' + bars + '</div>' +
+           '</div>';
+  }
+
+  function isQuantumQuestion(text){
+    if(!text) return false;
+    if(/^[\/!]/.test(text)) return false;                    /* real commands stay commands */
+    try{ if(typeof parseCmd === "function" && parseCmd(text)) return false; }catch(e){}
+    return INTENT.test(text);
+  }
+
+  function busyOff(){
+    try{ var t = document.getElementById("think"); if(t) t.classList.remove("on"); }catch(e){}
+    try{ if(typeof state === "string" && state === "thinking") setState("idle"); }catch(e){}
+  }
+
+  async function runQuantum(text){
+    var wrap = null, statusEl = null, slow = null, persona = "aura";
+    try{ if(typeof mode === "string" && mode === "zeus") persona = "zeus"; }catch(e){}
+
+    try{
+      try{ if(typeof addMsg === "function") addMsg("u", text); }catch(e){}
+      try{ var inp = document.getElementById("inp"); if(inp) inp.value = ""; }catch(e){}
+      try{ saveChat(); }catch(e){}
+      try{ setState("thinking"); var th = document.getElementById("think"); if(th) th.classList.add("on"); }catch(e){}
+      try{ if(window.SFX && typeof window.SFX.tick === "function") window.SFX.tick(); }catch(e){}
+
+      var bubble = addMsg("a", "", true);
+      wrap = bubble && bubble.lastChild ? bubble.lastChild : bubble;
+      if(bubble && bubble.classList) bubble.classList.add("aqc-bubble");
+      wrap.className = "aqc-wrap";
+      wrap.innerHTML = '<div class="aqc-status"><span class="aqc-dot"></span>Initializing Q-Core &amp; running ' + SHOTS + ' quantum shots\u2026</div>';
+      statusEl = wrap.firstChild;
+
+      slow = setTimeout(function(){
+        if(statusEl) statusEl.innerHTML = '<span class="aqc-dot"></span>Q-Core is waking from a cold start \u2014 still running ' + SHOTS + ' shots\u2026';
+      }, 12000);
+
+      var ctrl = (typeof AbortController === "function") ? new AbortController() : null;
+      var timer = setTimeout(function(){ try{ if(ctrl) ctrl.abort(); }catch(e){} }, TIMEOUT);
+      var res, data = null;
+      try{
+        res = await fetch(BASE + "/api/quantum", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt: text, persona: persona, shots: SHOTS }),
+          signal: ctrl ? ctrl.signal : undefined
+        });
+        try{ data = await res.json(); }catch(e){ data = null; }
+      }finally{
+        clearTimeout(timer);
+        clearTimeout(slow);
+        slow = null;
+      }
+      if(!res) throw new Error("no response from the Q-Core");
+      if(!res.ok || !data || data.error){
+        throw new Error((data && (data.message || data.error)) || ("HTTP " + res.status));
+      }
+
+      if(statusEl && statusEl.parentNode) statusEl.parentNode.removeChild(statusEl);
+      statusEl = null;
+      wrap.insertAdjacentHTML("beforeend", card(data));
+
+      var analysis = String(data.analysis == null ? "" : data.analysis).trim();
+      if(analysis){
+        var p = document.createElement("p");
+        p.className = "aqc-analysis";
+        p.textContent = analysis;
+        wrap.appendChild(p);
+      }
+
+      try{ setState("speaking"); }catch(e){}
+      try{ convo.push({ r: "a", t: (data.title || "Quantum run") + (analysis ? "\n\n" + analysis : "") }); }catch(e){}
+      try{ saveChat(); }catch(e){}
+      /* the persona already speaks its chat answers; the quantum explanation joins in */
+      try{ if(analysis && typeof speak === "function") speak(analysis); }catch(e){}
+      try{ var m = document.getElementById("msgs"); if(m) m.scrollTop = 1e9; }catch(e){}
+      try{ if(typeof slog === "function") slog("<b>QUANTUM</b> " + esc(String(text).slice(0, 40))); }catch(e){}
+    }catch(err){
+      var reason = String((err && err.message) || "network error").replace(/[.\s]+$/, "");
+      var msg = (err && err.name === "AbortError")
+        ? "Q-Core timed out after " + Math.round(TIMEOUT / 1000) + "s \u2014 the lane may still be cold-starting. Your chat is unaffected; ask again in a moment."
+        : "Q-Core could not answer: " + reason + " \u2014 your chat is unaffected.";
+      try{ if(statusEl && statusEl.parentNode) statusEl.parentNode.removeChild(statusEl); }catch(e){}
+      try{
+        if(wrap){
+          var box = document.createElement("div");
+          box.className = "aqc-error";
+          box.textContent = msg;
+          wrap.appendChild(box);
+        }
+      }catch(e){}
+      try{ convo.push({ r: "a", t: msg }); }catch(e){}
+      try{ saveChat(); }catch(e){}
+      try{ if(typeof slog === "function") slog("<b>QUANTUM</b> failed: " + esc(String(msg).slice(0, 80))); }catch(e){}
+    }finally{
+      if(slow) clearTimeout(slow);
+      busyOff();
+    }
+  }
+
+  /* one interception point: the composer, the mic, the voice lane and every
+     "send" click all end in window.send, so nothing else needs to change */
+  function install(){
+    var base = window.send;
+    if(typeof base !== "function" || base.__auraQuantum) return false;
+    var wrapped = function(q){
+      var text = String(q == null ? "" : q).trim();
+      if(!text || !isQuantumQuestion(text)) return base.apply(this, arguments);
+      if(window.__auraQuantumBusy) return;             /* one run at a time */
+      window.__auraQuantumBusy = true;
+      var done = runQuantum(text);
+      if(done && typeof done.finally === "function") done.finally(function(){ window.__auraQuantumBusy = false; });
+      return done;
+    };
+    wrapped.__auraQuantum = true;
+    window.send = wrapped;
+    return true;
+  }
+
+  if(!install()){
+    /* a late module may have replaced send after this block; try once more shortly */
+    setTimeout(install, 400);
+    setTimeout(install, 1500);
+  }
+
+  window.__auraQuantumRun = function(prompt, persona, shots){
+    return fetch(BASE + "/api/quantum", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: String(prompt || ""), persona: persona === "zeus" ? "zeus" : "aura", shots: Math.max(1, Math.min(2048, parseInt(shots, 10) || SHOTS)) })
+    }).then(function(r){ return r.json(); });
+  };
+})();
+</script>
