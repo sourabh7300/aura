@@ -59,6 +59,8 @@ fs.writeFileSync('bundle/index.html', h);
 //    No top-level "version": schema 4 forbids it (anna-app validate fails on
 //    additional properties), and the anna-app CLI owns the version server-side —
 //    it bumps on every publish and cuts the immutable version itself.
+/* Listing metadata (name/tagline/screenshots) lives in app.json: schema 4 rejects
+   those keys in manifest.json, and `anna-app apps sync-meta` reads app.json first. */
 const manifest = {
   schema: 4,
   system_prompt_addendum: "When the user wants to use AURA or launch the 3D holographic AI assistant, open the main view via open_app_view('main').",
